@@ -33,7 +33,9 @@ services:
       --master-key ${MEILISEARCH_MASTER_KEY}
 
   app:
-    image: ghcr.io/nihilx/toyohime-file-service:latest
+    image: ghcr.io/ginpika/bootfs:latest
+    env_file:
+      - .env
     networks:
       - net
     volumes:

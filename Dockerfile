@@ -45,4 +45,6 @@ ENTRYPOINT exec java $JAVA_OPTS -Dspring.profiles.active=prod -jar /app/app.jar 
     --tfs.web-entrypoint=$TFS_WEB_ENTRYPOINT \
     --tfs.data-dir=/data \
     --meili-search.master-key=$MEILISEARCH_MASTER_KEY \
-    --meili-search.web-ui=$MEILISEARCH_WEB_UI
+    --meili-search.web-ui=$MEILISEARCH_WEB_UI \
+    --sso.server-url=$SSO_SERVER_URL \
+    --sso.info-url=$SSO_INFO_URL

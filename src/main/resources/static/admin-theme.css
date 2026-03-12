@@ -72,6 +72,9 @@
 .theme-rounded-xl {
     border-radius: 1.25rem;
 }
+.theme-rounded-full {
+    border-radius: 9999px;
+}
 .bg-theme-primary { background-color: var(--color-bg-primary); }
 .text-theme-secondary { color: var(--color-text-secondary); }
 .text-theme-tertiary { color: var(--color-text-tertiary); }

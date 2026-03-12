@@ -713,7 +713,7 @@ function createWaterfallCard(file) {
                         </div>
                         <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <div class="w-12 h-12 theme-rounded-full flex items-center justify-center shadow-lg" style="background-color: var(--color-bg-secondary);">
-                                <svg class="w-6 h-6 ml-1" style="color: var(--color-text-primary);" fill="currentColor" viewBox="0 0 24 24">
+                                <svg class="w-5 h-5" style="color: var(--color-text-primary);" fill="currentColor" viewBox="0 0 24 24">
                                     <path d="M8 5v14l11-7z"></path>
                                 </svg>
                             </div>
@@ -758,11 +758,21 @@ function createGridCard(file) {
                          class="w-full h-full object-cover zoom-image"
                          onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
                 ` : isVideoFile ? `
-                    <div class="w-full h-full flex items-center justify-center" style="background-color: var(--color-bg-tertiary);">
-                        <svg class="w-12 h-12 theme-page-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
+                    <div class="w-full h-full relative" style="background-color: var(--color-bg-tertiary);">
+                        <video src="/p/${file.uuid}" 
+                               class="w-full h-full object-cover"
+                               muted
+                               preload="metadata"
+                               onloadeddata="this.currentTime=0.1;"
+                               onerror="this.style.display='none';">
+                        </video>
+                        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div class="w-12 h-12 theme-rounded-full flex items-center justify-center shadow-lg" style="background-color: var(--color-bg-secondary);">
+                                <svg class="w-5 h-5" style="color: var(--color-text-primary);" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 5v14l11-7z"></path>
+                                </svg>
+                            </div>
+                        </div>
                     </div>
                 ` : `
                     <div class="w-full h-full flex items-center justify-center" style="background-color: var(--color-bg-tertiary);">
@@ -1992,6 +2002,65 @@ async function startTsUpload() {
     
     document.getElementById('tsUploadProgress').classList.remove('hidden');
     
+    const totalBytes = selectedTsFiles.reduce((sum, f) => sum + f.size, 0);
+    let totalTransferred = 0;
+    let lastTime = Date.now();
+    let lastLoaded = 0;
+    
+    const uploadSegment = (file, sequence) => {
+        return new Promise((resolve, reject) => {
+            const formData = new FormData();
+            formData.append('segment', file);
+            formData.append('sequence', sequence);
+            formData.append('duration', '10.0');
+            
+            const xhr = new XMLHttpRequest();
+            
+            xhr.upload.addEventListener('progress', (event) => {
+                if (event.lengthComputable) {
+                    const currentTime = Date.now();
+                    const timeDiff = (currentTime - lastTime) / 1000;
+                    const loadedDiff = event.loaded - lastLoaded;
+                    
+                    let speed = 0;
+                    if (timeDiff > 0) {
+                        speed = loadedDiff / timeDiff;
+                    }
+                    
+                    const overallTransferred = totalTransferred + event.loaded;
+                    const overallPercent = Math.round((overallTransferred / totalBytes) * 100);
+                    
+                    updateTsProgressWithStats(overallPercent, overallTransferred, speed, `正在上传: ${file.name}`);
+                    
+                    lastLoaded = event.loaded;
+                    lastTime = currentTime;
+                }
+            });
+            
+            xhr.addEventListener('load', () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    totalTransferred += file.size;
+                    lastLoaded = 0;
+                    resolve();
+                } else {
+                    try {
+                        const errorData = JSON.parse(xhr.responseText);
+                        reject(new Error(errorData.error || `上传切片 ${file.name} 失败`));
+                    } catch (e) {
+                        reject(new Error(`上传切片 ${file.name} 失败，状态码: ${xhr.status}`));
+                    }
+                }
+            });
+            
+            xhr.addEventListener('error', () => {
+                reject(new Error(`上传切片 ${file.name} 网络错误`));
+            });
+            
+            xhr.open('POST', `/hls/${currentVirtualFileUuid}/segments`);
+            xhr.send(formData);
+        });
+    };
+    
     try {
         let startSequence = 0;
         
@@ -2030,29 +2099,11 @@ async function startTsUpload() {
             return numA - numB;
         });
         
-        const totalFiles = sortedFiles.length;
-        
         for (let i = 0; i < sortedFiles.length; i++) {
             const file = sortedFiles[i];
             const sequence = startSequence + i;
-            const progress = 5 + Math.round((i / totalFiles) * 90);
             
-            updateTsProgress(progress, `正在上传: ${file.name} (${i + 1}/${totalFiles})`);
-            
-            const formData = new FormData();
-            formData.append('segment', file);
-            formData.append('sequence', sequence);
-            formData.append('duration', '10.0');
-            
-            const uploadResponse = await fetch(`/hls/${currentVirtualFileUuid}/segments`, {
-                method: 'POST',
-                body: formData
-            });
-            
-            if (!uploadResponse.ok) {
-                const errorData = await uploadResponse.json();
-                throw new Error(errorData.error || `上传切片 ${file.name} 失败`);
-            }
+            await uploadSegment(file, sequence);
         }
         
         updateTsProgress(95, '正在完成播放列表...');
@@ -2066,6 +2117,7 @@ async function startTsUpload() {
         }
         
         updateTsProgress(100, '上传完成!');
+        document.getElementById('tsUploadSpeed').textContent = '-- MB/s';
         
         if (tsUploadMode === 'edit') {
             loadSegmentList();
@@ -2093,5 +2145,13 @@ async function startTsUpload() {
 function updateTsProgress(percent, status) {
     document.getElementById('tsUploadProgressBar').style.width = `${percent}%`;
     document.getElementById('tsUploadPercent').textContent = `${percent}%`;
+    document.getElementById('tsUploadStatus').textContent = status;
+}
+
+function updateTsProgressWithStats(percent, transferred, speed, status) {
+    document.getElementById('tsUploadProgressBar').style.width = `${percent}%`;
+    document.getElementById('tsUploadPercent').textContent = `${percent}%`;
+    document.getElementById('tsUploadTransferred').textContent = formatFileSize(transferred);
+    document.getElementById('tsUploadSpeed').textContent = speed > 0 ? formatSpeed(speed) : '-- MB/s';
     document.getElementById('tsUploadStatus').textContent = status;
 }

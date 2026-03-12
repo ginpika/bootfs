@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>TFS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/themes.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        display: ['Space Grotesk', 'system-ui', 'sans-serif'],
+                        body: ['Outfit', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+        
+        function initTheme() {
+            const savedTheme = localStorage.getItem('tfs-theme') || 'light';
+            const root = document.documentElement;
+            root.className = '';
+            root.classList.add(`theme-${savedTheme}`);
+        }
+        
+        initTheme();
+    </script>
+    <link rel="stylesheet" href="/default.css">
+    <style>
+        body {
+            background: black;
+            font-family: 'Outfit', system-ui, sans-serif;
+        }
+
+        #loader {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 120px;
+            height: 120px;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            border-radius: 4px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--color-accent-primary, #3498db);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #loader p {
+            margin-top: 10px;
+            font-family: 'Outfit', sans-serif;
+            color: #ccc;
+            font-size: 14px;
+        }
+    </style>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+</head>
+
+<body>
+<a href="/" class="fixed top-4 left-4 z-50 flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg backdrop-blur-sm transition-all duration-200 group font-body text-sm font-medium" style="background-color: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border-primary);">
+    <svg class="w-5 h-5 transition-transform group-hover:-translate-x-1" style="color: var(--color-accent-primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>返回</span>
+</a>
+<div class="container-fluid row">
+    <div class="super-center-container">
+        <img style="display:inline-block;height:100vh;" id="image-view">
+
+        <div id="loader" style="display: none;">
+            <div class="spinner"></div>
+            <p style="color:white;">少女祈祷中...</p>
+        </div>
+    </div>
+</div>
+</body>
+
+<footer>
+    <script src="https://cdn.jsdelivr.net/npm/jquery/dist/jquery.min.js"></script>
+    <script th:inline="javascript">
+        function init() {
+            let doc = []
+            let curIdx = 0;
+            let lastPart = window.location.pathname.split('/').filter(Boolean).pop() || '';
+
+            /*<![CDATA[*/
+            $.ajax({
+                url: [[${meilisearchUrl}]] + "/indexes/full-text/documents/" + lastPart,
+                type: "GET",
+                headers: {
+                    "Authorization": "Bearer " + /*[[${token}]]*/,
+                },
+                success: function(res) {
+                    if (res) {
+                        console.log(res);
+                        doc = res;
+                        $("#image-view").attr("src", doc.resources[0]);
+                        curIdx = 0;
+                    } else {
+                        console.log("未获取到doc");
+                    }
+                },
+                error: function(xhr) {
+                    console.log("请求失败:", xhr.status, xhr.statusText);
+                }
+            });
+            /*]]>*/
+
+            const $img = $("#image-view");
+            let isLoading = false;
+
+            // 1. 初始化时绑定一次监听函数
+            $img.on('load', function() {
+                console.log("图片加载完成，解锁");
+                isLoading = false;
+                // 这里可以隐藏加载动画
+                $("#loader").hide();
+            });
+
+            $img.on('error', function() {
+                console.log("加载出错，解锁防止死锁");
+                isLoading = false;
+                $("#loader").hide();
+            });
+
+            // 监听整个文档的滚轮事件
+            document.addEventListener('wheel', function (event) {
+                event.preventDefault();
+                if (isLoading) {
+                    return
+                }
+                // 获取滚动方向
+                const deltaY = event.deltaY;
+                const deltaX = event.deltaX;
+
+                if (deltaY > 0 && curIdx < doc.resources.length - 1) {
+                    curIdx++;
+                } else if (deltaY < 0 && curIdx > 0) {
+                    curIdx--;
+                } else {
+                    return
+                }
+
+                isLoading = true;
+                $("#loader").show();
+                $("#image-view").attr("src", doc.resources[curIdx]);
+            }, { passive: false });
+
+            // 监听键盘事件
+            document.addEventListener('keydown', function (event) {
+                if (isLoading || !doc.resources || doc.resources.length === 0) {
+                    return;
+                }
+
+                let shouldNavigate = false;
+                let direction = 0;
+
+                switch (event.key) {
+                    case 'ArrowUp':
+                    case 'ArrowLeft':
+                        if (curIdx > 0) {
+                            direction = -1;
+                            shouldNavigate = true;
+                        }
+                        break;
+                    case 'ArrowDown':
+                    case 'ArrowRight':
+                        if (curIdx < doc.resources.length - 1) {
+                            direction = 1;
+                            shouldNavigate = true;
+                        }
+                        break;
+                    case 'PageUp':
+                        if (curIdx > 0) {
+                            direction = -5;
+                            if (curIdx + direction < 0) {
+                                direction = -curIdx;
+                            }
+                            shouldNavigate = true;
+                        }
+                        break;
+                    case 'PageDown':
+                        if (curIdx < doc.resources.length - 1) {
+                            direction = 5;
+                            if (curIdx + direction >= doc.resources.length) {
+                                direction = doc.resources.length - 1 - curIdx;
+                            }
+                            shouldNavigate = true;
+                        }
+                        break;
+                    case 'Home':
+                        if (curIdx > 0) {
+                            direction = -curIdx;
+                            shouldNavigate = true;
+                        }
+                        break;
+                    case 'End':
+                        if (curIdx < doc.resources.length - 1) {
+                            direction = doc.resources.length - 1 - curIdx;
+                            shouldNavigate = true;
+                        }
+                        break;
+                }
+
+                if (shouldNavigate) {
+                    event.preventDefault();
+                    curIdx += direction;
+                    isLoading = true;
+                    $("#loader").show();
+                    $("#image-view").attr("src", doc.resources[curIdx]);
+                }
+            });
+        }
+
+        init();
+    </script>
+</footer>

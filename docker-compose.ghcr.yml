@@ -39,7 +39,7 @@ services:
     networks:
       - net
     volumes:
-      - data:/data
+      - data:/app
     ports:
       - "8181:8181"
     environment:

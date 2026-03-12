@@ -8,7 +8,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@heroicons/v2/css/heroicons.min.css">
     <link rel="stylesheet" href="/admin-styles.css">
     <link rel="stylesheet" href="/themes.css">
     <link rel="stylesheet" href="/admin-theme.css">
@@ -508,6 +507,16 @@
                         </div>
                         <div class="w-full theme-rounded-full h-3 overflow-hidden" style="background-color: var(--color-bg-primary);">
                             <div id="tsUploadProgressBar" class="h-3 theme-rounded-full transition-all duration-300 ease-out" style="width: 0%; background-color: var(--color-accent-primary);"></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 mt-3">
+                            <div class="theme-rounded-lg p-2" style="background-color: var(--color-bg-primary);">
+                                <p class="text-xs theme-page-text-muted mb-1">已上传</p>
+                                <p id="tsUploadTransferred" class="text-sm font-semibold theme-page-text-primary">0 B</p>
+                            </div>
+                            <div class="theme-rounded-lg p-2" style="background-color: var(--color-bg-primary);">
+                                <p class="text-xs theme-page-text-muted mb-1">上传速度</p>
+                                <p id="tsUploadSpeed" class="text-sm font-semibold" style="color: var(--color-success);">-- MB/s</p>
+                            </div>
                         </div>
                         <div class="mt-2 text-xs theme-page-text-muted">
                             <span id="tsUploadStatus">准备上传...</span>

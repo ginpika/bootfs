@@ -1,0 +1,80 @@
+:root {
+    --color-bg-primary: var(--color-bg-primary);
+    --color-bg-secondary: var(--color-bg-secondary);
+    --color-bg-tertiary: var(--color-bg-tertiary);
+    --color-bg-hover: var(--color-bg-hover);
+    --color-text-primary: var(--color-text-primary);
+    --color-text-secondary: var(--color-text-secondary);
+    --color-text-tertiary: var(--color-text-tertiary);
+    --color-text-muted: var(--color-text-muted);
+    --color-border-primary: var(--color-border-primary);
+    --color-border-secondary: var(--color-border-secondary);
+    --color-accent-primary: var(--color-accent-primary);
+    --color-accent-secondary: var(--color-accent-secondary);
+    --color-accent-muted: var(--color-accent-muted);
+    --color-accent-text: var(--color-accent-text);
+    --color-success: var(--color-success);
+    --color-danger: var(--color-danger);
+    --color-warning: var(--color-warning);
+}
+
+.theme-page-bg { background-color: var(--color-bg-primary); }
+.theme-page-text { color: var(--color-text-primary); }
+.theme-page-text-primary { color: var(--color-text-primary); }
+.theme-page-text-secondary { color: var(--color-text-secondary); }
+.theme-page-text-tertiary { color: var(--color-text-tertiary); }
+.theme-page-text-muted { color: var(--color-text-muted); }
+.theme-card {
+    background-color: var(--color-bg-secondary);
+    border: 1px solid var(--color-border-primary);
+}
+.theme-card-hover:hover {
+    background-color: var(--color-bg-tertiary);
+}
+.theme-input {
+    background-color: var(--color-bg-secondary);
+    border: 1px solid var(--color-border-secondary);
+    color: var(--color-text-primary);
+}
+.theme-input:focus {
+    border-color: var(--color-accent-primary);
+    box-shadow: 0 0 0 2px var(--color-accent-muted);
+}
+.theme-input::placeholder {
+    color: var(--color-text-muted);
+}
+.theme-btn-primary {
+    background-color: var(--color-accent-primary);
+    color: var(--color-accent-text);
+    transition: background-color 0.2s;
+}
+.theme-btn-primary:hover {
+    background-color: var(--color-accent-secondary);
+}
+.theme-btn-secondary {
+    background-color: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border-secondary);
+    transition: all 0.2s;
+}
+.theme-btn-secondary:hover {
+    background-color: var(--color-bg-tertiary);
+}
+.theme-shadow {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+.theme-rounded {
+    border-radius: 0.75rem;
+}
+.theme-rounded-lg {
+    border-radius: 1rem;
+}
+.theme-rounded-xl {
+    border-radius: 1.25rem;
+}
+.bg-theme-primary { background-color: var(--color-bg-primary); }
+.text-theme-secondary { color: var(--color-text-secondary); }
+.text-theme-tertiary { color: var(--color-text-tertiary); }
+.text-theme-muted { color: var(--color-text-muted); }
+.text-theme-accent { color: var(--color-accent-primary); }
+.border-theme { border-color: var(--color-border-primary); }

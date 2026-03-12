@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gallery</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/themes.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        display: ['Space Grotesk', 'system-ui', 'sans-serif'],
+                        body: ['Outfit', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+        
+        function initTheme() {
+            const savedTheme = localStorage.getItem('tfs-theme') || 'light';
+            const root = document.documentElement;
+            root.className = '';
+            root.classList.add(`theme-${savedTheme}`);
+        }
+        
+        initTheme();
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', system-ui, sans-serif;
+            background-color: var(--color-bg-primary);
+            color: var(--color-text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            overflow-y: hidden;
+        }
+
+        .container {
+            width: 120vw;
+            margin: 0 auto;
+            padding: 20px;
+            height: 200vh;
+            position:relative;
+            right: 200px;
+            bottom: 500px;
+            display:none;
+        }
+
+        .gallery {
+            display: flex;
+            gap: 15px;
+            height: 100%;
+            transform: rotate(-25deg) scale(1.4) translateX(100px);
+            position: relative;
+            left: 50px;
+        }
+
+        .column {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            background-color: var(--color-bg-secondary);
+        }
+
+        .imageScroll {
+            position: absolute;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding: 15px;
+            transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .image-container {
+            width: 100%;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            background-color: var(--color-bg-tertiary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .image-container:hover {
+            transform: scale(1.03);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+            z-index: 10;
+        }
+
+        .image-container img {
+            width: 100%;
+            display: block;
+            height: auto;
+            min-height: 200px;
+            object-fit: cover;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--color-border-primary);
+            border-radius: 50%;
+            border-top-color: var(--color-accent-primary);
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @media (max-width: 1100px) {
+            .gallery {
+                flex-wrap: wrap;
+            }
+
+            .column {
+                flex: 0 0 calc(33.333% - 15px);
+                height: 450px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .column {
+                flex: 0 0 calc(50% - 15px);
+                height: 400px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .column {
+                flex: 0 0 100%;
+                height: 350px;
+            }
+        }
+
+        #loader {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 300px;
+            height: 120px;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            border-radius: 4px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--color-border-secondary);
+            border-top: 4px solid var(--color-accent-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #loader p {
+            margin-top: 10px;
+            font-family: 'Outfit', sans-serif;
+            color: var(--color-text-tertiary);
+            font-size: 14px;
+        }
+
+    </style>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <script src="https://cdn.jsdelivr.net/npm/bigpicture@2.6.2/dist/BigPicture.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/spotlight.js@0.7.8/dist/spotlight.bundle.js"></script>
+</head>
+
+<body>
+<div id="empty-state" class="hidden fixed inset-0 flex flex-col items-center justify-center z-50" style="background-color: var(--color-bg-primary);">
+    <div class="text-center">
+        <svg class="mx-auto h-24 w-24" style="color: var(--color-text-quaternary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+        </svg>
+        <h3 class="mt-6 text-xl font-semibold font-display tracking-tight" style="color: var(--color-text-primary);">暂无公开图片</h3>
+        <p class="mt-3 text-sm max-w-md" style="color: var(--color-text-tertiary);">还没有公开的图片，快去管理页面上传并发布一些吧！</p>
+        <div class="mt-8">
+            <a href="/" class="inline-flex items-center px-6 py-3 text-sm font-medium rounded-lg transition-colors shadow-sm theme-btn-primary">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                </svg>
+                前往管理页面
+            </a>
+        </div>
+    </div>
+</div>
+<div class="container">
+    <div class="gallery" id="gallery"></div>
+</div>
+<div id="loader">
+    <div class="spinner"></div>
+    <p style="color:white;">少女祈祷中...</p>
+</div>
+</body>
+
+<footer>
+    <script src="/jquery.min.js"></script>
+    <script>
+        window.addEventListener('load', function () {
+            const gallery = document.getElementById('gallery');
+
+            // 图片API配置
+            const IMAGE_API = '/setu-url';
+
+            // 列配置
+            const COLUMN_COUNT = 8;
+            const IMAGES_PER_COLUMN = 30;
+            const SCROLL_SPEED = 0.2; // 像素/帧
+
+            // 状态管理
+            let columns = [];
+            let scrollSpeed = SCROLL_SPEED;
+
+            // 创建列
+            function createColumns() {
+                for (let i = 0; i < COLUMN_COUNT; i++) {
+                    const column = document.createElement('div');
+                    column.className = 'column';
+
+                    const imageScroll = document.createElement('div');
+                    imageScroll.className = 'imageScroll';
+                    imageScroll.id = `imageScroll-${i}`;
+
+                    if (i % 2 === 1) {
+                        imageScroll.style.position = `relative`;
+                        imageScroll.style.top = `-4300px`
+                    } else {
+                        imageScroll.style.position = `relative`;
+                        imageScroll.style.top = `0px`
+                    }
+
+                    column.appendChild(imageScroll);
+                    gallery.appendChild(column);
+
+                    // 存储列信息
+                    columns.push({
+                        element: imageScroll,
+                        direction: i % 2 === 0 ? 'up' : 'down',
+                        position: 0,
+                        maxPosition: 0,
+                        minPosition: 0,
+                        bouncing: false
+                    });
+
+                    // 加载图片
+                    loadImagesForColumn(i);
+                }
+            }
+
+            // 为列加载图片
+            function loadImagesForColumn(columnIndex) {
+                const imageScroll = document.getElementById(`imageScroll-${columnIndex}`);
+
+                for (let j = 0; j < IMAGES_PER_COLUMN; j++) {
+                    const imageContainer = document.createElement('div');
+                    imageContainer.className = 'image-container';
+
+                    // 创建加载动画
+                    const spinner = document.createElement('div');
+                    spinner.className = 'loading-spinner';
+                    imageContainer.appendChild(spinner);
+
+                    imageScroll.appendChild(imageContainer);
+
+                    // 使用AJAX加载图片
+                    loadRandomImage(imageContainer, columnIndex, j);
+                }
+            }
+
+            // 使用AJAX加载随机图片
+            function loadRandomImage(container, col, row) {
+                const imgUrl = `${IMAGE_API}`;
+                $.get(imgUrl).done(res => {
+                    const img = new Image();
+
+                    img.onload = function () {
+                        while (container.firstChild) {
+                            container.removeChild(container.firstChild);
+                        }
+
+                        container.appendChild(img);
+
+                        if (col === COLUMN_COUNT - 1 && row === IMAGES_PER_COLUMN - 1) {
+                            $($(".container")[0]).fadeIn(600)
+                            $("#loader").hide();
+                        }
+                    };
+
+                    img.onerror = function () {
+                        while (container.firstChild) {
+                            container.removeChild(container.firstChild);
+                        }
+
+                        const errorDiv = document.createElement('div');
+                        errorDiv.textContent = '加载失败';
+                        errorDiv.style.color = '#e74c3c';
+                        errorDiv.style.textAlign = 'center';
+                        errorDiv.style.padding = '20px';
+                        container.appendChild(errorDiv);
+                    };
+
+                    img.onclick = function () {
+                        BigPicture({ el: this, imgSrc: res });
+                    }
+
+                    img.src = res;
+                    img.alt = '随机图片';
+                }).fail(function(xhr) {
+                    if (xhr.status === 404) {
+                        showEmptyState();
+                    } else {
+                        while (container.firstChild) {
+                            container.removeChild(container.firstChild);
+                        }
+                        const errorDiv = document.createElement('div');
+                        errorDiv.textContent = '加载失败';
+                        errorDiv.style.color = '#e74c3c';
+                        errorDiv.style.textAlign = 'center';
+                        errorDiv.style.padding = '20px';
+                        container.appendChild(errorDiv);
+                    }
+                });
+            }
+
+            function showEmptyState() {
+                $("#loader").hide();
+                $(".container").hide();
+                $("#empty-state").removeClass("hidden");
+            }
+
+            // 动画循环
+            function animate() {
+                columns.forEach((column, index) => {
+                    const imageScroll = column.element;
+                    const columnHeight = imageScroll.parentElement.offsetHeight;
+                    const contentHeight = imageScroll.scrollHeight;
+
+                    // 计算最大和最小位置
+
+                    if (index % 2 === 0) {
+                        column.maxPosition = 0;
+                        column.minPosition = -4300;
+
+                        if (column.direction === 'up') {
+                            column.position -= scrollSpeed;
+
+                            // 检查是否需要反弹
+                            if (column.position <= column.minPosition) {
+                                column.direction = 'down';
+                                column.bouncing = true;
+                            } else if (column.position >= column.maxPosition) {
+                                column.direction = 'up';
+                                column.bouncing = true;
+                            }
+                        } else {
+                            // 奇数列
+                            column.position += scrollSpeed;
+
+                            // 检查是否需要反弹
+                            if (column.position >= column.maxPosition) {
+                                column.direction = 'up';
+                                column.bouncing = true;
+                            } else if (column.position <= column.minPosition) {
+                                column.direction = 'down';
+                                column.bouncing = true;
+                            }
+                        }
+                    } else {
+                        column.maxPosition = 4300;
+                        column.minPosition = 0;
+                        if (column.direction === 'up') {
+                            column.position -= scrollSpeed;
+
+                            // 检查是否需要反弹
+                            if (column.position <= column.minPosition) {
+                                column.direction = 'down';
+                                column.bouncing = true;
+                            } else if (column.position >= column.maxPosition) {
+                                column.direction = 'up';
+                                column.bouncing = true;
+                            }
+                        } else {
+                            column.position += scrollSpeed;
+
+                            // 检查是否需要反弹
+                            if (column.position >= column.maxPosition) {
+                                column.direction = 'up';
+                                column.bouncing = true;
+                            } else if (column.position <= column.minPosition) {
+                                column.direction = 'down';
+                                column.bouncing = true;
+                            }
+                        }
+                    }
+
+                    // 应用变换
+                    imageScroll.style.transform = `translateY(${column.position}px)`;
+                });
+
+                requestAnimationFrame(animate);
+            }
+
+            // 初始化
+            createColumns();
+            animate();
+        });
+    </script>
+</footer>
+</html>

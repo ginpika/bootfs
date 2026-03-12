@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TV 管理 - TFS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <link rel="stylesheet" href="/themes.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        display: ['Space Grotesk', 'system-ui', 'sans-serif'],
+                        body: ['Outfit', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+        
+        function initTheme() {
+            const savedTheme = localStorage.getItem('tfs-theme') || 'light';
+            const root = document.documentElement;
+            root.className = '';
+            root.classList.add(`theme-${savedTheme}`);
+        }
+        
+        initTheme();
+    </script>
+    <style>
+        body {
+            font-family: 'Outfit', system-ui, sans-serif;
+            background-color: var(--color-bg-primary);
+            color: var(--color-text-primary);
+            min-height: 100vh;
+        }
+        
+        .video-item {
+            cursor: grab;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+            user-select: none;
+        }
+        
+        .video-item:hover {
+            border-color: var(--color-border-secondary);
+        }
+        
+        .video-item.sortable-chosen {
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            border-color: var(--color-accent-primary);
+        }
+        
+        .video-item.sortable-ghost {
+            opacity: 0.4;
+            background-color: var(--color-accent-muted);
+        }
+        
+        .checkbox {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            border: 2px solid var(--color-border-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background-color: var(--color-bg-secondary);
+        }
+        
+        .checkbox:hover {
+            border-color: var(--color-accent-primary);
+        }
+        
+        .checkbox.checked {
+            background-color: var(--color-accent-primary);
+            border-color: var(--color-accent-primary);
+        }
+        
+        .checkbox.checked::after {
+            content: '✓';
+            color: var(--color-accent-text);
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body class="font-body">
+    <div class="fixed top-4 left-4 z-50">
+        <a href="/tv" class="flex items-center gap-2 px-4 py-2.5 rounded-lg transition-colors shadow-sm" style="background-color: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border-primary);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            返回 TV
+        </a>
+    </div>
+
+    <div class="max-w-5xl mx-auto p-5">
+        <div class="flex justify-between items-center mb-5 p-5 theme-rounded-xl" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
+            <h1 class="text-xl font-bold font-display" style="color: var(--color-text-primary);">TV 播放列表管理</h1>
+            <a href="/" class="px-4 py-2 text-sm theme-rounded-lg transition-colors theme-btn-secondary">返回首页</a>
+        </div>
+
+        <div class="flex gap-5 mb-5 p-4 theme-rounded-xl text-sm" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
+            <div class="flex items-center gap-2">
+                <span style="color: var(--color-text-secondary);">已选视频:</span>
+                <span class="font-semibold" style="color: var(--color-accent-primary);" id="selectedCount">0</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span style="color: var(--color-text-secondary);">总切片数:</span>
+                <span class="font-semibold" style="color: var(--color-accent-primary);" id="totalSegments" th:text="${stats.allTsListSize}">0</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span style="color: var(--color-text-secondary);">总时长:</span>
+                <span class="font-semibold" style="color: var(--color-accent-primary);" id="totalDuration" th:text="${stats.totalDurationFormatted}">0秒</span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="theme-rounded-xl p-5" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
+                <div class="flex justify-between items-center mb-4 pb-3" style="border-bottom: 1px solid var(--color-border-primary);">
+                    <h2 class="text-base font-semibold" style="color: var(--color-text-primary);">可选视频</h2>
+                    <span class="px-3 py-1 text-xs rounded-full" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);" id="availableCount">0 个</span>
+                </div>
+                <div class="flex flex-col gap-2 max-h-[500px] overflow-y-auto" id="availableList">
+                </div>
+            </div>
+
+            <div class="theme-rounded-xl p-5" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
+                <div class="flex justify-between items-center mb-4 pb-3" style="border-bottom: 1px solid var(--color-border-primary);">
+                    <h2 class="text-base font-semibold" style="color: var(--color-text-primary);">播放列表 (拖拽排序)</h2>
+                    <span class="px-3 py-1 text-xs rounded-full" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);" id="playlistCount">0 个</span>
+                </div>
+                <div class="flex flex-col gap-2 max-h-[500px] overflow-y-auto" id="playlistList">
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-3 mt-5 justify-end">
+            <button class="px-4 py-2 text-sm theme-rounded-lg transition-colors theme-btn-secondary" onclick="selectAll()">全选</button>
+            <button class="px-4 py-2 text-sm theme-rounded-lg transition-colors theme-btn-secondary" onclick="clearAll()">清空</button>
+            <button class="px-4 py-2 text-sm text-white theme-rounded-lg transition-colors flex items-center gap-2" style="background-color: var(--color-success);" onclick="savePlaylist()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
+                    <polyline points="17,21 17,13 7,13 7,21"/>
+                    <polyline points="7,3 7,8 15,8"/>
+                </svg>
+                保存并重新初始化
+            </button>
+        </div>
+    </div>
+
+    <div class="fixed bottom-5 right-5 px-6 py-4 rounded-xl text-sm font-medium opacity-0 translate-y-5 transition-all duration-300 z-50" style="background-color: var(--color-success); color: white;" id="toast"></div>
+
+    <script>
+        let allVideos = [];
+        let playlistUuids = [];
+        let sortableInstance = null;
+        let availableSortableInstance = null;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadVideos();
+        });
+
+        function loadVideos() {
+            fetch('/tv/api/videos')
+                .then(response => response.json())
+                .then(videos => {
+                    allVideos = videos;
+                    return fetch('/tv/api/playlist');
+                })
+                .then(response => response.json())
+                .then(uuids => {
+                    playlistUuids = uuids;
+                    renderLists();
+                    initDragAndDrop();
+                })
+                .catch(err => {
+                    console.error('Failed to load videos:', err);
+                    showToast('加载视频列表失败', true);
+                });
+        }
+
+        function renderLists() {
+            const availableList = document.getElementById('availableList');
+            const playlistList = document.getElementById('playlistList');
+            
+            availableList.innerHTML = '';
+            playlistList.innerHTML = '';
+
+            const playlistSet = new Set(playlistUuids);
+
+            playlistUuids.forEach((uuid, index) => {
+                const video = allVideos.find(v => v.uuid === uuid);
+                if (video) {
+                    playlistList.appendChild(createVideoItem(video, index + 1, true));
+                }
+            });
+
+            allVideos.forEach(video => {
+                if (!playlistSet.has(video.uuid)) {
+                    availableList.appendChild(createVideoItem(video, -1, false));
+                }
+            });
+
+            updateStats();
+        }
+
+        function createVideoItem(video, order, inPlaylist) {
+            const item = document.createElement('div');
+            item.className = 'video-item px-4 py-3 theme-rounded-lg flex items-center gap-3';
+            item.style.backgroundColor = 'var(--color-bg-tertiary)';
+            item.dataset.uuid = video.uuid;
+
+            const duration = formatDuration(video.totalDuration);
+
+            item.innerHTML = `
+                <div class="drag-handle" style="color: var(--color-text-muted); cursor: grab;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="9" cy="6" r="1.5"/>
+                        <circle cx="15" cy="6" r="1.5"/>
+                        <circle cx="9" cy="12" r="1.5"/>
+                        <circle cx="15" cy="12" r="1.5"/>
+                        <circle cx="9" cy="18" r="1.5"/>
+                        <circle cx="15" cy="18" r="1.5"/>
+                    </svg>
+                </div>
+                <div class="checkbox ${inPlaylist ? 'checked' : ''}" data-uuid="${video.uuid}"></div>
+                <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium truncate" style="color: var(--color-text-primary);" title="${video.fileName}">${video.fileName}</div>
+                    <div class="text-xs mt-1" style="color: var(--color-text-muted);">${video.segmentCount} 个切片 · ${duration}</div>
+                </div>
+                ${inPlaylist ? `<div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white" style="background-color: var(--color-accent-primary);">${order}</div>` : ''}
+            `;
+
+            return item;
+        }
+
+        function handleCheckboxClick(e) {
+            const checkbox = e.target.closest('.checkbox');
+            if (checkbox) {
+                e.preventDefault();
+                e.stopPropagation();
+                const uuid = checkbox.dataset.uuid;
+                toggleVideo(uuid);
+            }
+        }
+
+        function toggleVideo(uuid) {
+            const index = playlistUuids.indexOf(uuid);
+            if (index > -1) {
+                playlistUuids.splice(index, 1);
+            } else {
+                playlistUuids.push(uuid);
+            }
+            renderLists();
+            initDragAndDrop();
+        }
+
+        function selectAll() {
+            playlistUuids = allVideos.map(v => v.uuid);
+            renderLists();
+            initDragAndDrop();
+        }
+
+        function clearAll() {
+            playlistUuids = [];
+            renderLists();
+            initDragAndDrop();
+        }
+
+        function updateStats() {
+            const selectedVideos = allVideos.filter(v => playlistUuids.includes(v.uuid));
+            const totalSegments = selectedVideos.reduce((sum, v) => sum + v.segmentCount, 0);
+            const totalDuration = selectedVideos.reduce((sum, v) => sum + v.totalDuration, 0);
+
+            document.getElementById('selectedCount').textContent = playlistUuids.length;
+            document.getElementById('availableCount').textContent = (allVideos.length - playlistUuids.length) + ' 个';
+            document.getElementById('playlistCount').textContent = playlistUuids.length + ' 个';
+            document.getElementById('totalSegments').textContent = totalSegments;
+            document.getElementById('totalDuration').textContent = formatDuration(totalDuration);
+        }
+
+        function savePlaylist() {
+            fetch('/tv/api/playlist', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(playlistUuids)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(data.message);
+                } else {
+                    showToast('保存失败', true);
+                }
+            })
+            .catch(err => {
+                console.error('Failed to save playlist:', err);
+                showToast('保存失败', true);
+            });
+        }
+
+        function initDragAndDrop() {
+            const playlistList = document.getElementById('playlistList');
+            const availableList = document.getElementById('availableList');
+            
+            if (sortableInstance) {
+                sortableInstance.destroy();
+            }
+            if (availableSortableInstance) {
+                availableSortableInstance.destroy();
+            }
+            
+            // 事件委托处理 checkbox 点击
+            document.removeEventListener('click', handleCheckboxClick);
+            document.addEventListener('click', handleCheckboxClick);
+            
+            // 可选视频列表
+            availableSortableInstance = new Sortable(availableList, {
+                group: {
+                    name: 'available',
+                    pull: 'clone',
+                    put: ['playlist']
+                },
+                sort: false,
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                chosenClass: 'sortable-chosen',
+                filter: '.checkbox',
+                preventOnFilter: false,
+                onAdd: function(evt) {
+                    const uuid = evt.item.dataset.uuid;
+                    const index = playlistUuids.indexOf(uuid);
+                    if (index > -1) {
+                        playlistUuids.splice(index, 1);
+                    }
+                    evt.item.remove();
+                    renderLists();
+                    initDragAndDrop();
+                }
+            });
+            
+            // 播放列表
+            sortableInstance = new Sortable(playlistList, {
+                group: {
+                    name: 'playlist',
+                    put: ['available']
+                },
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                chosenClass: 'sortable-chosen',
+                dragClass: 'sortable-drag',
+                filter: '.checkbox',
+                preventOnFilter: false,
+                onAdd: function(evt) {
+                    const items = playlistList.querySelectorAll('.video-item');
+                    const newOrder = [];
+                    items.forEach(item => {
+                        const uuid = item.dataset.uuid;
+                        if (!newOrder.includes(uuid)) {
+                            newOrder.push(uuid);
+                        }
+                    });
+                    playlistUuids = newOrder;
+                    renderLists();
+                    initDragAndDrop();
+                },
+                onUpdate: function(evt) {
+                    const items = playlistList.querySelectorAll('.video-item');
+                    const newOrder = [];
+                    items.forEach(item => {
+                        newOrder.push(item.dataset.uuid);
+                    });
+                    playlistUuids = newOrder;
+                    
+                    items.forEach((item, index) => {
+                        const orderBadge = item.querySelector('.w-6.h-6.rounded-full');
+                        if (orderBadge) {
+                            orderBadge.textContent = index + 1;
+                        }
+                    });
+                    
+                    updateStats();
+                }
+            });
+        }
+
+        function formatDuration(seconds) {
+            if (!seconds || seconds === 0) return '0秒';
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            
+            if (h > 0) return `${h}小时${m}分${s}秒`;
+            if (m > 0) return `${m}分${s}秒`;
+            return `${s}秒`;
+        }
+
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.style.backgroundColor = isError ? 'var(--color-danger)' : 'var(--color-success)';
+            
+            setTimeout(() => {
+                toast.style.opacity = '1';
+                toast.style.transform = 'translateY(0)';
+            }, 10);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(20px)';
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

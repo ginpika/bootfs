@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  etcd:
+    image: quay.io/coreos/etcd:v3.6.7
+    command: >
+      /usr/local/bin/etcd
+      --name etcd
+      --data-dir /etcd-data
+      --listen-client-urls http://0.0.0.0:2379
+      --advertise-client-urls http://etcd:2379
+      --listen-peer-urls http://0.0.0.0:2380
+      --initial-advertise-peer-urls http://etcd:2380
+      --initial-cluster-token etcd-cluster
+      --initial-cluster "etcd=http://etcd:2380"
+      --initial-cluster-state new
+      --enable-pprof
+    networks:
+      - net
+    volumes:
+      - etcd_data:/etcd-data
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.34.1
+    networks:
+      - net
+    volumes:
+      - meilisearch_data:/meili_data
+    ports:
+      - "7700:7700"
+    command: >
+      /meilisearch
+      --master-key ${MEILISEARCH_MASTER_KEY}
+
+  app:
+    image: ghcr.io/nihilx/toyohime-file-service:latest
+    networks:
+      - net
+    volumes:
+      - data:/data
+    ports:
+      - "8181:8181"
+    environment:
+      - TFS_COPIES=${TFS_COPIES}
+      - TFS_WEB_ENTRYPOINT=${TFS_WEB_ENTRYPOINT}
+      - MEILISEARCH_MASTER_KEY=${MEILISEARCH_MASTER_KEY}
+      - MEILISEARCH_WEB_UI=${MEILISEARCH_WEB_UI}
+    depends_on:
+      - etcd
+      - meilisearch
+
+networks:
+  net:
+
+volumes:
+  etcd_data:
+  meilisearch_data:
+  data:

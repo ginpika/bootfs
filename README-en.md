@@ -38,3 +38,4 @@ docker compose up -d
 1. Finer-grained authorization/permission control. 
 2. Improved peer-to-peer expansion capabilities. 
 3. Optimization for software-based HLS transcoding.
+4. Image .webp convert

@@ -15,7 +15,6 @@ import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.io.BufferedReader;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -67,6 +66,7 @@ public class TvService {
         private String uuid;
         private String fileName;
         private double duration;
+        private int segmentIndex;
     }
 
     @PostConstruct
@@ -247,6 +247,7 @@ public class TvService {
             }
 
             List<TsSegment> segments = new ArrayList<>();
+            int segmentIndex = 0;
 
             try (BufferedReader reader = new BufferedReader(new FileReader(m3u8Path.toFile()))) {
                 String line;
@@ -263,6 +264,7 @@ public class TvService {
                                 segment.setUuid(file.getUuid());
                                 segment.setFileName(tsFile.trim());
                                 segment.setDuration(duration);
+                                segment.setSegmentIndex(segmentIndex++);
                                 segments.add(segment);
                             }
                         } catch (NumberFormatException e) {
@@ -287,9 +289,12 @@ public class TvService {
         sb.append("#EXT-X-MEDIA-SEQUENCE:").append(mediaSequence).append("\n");
 
         String previousUuid = null;
+        int previousSegmentIndex = -1;
         for (TsSegment segment : cacheOne) {
-            // 如果切换到不同的视频源，添加 DISCONTINUITY 标签
-            if (previousUuid != null && !previousUuid.equals(segment.getUuid())) {
+            boolean isDifferentSource = previousUuid != null && !previousUuid.equals(segment.getUuid());
+            boolean isLoopPlayback = previousSegmentIndex >= 0 && segment.getSegmentIndex() <= previousSegmentIndex;
+            
+            if (isDifferentSource || isLoopPlayback) {
                 sb.append("#EXT-X-DISCONTINUITY\n");
             }
             
@@ -297,6 +302,7 @@ public class TvService {
             sb.append("/tv/ts/").append(segment.getUuid()).append("/").append(segment.getFileName()).append("\n");
             
             previousUuid = segment.getUuid();
+            previousSegmentIndex = segment.getSegmentIndex();
         }
 
         return sb.toString();

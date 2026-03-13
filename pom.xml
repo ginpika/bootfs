@@ -8,11 +8,11 @@
 		<version>2.7.18</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
-	<groupId>com.nihilx</groupId>
-	<artifactId>toyohime-file-service</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
-	<name>toyohime-file-service</name>
-	<description>A file transport/storage service based on protobuf.</description>
+	<groupId>cc.ginpika</groupId>
+	<artifactId>bootfs</artifactId>
+	<version>1.0.0</version>
+	<name>bootfs</name>
+	<description>A lightweight, multimedia-centric file system for minimalists. Based on Spring Boot.</description>
 	<properties>
 		<java.version>17</java.version>
 	</properties>
@@ -100,7 +100,7 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 				<configuration>
-					<mainClass>com.nihilx.tfs.TFS</mainClass>
+					<mainClass>cc.ginpika.bootfs.BootFS</mainClass>
 					<layout>JAR</layout>
 				</configuration>
 			</plugin>

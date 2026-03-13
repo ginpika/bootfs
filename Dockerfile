@@ -25,17 +25,17 @@ ENV TZ=PRC
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Create non-root user for security
-RUN groupadd -r tfs && useradd -r -g tfs tfs
+RUN groupadd -r bootfs && useradd -r -g bootfs bootfs
 
 WORKDIR /app
 
 # Copy the built jar from builder stage
-COPY --from=builder /build/target/toyohime-file-service-*.jar /app/app.jar
+COPY --from=builder /build/target/bootfs-*.jar /app/app.jar
 
 # Create data directory and set permissions
-RUN mkdir -p /data && chown -R tfs:tfs /app /data
+RUN mkdir -p /data && chown -R bootfs:bootfs /app /data
 
-USER tfs
+USER bootfs
 
 EXPOSE 8181
 

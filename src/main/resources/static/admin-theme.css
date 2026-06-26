@@ -75,9 +75,109 @@
 .theme-rounded-full {
     border-radius: 9999px;
 }
+
+/* Pagination */
+.pagination-select,
+.pagination-input {
+    height: 2rem;
+    font-size: 0.875rem;
+    background-color: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border-secondary);
+    border-radius: 0.5rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.pagination-select {
+    padding: 0 1.5rem 0 0.5rem;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.4rem center;
+}
+.pagination-input {
+    width: 3.25rem;
+    padding: 0 0.25rem;
+    text-align: center;
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+.pagination-input::-webkit-outer-spin-button,
+.pagination-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.pagination-select:focus,
+.pagination-input:focus {
+    outline: none;
+    border-color: var(--color-accent-primary);
+    box-shadow: 0 0 0 2px var(--color-accent-muted);
+}
+.pagination-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0 0.5rem;
+    font-size: 0.875rem;
+    background-color: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border-secondary);
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+.pagination-btn:hover:not(:disabled):not(.pagination-btn-active) {
+    background-color: var(--color-bg-tertiary);
+    border-color: var(--color-accent-primary);
+}
+.pagination-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.pagination-btn-active {
+    background-color: var(--color-accent-primary);
+    color: var(--color-accent-text);
+    border-color: var(--color-accent-primary);
+    cursor: default;
+}
+.pagination-ellipsis {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    height: 2rem;
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    user-select: none;
+}
 .bg-theme-primary { background-color: var(--color-bg-primary); }
 .text-theme-secondary { color: var(--color-text-secondary); }
 .text-theme-tertiary { color: var(--color-text-tertiary); }
 .text-theme-muted { color: var(--color-text-muted); }
 .text-theme-accent { color: var(--color-accent-primary); }
 .border-theme { border-color: var(--color-border-primary); }
+
+/* Limit video preview height within the unified preview modal.
+   video.js fluid mode uses padding-top + height:0 to maintain aspect ratio,
+   which can overflow the viewport for portrait videos (max-height does not
+   clip padding). Override fluid sizing so the video element sizes naturally
+   with width:100% + height:auto, capped by max-height and letterboxed via
+   object-fit: contain. Scoped to non-fullscreen mode so video.js's default
+   fullscreen layout (which fills the screen) is not affected. */
+#imagePreviewVideoWrap .video-js:not(.vjs-fullscreen) {
+    padding-top: 0 !important;
+    height: auto !important;
+    width: 100% !important;
+    max-height: 85vh;
+    margin: 0 auto;
+}
+#imagePreviewVideoWrap .video-js:not(.vjs-fullscreen) video {
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: 85vh;
+    object-fit: contain;
+}

@@ -38,6 +38,8 @@ arthas-output/
 data.ms
 default.etcd
 /tfs/
+/bootfs/
 dumps
 cache
 .DS_Store
+.tare

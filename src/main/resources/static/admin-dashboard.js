@@ -54,10 +54,14 @@ function updateThemeOptionStyles() {
 // Global state
 let currentPage = 1;
 let totalPages = 1;
+let pageSize = 10;
 let selectedFiles = new Set();
-let currentView = 'list'; // 'grid' or 'list' - default to list
-let searchQuery = '';
-let showOnlyIndexed = false;
+let currentView = localStorage.getItem('tfs-view') || 'list'; // 'grid' or 'list' - default to list
+let showOnlyIndexed = localStorage.getItem('tfs-only-indexed') === 'true';
+let searchQuery = showOnlyIndexed ? 'meta:index' : '';
+let dirStack = []; // FileSystemDirectoryHandle 栈，用于本地文件夹右栏返回上级
+let draggingFileHandle = null; // 当前拖拽中的 FileSystemFileHandle
+let storedDirHandle = null; // 持久化的根目录句柄（IndexedDB）
 
 // Grid view (waterfall) specific state
 let gridPage = 0;
@@ -73,9 +77,48 @@ let gridTotal = 0;
 document.addEventListener('DOMContentLoaded', function() {
     initTheme();
     initializeEventListeners();
+    restoreViewState();
+    initializeLocalFolderPanel();
     loadFileList();
     initializeDragAndDrop();
 });
+
+// 从 localStorage 恢复视图状态（视图模式 + 只显示主存储），避免刷新后回到默认
+function restoreViewState() {
+    const gridView = document.getElementById('gridView');
+    const listView = document.getElementById('listView');
+    const gridViewBtn = document.getElementById('gridViewBtn');
+    const listViewBtn = document.getElementById('listViewBtn');
+    const paginationRow = document.getElementById('paginationRow');
+
+    if (currentView === 'grid') {
+        if (gridView) gridView.classList.remove('hidden');
+        if (listView) listView.classList.add('hidden');
+        if (gridViewBtn) gridViewBtn.classList.add('active');
+        if (listViewBtn) listViewBtn.classList.remove('active');
+        if (paginationRow) paginationRow.classList.add('hidden');
+        const openLocalFolderBtn = document.getElementById('openLocalFolderBtn');
+        if (openLocalFolderBtn) openLocalFolderBtn.classList.add('view-hidden');
+    } else {
+        if (gridView) gridView.classList.add('hidden');
+        if (listView) listView.classList.remove('hidden');
+        if (listViewBtn) listViewBtn.classList.add('active');
+        if (gridViewBtn) gridViewBtn.classList.remove('active');
+        if (paginationRow) paginationRow.classList.remove('hidden');
+    }
+
+    if (showOnlyIndexed) {
+        const btn = document.getElementById('showOnlyIndexedBtn');
+        if (btn) {
+            btn.style.backgroundColor = 'var(--color-accent-muted)';
+            btn.style.color = 'var(--color-accent-primary)';
+        }
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) searchInput.value = 'meta:index';
+    }
+
+    restoreLocalPanel();
+}
 
 // Initialize event listeners
 function initializeEventListeners() {
@@ -99,7 +142,28 @@ function initializeEventListeners() {
             }
         });
     }
-    
+
+    // Upload menu toggle (split button dropdown)
+    const uploadMenuBtn = document.getElementById('uploadMenuBtn');
+    const uploadDropdown = document.getElementById('uploadDropdown');
+    if (uploadMenuBtn && uploadDropdown) {
+        uploadMenuBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            uploadDropdown.classList.toggle('hidden');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!uploadDropdown.contains(e.target) && !uploadMenuBtn.contains(e.target)) {
+                uploadDropdown.classList.add('hidden');
+            }
+        });
+
+        // 选中任意项后收起下拉
+        uploadDropdown.addEventListener('click', () => {
+            uploadDropdown.classList.add('hidden');
+        });
+    }
+
     // Search with autocomplete
     const searchInput = document.getElementById('searchInput');
     const searchSuggestions = document.getElementById('searchSuggestions');
@@ -228,6 +292,10 @@ function initializeEventListeners() {
     // Pagination
     document.getElementById('prevPage').addEventListener('click', () => changePage(-1));
     document.getElementById('nextPage').addEventListener('click', () => changePage(1));
+    document.getElementById('pageSizeSelect').addEventListener('change', (e) => changePageSize(e.target.value));
+    document.getElementById('jumpPageInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') jumpToPage();
+    });
     
     // Select all checkbox
     document.getElementById('selectAll').addEventListener('change', handleSelectAll);
@@ -268,6 +336,22 @@ function initializeEventListeners() {
             closeImagePreview();
             closeDeleteModal();
         }
+        // Arrow keys: navigate image preview when modal is open
+        const imagePreviewOpen = !document.getElementById('imagePreviewModal').classList.contains('hidden');
+        if (imagePreviewOpen) {
+            // Let video.js handle arrow keys when the player is focused
+            const target = e.target;
+            const isVideoControl = target && target.closest && (target.closest('.video-js') || target.tagName === 'VIDEO');
+            if (!isVideoControl) {
+                if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    previewPreviousImage();
+                } else if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    previewNextImage();
+                }
+            }
+        }
     });
 }
 
@@ -289,8 +373,8 @@ function loadListView() {
     showLoadingOverlay();
     
     const params = new URLSearchParams({
-        pageNumber: (currentPage - 1) * 10,
-        pageSize: 10,
+        pageNumber: (currentPage - 1) * pageSize,
+        pageSize: pageSize,
         search: searchQuery
     });
     
@@ -348,6 +432,7 @@ function loadGridView(reset = false) {
         gridLoading = false;
         gridTotal = 0;
         columnHeights = new Array(WATERFALL_COLUMNS).fill(0);
+        previewMediaFiles = [];
         
         const container = document.getElementById('waterfallContainer');
         if (container) {
@@ -439,6 +524,7 @@ async function loadMediaFilesRecursively(needCount) {
             gridTotal = data.total || gridTotal;
             
             const mediaFiles = data.rows.filter(file => isImage(file) || isVideo(file) || isAlbum(file));
+            previewMediaFiles = previewMediaFiles.concat(mediaFiles.filter(file => isImage(file) || isVideo(file)));
             
             if (mediaFiles.length > 0) {
                 await appendToWaterfallAsync(mediaFiles);
@@ -632,6 +718,8 @@ function renderFileList(data) {
     const gridContainer = document.getElementById('gridView');
     const listContainer = document.getElementById('fileListTableBody');
     
+    previewMediaFiles = (data && data.rows) ? data.rows.filter(file => isImage(file) || isVideo(file)) : [];
+    
     if (!data || !data.rows || data.rows.length === 0) {
         gridContainer.innerHTML = `
             <div class="col-span-full text-center py-12">
@@ -669,6 +757,14 @@ function renderFileList(data) {
             selectedFiles.add(uuid);
             showDeleteConfirm();
         });
+
+        const previewBtn = row.querySelector('.list-preview-btn');
+        if (previewBtn && file) {
+            previewBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                previewFile(file);
+            });
+        }
     });
 }
 
@@ -899,7 +995,7 @@ function createListRow(file) {
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                 <div class="flex space-x-2">
                     ${isImageFile ? `
-                        <button onclick="previewFileByUuid('${file.uuid}')" style="color: var(--color-accent-primary);">预览</button>
+                        <button class="list-preview-btn" style="color: var(--color-accent-primary);">预览</button>
                     ` : ''}
                     <a href="/f/${file.uuid}" download style="color: var(--color-success);">下载</a>
                     <button class="list-delete-btn" style="color: var(--color-danger);">删除</button>
@@ -911,53 +1007,177 @@ function createListRow(file) {
 
 // Preview file
 let videoPlayer = null;
+let previewMediaFiles = [];
+let currentPreviewIndex = -1;
+let previewLoadingMore = false;
+let previewSessionId = 0;
 
 function previewFile(file) {
     if (isAlbum(file)) {
         window.location.href = `/album/${file.uuid}`;
-    } else if (isImage(file)) {
-        document.getElementById('imagePreviewSrc').src = `/p/${file.uuid}`;
-        document.getElementById('imagePreviewName').textContent = file.fileName;
-        document.getElementById('imagePreviewModal').classList.remove('hidden');
-    } else if (isVideo(file)) {
-        const videoElement = document.getElementById('videoPreviewSrc');
-        const source = file.hlsAvailable 
-            ? `/hls/${file.uuid}/playlist.m3u8` 
-            : `/p/${file.uuid}`;
-        const type = file.hlsAvailable ? 'application/x-mpegURL' : 'video/mp4';
-        
-        // 初始化 Video.js 播放器
-        if (!videoPlayer) {
-            videoPlayer = videojs(videoElement, {
-                fluid: true,
-                responsive: true
-            });
-        }
-        
-        // 设置视频源
-        videoPlayer.src({
-            src: source,
-            type: type
-        });
-        
-        document.getElementById('videoPreviewName').textContent = file.fileName;
-        document.getElementById('videoPreviewModal').classList.remove('hidden');
-        videoPlayer.play();
+    } else if (isImage(file) || isVideo(file)) {
+        showImagePreview(file);
     }
 }
 
 // Close image preview
 function closeImagePreview() {
+    if (videoPlayer) {
+        videoPlayer.pause();
+    }
     document.getElementById('imagePreviewModal').classList.add('hidden');
 }
 
-// Close video preview
-function closeVideoPreview() {
-    if (videoPlayer) {
-        videoPlayer.pause();
-        videoPlayer.src('');
+// Show image preview and locate it in the preview list
+function showImagePreview(file) {
+    previewSessionId++;
+    previewLoadingMore = false;
+    currentPreviewIndex = previewMediaFiles.findIndex(f => f.uuid === file.uuid);
+    updateImagePreview(file);
+    document.getElementById('imagePreviewModal').classList.remove('hidden');
+    updatePreviewNavButtons();
+}
+
+// Update the displayed media (image or video) and caption
+function updateImagePreview(file) {
+    const img = document.getElementById('imagePreviewSrc');
+    const videoWrap = document.getElementById('imagePreviewVideoWrap');
+    const videoEl = document.getElementById('imagePreviewVideo');
+
+    document.getElementById('imagePreviewName').textContent = file.fileName;
+
+    if (isVideo(file)) {
+        img.classList.add('hidden');
+        videoWrap.classList.remove('hidden');
+
+        const source = file.hlsAvailable
+            ? `/hls/${file.uuid}/playlist.m3u8`
+            : `/p/${file.uuid}`;
+        const type = file.hlsAvailable ? 'application/x-mpegURL' : 'video/mp4';
+
+        if (!videoPlayer) {
+            videoPlayer = videojs(videoEl, {
+                fluid: true,
+                responsive: true
+            });
+        }
+        videoPlayer.src({ src: source, type: type });
+        videoPlayer.play();
+    } else {
+        if (videoPlayer) {
+            videoPlayer.pause();
+        }
+        videoWrap.classList.add('hidden');
+        img.classList.remove('hidden');
+        img.src = `/p/${file.uuid}`;
     }
-    document.getElementById('videoPreviewModal').classList.add('hidden');
+
+    const counter = document.getElementById('imagePreviewCounter');
+    if (counter) {
+        if (currentPreviewIndex >= 0 && previewMediaFiles.length > 0) {
+            counter.textContent = `${currentPreviewIndex + 1} / ${previewMediaFiles.length}`;
+        } else {
+            counter.textContent = '';
+        }
+    }
+}
+
+// Navigate to previous image
+function previewPreviousImage(e) {
+    if (e) e.stopPropagation();
+    if (previewLoadingMore) return;
+    if (currentPreviewIndex > 0) {
+        currentPreviewIndex--;
+        updateImagePreview(previewMediaFiles[currentPreviewIndex]);
+        updatePreviewNavButtons();
+    }
+}
+
+// Navigate to next image (auto-loads more in grid view when reaching the end)
+async function previewNextImage(e) {
+    if (e) e.stopPropagation();
+    if (previewLoadingMore) return;
+    if (currentPreviewIndex < 0) return;
+
+    // Not at the last media item — just advance
+    if (currentPreviewIndex < previewMediaFiles.length - 1) {
+        currentPreviewIndex++;
+        updateImagePreview(previewMediaFiles[currentPreviewIndex]);
+        updatePreviewNavButtons();
+        return;
+    }
+
+    // At the last item — try to load more (grid view only)
+    if (currentView !== 'grid' || !gridHasMore) {
+        return;
+    }
+
+    const sessionId = previewSessionId;
+    previewLoadingMore = true;
+    setPreviewNavButtonsLoading(true);
+    const previousLength = previewMediaFiles.length;
+    loadGridView(false);
+    await waitForGridLoadComplete();
+
+    // Bail if the user closed/reopened the preview while loading
+    if (sessionId !== previewSessionId) return;
+
+    previewLoadingMore = false;
+
+    // Advance if new media arrived
+    if (previewMediaFiles.length > previousLength) {
+        currentPreviewIndex++;
+    }
+    const file = previewMediaFiles[currentPreviewIndex];
+    if (file) {
+        updateImagePreview(file);
+    }
+    updatePreviewNavButtons();
+}
+
+// Wait until grid loading finishes (polls gridLoading flag)
+function waitForGridLoadComplete() {
+    return new Promise(resolve => {
+        if (!gridLoading) {
+            resolve();
+            return;
+        }
+        const interval = setInterval(() => {
+            if (!gridLoading) {
+                clearInterval(interval);
+                resolve();
+            }
+        }, 100);
+    });
+}
+
+// Show loading state on prev/next buttons while more images are fetched
+function setPreviewNavButtonsLoading(loading) {
+    const prevBtn = document.getElementById('prevImageBtn');
+    const nextBtn = document.getElementById('nextImageBtn');
+    const counter = document.getElementById('imagePreviewCounter');
+    if (loading) {
+        if (prevBtn) prevBtn.disabled = true;
+        if (nextBtn) nextBtn.disabled = true;
+        if (counter) counter.textContent = '加载更多...';
+    }
+}
+
+// Enable/disable prev/next buttons based on current position
+function updatePreviewNavButtons() {
+    const prevBtn = document.getElementById('prevImageBtn');
+    const nextBtn = document.getElementById('nextImageBtn');
+    const hasList = previewMediaFiles.length > 0;
+    const atStart = currentPreviewIndex <= 0;
+    const atEnd = currentPreviewIndex >= previewMediaFiles.length - 1;
+    if (prevBtn) {
+        prevBtn.disabled = !hasList || atStart;
+    }
+    if (nextBtn) {
+        // Next stays enabled at the end if more grid pages can still be loaded
+        const canLoadMore = currentView === 'grid' && gridHasMore;
+        nextBtn.disabled = !hasList || (atEnd && !canLoadMore);
+    }
 }
 
 // Toggle file selection
@@ -1074,20 +1294,19 @@ function selectAllOnPage() {
 // Switch view
 function switchView(view) {
     currentView = view;
+    localStorage.setItem('tfs-view', view);
     const gridView = document.getElementById('gridView');
     const listView = document.getElementById('listView');
     const gridViewBtn = document.getElementById('gridViewBtn');
     const listViewBtn = document.getElementById('listViewBtn');
     const paginationRow = document.getElementById('paginationRow');
-    const batchDownloadBtn = document.getElementById('batchDownloadBtn');
-    const batchDeleteBtn = document.getElementById('batchDeleteBtn');
-    
+
     selectedFiles.clear();
     const selectedToolbar = document.getElementById('selectedToolbar');
     if (selectedToolbar) {
         selectedToolbar.classList.add('hidden');
     }
-    
+
     if (view === 'grid') {
         gridView.classList.remove('hidden');
         listView.classList.add('hidden');
@@ -1096,12 +1315,18 @@ function switchView(view) {
         if (paginationRow) {
             paginationRow.classList.add('hidden');
         }
-        if (batchDownloadBtn) {
-            batchDownloadBtn.classList.add('hidden');
-        }
-        if (batchDeleteBtn) {
-            batchDeleteBtn.classList.add('hidden');
-        }
+        const openLocalFolderBtn = document.getElementById('openLocalFolderBtn');
+        const localFolderPanel = document.getElementById('localFolderPanel');
+        const mainView = document.getElementById('mainView');
+        if (openLocalFolderBtn) openLocalFolderBtn.classList.add('view-hidden');
+        // 跳过关闭面板时的动画，避免左侧列表宽度变化的过渡效果
+        if (localFolderPanel) localFolderPanel.classList.add('no-transition');
+        if (mainView) mainView.classList.add('no-transition');
+        if (localFolderPanel) localFolderPanel.classList.remove('active');
+        if (mainView) mainView.classList.remove('local-panel-active');
+        if (mainView) mainView.offsetHeight; // 强制 reflow
+        if (localFolderPanel) localFolderPanel.classList.remove('no-transition');
+        if (mainView) mainView.classList.remove('no-transition');
         loadGridView(true);
     } else {
         gridView.classList.add('hidden');
@@ -1111,44 +1336,108 @@ function switchView(view) {
         if (paginationRow) {
             paginationRow.classList.remove('hidden');
         }
-        if (batchDownloadBtn) {
-            batchDownloadBtn.classList.remove('hidden');
-        }
-        if (batchDeleteBtn) {
-            batchDeleteBtn.classList.remove('hidden');
-        }
+        const openLocalFolderBtn = document.getElementById('openLocalFolderBtn');
+        if (openLocalFolderBtn) openLocalFolderBtn.classList.remove('view-hidden');
+        restoreLocalPanel();
         loadFileList();
     }
 }
 
 // Change page (for list view only)
 function changePage(delta) {
-    const newPage = currentPage + delta;
-    if (newPage >= 1 && newPage <= totalPages) {
-        currentPage = newPage;
-        loadListView(); // 直接调用列表视图加载，不使用 loadFileList()
+    gotoPage(currentPage + delta);
+}
+
+// Jump to an absolute page number
+function gotoPage(page) {
+    if (page >= 1 && page <= totalPages && page !== currentPage) {
+        currentPage = page;
+        clearSelection();
+        loadListView();
     }
+}
+
+// Change page size; resets to first page
+function changePageSize(newSize) {
+    const next = parseInt(newSize, 10);
+    if (!isNaN(next) && next > 0 && next !== pageSize) {
+        pageSize = next;
+        currentPage = 1;
+        clearSelection();
+        loadListView();
+    }
+}
+
+// Jump to the page entered in the input
+function jumpToPage() {
+    const input = document.getElementById('jumpPageInput');
+    if (!input) return;
+    const page = parseInt(input.value, 10);
+    if (!isNaN(page) && page >= 1 && page <= totalPages) {
+        gotoPage(page);
+        input.value = '';
+    }
+}
+
+// Build the list of page numbers/ellipses to render
+function getPageList(current, total) {
+    if (total <= 7) {
+        return Array.from({ length: total }, (_, i) => i + 1);
+    }
+    const pages = [1];
+    const start = Math.max(2, current - 1);
+    const end = Math.min(total - 1, current + 1);
+    if (start > 2) pages.push('...');
+    for (let i = start; i <= end; i++) pages.push(i);
+    if (end < total - 1) pages.push('...');
+    pages.push(total);
+    return pages;
+}
+
+// Render numbered page buttons
+function renderPageNumbers() {
+    const container = document.getElementById('pageNumbers');
+    if (!container) return;
+    container.innerHTML = '';
+    getPageList(currentPage, totalPages).forEach(p => {
+        if (p === '...') {
+            const ellipsis = document.createElement('span');
+            ellipsis.className = 'pagination-ellipsis';
+            ellipsis.textContent = '…';
+            container.appendChild(ellipsis);
+        } else {
+            const btn = document.createElement('button');
+            btn.className = 'pagination-btn' + (p === currentPage ? ' pagination-btn-active' : '');
+            btn.textContent = p;
+            if (p === currentPage) {
+                btn.setAttribute('aria-current', 'page');
+            } else {
+                btn.addEventListener('click', () => gotoPage(p));
+            }
+            container.appendChild(btn);
+        }
+    });
 }
 
 // Update pagination
 function updatePagination(data) {
-    if (data) {
-        const total = data.total || 0;
-        const pageSize = data.pageSize || 10;
-        totalPages = Math.ceil(total / pageSize) || 1;
-        
-        const currentPageEl = document.getElementById('currentPage');
-        const totalPagesEl = document.getElementById('totalPages');
-        const prevPageBtn = document.getElementById('prevPage');
-        const nextPageBtn = document.getElementById('nextPage');
-        
-        if (currentPageEl) currentPageEl.textContent = currentPage;
-        if (totalPagesEl) totalPagesEl.textContent = totalPages;
-        if (prevPageBtn) prevPageBtn.disabled = currentPage <= 1;
-        if (nextPageBtn) nextPageBtn.disabled = currentPage >= totalPages;
-        
-        console.log('Pagination updated:', { currentPage, totalPages, total, pageSize });
-    }
+    if (!data) return;
+    const total = data.total || 0;
+    const effectivePageSize = data.pageSize || pageSize;
+    totalPages = Math.ceil(total / effectivePageSize) || 1;
+
+    const totalRecordsEl = document.getElementById('totalRecords');
+    const prevPageBtn = document.getElementById('prevPage');
+    const nextPageBtn = document.getElementById('nextPage');
+    const pageSizeSelect = document.getElementById('pageSizeSelect');
+
+    if (totalRecordsEl) totalRecordsEl.textContent = total;
+    if (prevPageBtn) prevPageBtn.disabled = currentPage <= 1;
+    if (nextPageBtn) nextPageBtn.disabled = currentPage >= totalPages;
+    if (pageSizeSelect) pageSizeSelect.value = String(pageSize);
+
+    renderPageNumbers();
+    console.log('Pagination updated:', { currentPage, totalPages, total, pageSize });
 }
 
 // Update statistics
@@ -1450,6 +1739,7 @@ function downloadFile(file) {
 // Toggle only indexed
 function toggleOnlyIndexed() {
     showOnlyIndexed = !showOnlyIndexed;
+    localStorage.setItem('tfs-only-indexed', showOnlyIndexed);
     const btn = document.getElementById('showOnlyIndexedBtn');
     
     if (showOnlyIndexed) {
@@ -1591,36 +1881,539 @@ function initializeDragAndDrop() {
     dropZone.addEventListener('dragenter', () => {
         dropZone.classList.add('drag-active');
     }, false);
-    
+
+    dropZone.addEventListener('dragover', (e) => {
+        if (draggingFileHandle) {
+            e.dataTransfer.dropEffect = 'copy';
+        }
+    }, false);
+
     dropZone.addEventListener('dragleave', (e) => {
         if (e.relatedTarget === null) {
             dropZone.classList.remove('drag-active');
         }
     }, false);
-    
-    dropZone.addEventListener('drop', (e) => {
+
+    dropZone.addEventListener('drop', async (e) => {
         dropZone.classList.remove('drag-active');
-        const files = e.dataTransfer.files;
+        let files = e.dataTransfer.files;
+        // 右栏拖拽：files 为空时从 draggingFileHandle 异步获取 File
+        if (files.length === 0 && draggingFileHandle) {
+            try {
+                const file = await draggingFileHandle.getFile();
+                files = [file];
+            } catch (err) {
+                showToast('读取文件失败：' + err.message, 'error');
+            }
+            draggingFileHandle = null;
+        }
         if (files.length > 0) {
-            document.getElementById('uploadFileBtn').files = files;
             handleFileUpload({ target: { files } });
         }
     }, false);
 }
 
-// Preview file by UUID (for list view)
-function previewFileByUuid(uuid) {
-    fetch(`/queryPageOffset?pageNumber=0&pageSize=100`)
-    .then(response => response.json())
-    .then(data => {
-        const file = data.rows.find(f => f.uuid === uuid);
-        if (file) {
-            previewFile(file);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
+// ===== IndexedDB helpers：持久化 FileSystemDirectoryHandle =====
+const DIR_DB_NAME = 'tfs-local-dir';
+const DIR_STORE_NAME = 'handles';
+const DIR_KEY = 'root';
+const BOOKMARK_STORE = 'bookmarks';
+const RECENT_STORE = 'recent';
+
+function openDirDB() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DIR_DB_NAME, 2);
+        req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(DIR_STORE_NAME)) {
+                db.createObjectStore(DIR_STORE_NAME);
+            }
+            if (!db.objectStoreNames.contains(BOOKMARK_STORE)) {
+                db.createObjectStore(BOOKMARK_STORE, { keyPath: 'id', autoIncrement: true });
+            }
+            if (!db.objectStoreNames.contains(RECENT_STORE)) {
+                db.createObjectStore(RECENT_STORE, { keyPath: 'id', autoIncrement: true });
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
     });
+}
+
+async function saveDirHandle(handle) {
+    const db = await openDirDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(DIR_STORE_NAME, 'readwrite');
+        tx.objectStore(DIR_STORE_NAME).put(handle, DIR_KEY);
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+}
+
+async function loadDirHandle() {
+    const db = await openDirDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(DIR_STORE_NAME, 'readonly');
+        const req = tx.objectStore(DIR_STORE_NAME).get(DIR_KEY);
+        req.onsuccess = () => { db.close(); resolve(req.result || null); };
+        req.onerror = () => { db.close(); reject(req.error); };
+    });
+}
+
+// ===== 书签 & 最近打开 =====
+async function saveBookmark(handle, name) {
+    const db = await openDirDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(BOOKMARK_STORE, 'readwrite');
+        tx.objectStore(BOOKMARK_STORE).add({ handle, name, savedAt: Date.now() });
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+}
+
+async function loadBookmarks() {
+    const db = await openDirDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(BOOKMARK_STORE, 'readonly');
+        const req = tx.objectStore(BOOKMARK_STORE).getAll();
+        req.onsuccess = () => { db.close(); resolve(req.result || []); };
+        req.onerror = () => { db.close(); reject(req.error); };
+    });
+}
+
+async function deleteBookmark(id) {
+    const db = await openDirDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(BOOKMARK_STORE, 'readwrite');
+        tx.objectStore(BOOKMARK_STORE).delete(id);
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+}
+
+async function addRecent(handle, name) {
+    const db = await openDirDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(RECENT_STORE, 'readwrite');
+        const store = tx.objectStore(RECENT_STORE);
+        const getAllReq = store.getAll();
+        getAllReq.onsuccess = () => {
+            const all = getAllReq.result || [];
+            all.forEach(r => { if (r.name === name) store.delete(r.id); });
+            store.add({ handle, name, openedAt: Date.now() });
+            const remaining = all.filter(r => r.name !== name).sort((a, b) => b.openedAt - a.openedAt);
+            if (remaining.length >= 5) {
+                remaining.slice(4).forEach(r => store.delete(r.id));
+            }
+        };
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+}
+
+async function loadRecents() {
+    const db = await openDirDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(RECENT_STORE, 'readonly');
+        const req = tx.objectStore(RECENT_STORE).getAll();
+        req.onsuccess = () => {
+            db.close();
+            resolve((req.result || []).sort((a, b) => b.openedAt - a.openedAt).slice(0, 5));
+        };
+        req.onerror = () => { db.close(); reject(req.error); };
+    });
+}
+
+async function clearRecents() {
+    const db = await openDirDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(RECENT_STORE, 'readwrite');
+        tx.objectStore(RECENT_STORE).clear();
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+}
+
+// ===== Local folder panel：打开本地文件夹、渲染表格列表、拖拽上传 =====
+function initializeLocalFolderPanel() {
+    const openBtn = document.getElementById('openLocalFolderBtn');
+    const panel = document.getElementById('localFolderPanel');
+    const closeBtn = document.getElementById('localFolderClose');
+    const changeBtn = document.getElementById('localFolderChange');
+    const backBtn = document.getElementById('localFolderBack');
+    const bookmarkBtn = document.getElementById('localFolderBookmark');
+    const bookmarksBtn = document.getElementById('localFolderBookmarksBtn');
+    const bookmarksDropdown = document.getElementById('bookmarksDropdown');
+
+    if (!openBtn) return;
+
+    // 不支持 File System Access API 时隐藏入口
+    if (!window.showDirectoryPicker) {
+        openBtn.classList.add('hidden');
+        return;
+    }
+
+    openBtn.addEventListener('click', () => {
+        const panel = document.getElementById('localFolderPanel');
+        if (panel && panel.classList.contains('active')) {
+            closeLocalFolderPanel();
+        } else {
+            openLocalFolder();
+        }
+    });
+    if (closeBtn) closeBtn.addEventListener('click', closeLocalFolderPanel);
+    if (changeBtn) changeBtn.addEventListener('click', changeLocalFolder);
+    if (backBtn) backBtn.addEventListener('click', backLocalDir);
+    if (bookmarkBtn) bookmarkBtn.addEventListener('click', saveCurrentBookmark);
+    if (bookmarksBtn) {
+        bookmarksBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const wasHidden = bookmarksDropdown.classList.contains('hidden');
+            await renderBookmarksDropdown();
+            bookmarksDropdown.classList.toggle('hidden', !wasHidden);
+        });
+        document.addEventListener('click', (e) => {
+            if (bookmarksDropdown && !bookmarksDropdown.contains(e.target) && !bookmarksBtn.contains(e.target)) {
+                bookmarksDropdown.classList.add('hidden');
+            }
+        });
+    }
+
+    // 阻止右栏内部 drop 冒泡到 body，防止拖回右栏误触发上传
+    if (panel) {
+        panel.addEventListener('dragover', (e) => e.preventDefault());
+        panel.addEventListener('drop', (e) => e.stopPropagation());
+    }
+}
+
+async function openLocalFolder() {
+    try {
+        // 优先使用已持久化的目录句柄
+        if (!storedDirHandle) {
+            storedDirHandle = await loadDirHandle();
+        }
+        if (storedDirHandle) {
+            // 检查权限，已授权直接渲染；未授权则在用户手势中请求
+            let perm = await storedDirHandle.queryPermission({ mode: 'read' });
+            if (perm !== 'granted') {
+                perm = await storedDirHandle.requestPermission({ mode: 'read' });
+            }
+            if (perm === 'granted') {
+                dirStack = [storedDirHandle];
+                await renderLocalDir();
+                showLocalFolderPanel();
+                return;
+            }
+            // 权限被拒，回退到 picker 重新选择
+        }
+        // 无持久化句柄或权限被拒，走 picker
+        const handle = await window.showDirectoryPicker();
+        storedDirHandle = handle;
+        await saveDirHandle(handle);
+        await addRecent(handle, handle.name);
+        dirStack = [handle];
+        await renderLocalDir();
+        showLocalFolderPanel();
+    } catch (e) {
+        if (e.name !== 'AbortError') {
+            showToast('打开文件夹失败：' + e.message, 'error');
+        }
+    }
+}
+
+async function changeLocalFolder() {
+    try {
+        const handle = await window.showDirectoryPicker();
+        storedDirHandle = handle;
+        await saveDirHandle(handle);
+        await addRecent(handle, handle.name);
+        dirStack = [handle];
+        await renderLocalDir();
+    } catch (e) {
+        if (e.name !== 'AbortError') {
+            showToast('更换文件夹失败：' + e.message, 'error');
+        }
+    }
+}
+
+function showLocalFolderPanel(skipAnimation) {
+    const panel = document.getElementById('localFolderPanel');
+    const mainView = document.getElementById('mainView');
+    const openBtn = document.getElementById('openLocalFolderBtn');
+    if (skipAnimation) {
+        if (panel) panel.classList.add('no-transition');
+        if (mainView) mainView.classList.add('no-transition');
+    }
+    if (panel) panel.classList.add('active');
+    if (mainView) mainView.classList.add('local-panel-active');
+    if (openBtn) openBtn.classList.add('active');
+    localStorage.setItem('tfs-local-panel-open', 'true');
+    if (skipAnimation) {
+        if (panel) panel.offsetHeight; // 强制 reflush，确保无动画样式已应用
+        if (panel) panel.classList.remove('no-transition');
+        if (mainView) mainView.classList.remove('no-transition');
+    }
+}
+
+function closeLocalFolderPanel() {
+    const panel = document.getElementById('localFolderPanel');
+    const mainView = document.getElementById('mainView');
+    const openBtn = document.getElementById('openLocalFolderBtn');
+    if (panel) panel.classList.remove('active');
+    if (mainView) mainView.classList.remove('local-panel-active');
+    if (openBtn) openBtn.classList.remove('active');
+    localStorage.setItem('tfs-local-panel-open', 'false');
+}
+
+// 保存当前目录为书签
+async function saveCurrentBookmark() {
+    const current = dirStack[dirStack.length - 1];
+    if (!current) {
+        showToast('请先打开一个文件夹', 'error');
+        return;
+    }
+    const name = dirStack.map(h => h.name).join(' / ');
+    try {
+        await saveBookmark(current, name);
+        showToast('已保存书签', 'success');
+    } catch (e) {
+        showToast('保存书签失败：' + e.message, 'error');
+    }
+}
+
+// 通过 handle 打开目录（书签/最近打开复用）
+async function openFromHandle(handle) {
+    try {
+        let perm = await handle.queryPermission({ mode: 'read' });
+        if (perm !== 'granted') {
+            perm = await handle.requestPermission({ mode: 'read' });
+        }
+        if (perm !== 'granted') return;
+        storedDirHandle = handle;
+        await saveDirHandle(handle);
+        dirStack = [handle];
+        await renderLocalDir();
+        showLocalFolderPanel();
+    } catch (e) {
+        showToast('打开失败：' + e.message, 'error');
+    }
+}
+
+// 渲染书签 & 最近打开下拉菜单
+async function renderBookmarksDropdown() {
+    const dropdown = document.getElementById('bookmarksDropdown');
+    if (!dropdown) return;
+
+    const [bookmarks, recents] = await Promise.all([loadBookmarks(), loadRecents()]);
+
+    let html = '';
+
+    if (bookmarks.length > 0) {
+        html += `<div class="px-3 py-2 border-b" style="border-color: var(--color-border-primary);"><p class="text-xs font-medium uppercase tracking-wider" style="color: var(--color-text-tertiary);">书签</p></div>`;
+        html += '<div class="py-1">';
+        bookmarks.forEach(bm => {
+            html += `
+                <div class="bookmark-item flex items-center justify-between px-3 py-2 text-sm cursor-pointer transition-colors" data-bookmark-id="${bm.id}" style="color: var(--color-text-secondary);" onmouseover="this.style.backgroundColor='var(--color-bg-tertiary)'" onmouseout="this.style.backgroundColor=''">
+                    <span class="truncate flex-1">${bm.name}</span>
+                    <button class="bookmark-delete-btn ml-2 flex-shrink-0 p-0.5 rounded" data-bookmark-id="${bm.id}" style="color: var(--color-text-muted);" title="删除书签">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
+
+    if (recents.length > 0) {
+        html += `<div class="px-3 py-2 border-t ${bookmarks.length > 0 ? 'border-b' : 'border-b'}" style="border-color: var(--color-border-primary);"><p class="text-xs font-medium uppercase tracking-wider" style="color: var(--color-text-tertiary);">最近打开</p></div>`;
+        html += '<div class="py-1">';
+        recents.forEach(r => {
+            html += `
+                <div class="recent-item flex items-center px-3 py-2 text-sm cursor-pointer transition-colors" data-recent-id="${r.id}" style="color: var(--color-text-secondary);" onmouseover="this.style.backgroundColor='var(--color-bg-tertiary)'" onmouseout="this.style.backgroundColor=''">
+                    <span class="truncate">${r.name}</span>
+                </div>
+            `;
+        });
+        html += '</div>';
+        html += `<div class="border-t" style="border-color: var(--color-border-primary);"><button id="clearRecentBtn" class="w-full text-left px-3 py-2 text-sm transition-colors" style="color: var(--color-danger);" onmouseover="this.style.backgroundColor='var(--color-bg-tertiary)'" onmouseout="this.style.backgroundColor=''">清除最近打开</button></div>`;
+    }
+
+    if (!html) {
+        html = '<div class="px-3 py-6 text-center text-sm" style="color: var(--color-text-tertiary);">暂无书签或历史记录</div>';
+    }
+
+    dropdown.innerHTML = html;
+
+    // 绑定书签项点击
+    dropdown.querySelectorAll('.bookmark-item').forEach(item => {
+        item.addEventListener('click', async (e) => {
+            if (e.target.closest('.bookmark-delete-btn')) return;
+            const id = parseInt(item.dataset.bookmarkId);
+            const bms = await loadBookmarks();
+            const bm = bms.find(b => b.id === id);
+            if (bm) {
+                await openFromHandle(bm.handle);
+                dropdown.classList.add('hidden');
+            }
+        });
+    });
+
+    // 绑定书签删除
+    dropdown.querySelectorAll('.bookmark-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const id = parseInt(btn.dataset.bookmarkId);
+            await deleteBookmark(id);
+            await renderBookmarksDropdown();
+        });
+    });
+
+    // 绑定最近打开点击
+    dropdown.querySelectorAll('.recent-item').forEach(item => {
+        item.addEventListener('click', async () => {
+            const id = parseInt(item.dataset.recentId);
+            const recs = await loadRecents();
+            const r = recs.find(x => x.id === id);
+            if (r) {
+                await openFromHandle(r.handle);
+                dropdown.classList.add('hidden');
+            }
+        });
+    });
+
+    // 绑定清除最近打开
+    const clearBtn = document.getElementById('clearRecentBtn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', async () => {
+            await clearRecents();
+            await renderBookmarksDropdown();
+        });
+    }
+}
+
+// 恢复右栏打开状态：从 IndexedDB 读取句柄 + queryPermission 检查权限
+// queryPermission 不需要用户手势，若权限仍为 granted 则直接恢复；否则等用户点击按钮时 requestPermission
+async function restoreLocalPanel() {
+    if (localStorage.getItem('tfs-local-panel-open') !== 'true') return;
+    if (currentView !== 'list') return;
+    const panel = document.getElementById('localFolderPanel');
+    if (panel && panel.classList.contains('active')) return;
+
+    if (!storedDirHandle) {
+        storedDirHandle = await loadDirHandle();
+    }
+    if (!storedDirHandle) return;
+
+    try {
+        const perm = await storedDirHandle.queryPermission({ mode: 'read' });
+        if (perm === 'granted') {
+            dirStack = [storedDirHandle];
+            await renderLocalDir();
+            showLocalFolderPanel(true);
+        }
+    } catch (_) {}
+}
+
+async function renderLocalDir() {
+    const listEl = document.getElementById('localFileList');
+    const emptyHint = document.getElementById('localEmptyHint');
+    const pathEl = document.getElementById('localFolderPath');
+    const backBtn = document.getElementById('localFolderBack');
+    if (!listEl) return;
+
+    const current = dirStack[dirStack.length - 1];
+    const entries = [];
+    for await (const [name, handle] of current.entries()) {
+        entries.push({ name, handle, kind: handle.kind });
+    }
+    entries.sort((a, b) => {
+        if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1;
+        return a.name.localeCompare(b.name);
+    });
+
+    pathEl.textContent = '../ ' + (dirStack.map(h => h.name).join(' / ') || '本地文件夹');
+    backBtn.disabled = dirStack.length <= 1;
+
+    if (entries.length === 0) {
+        listEl.innerHTML = '';
+        emptyHint.classList.remove('hidden');
+        return;
+    }
+    emptyHint.classList.add('hidden');
+
+    const dirIcon = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>';
+    const fileIcon = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>';
+
+    listEl.innerHTML = entries.map(({ kind }, index) => {
+        const isDir = kind === 'directory';
+        const dataKind = isDir ? 'dir' : 'file';
+        return `
+            <tr class="local-file-row" data-kind="${dataKind}" data-index="${index}" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+                <td class="px-6 py-4">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0 h-10 w-10 rounded-lg flex items-center justify-center local-file-icon" style="background-color: var(--color-bg-tertiary);">
+                            ${isDir ? dirIcon : fileIcon}
+                        </div>
+                        <div class="ml-4 min-w-0">
+                            <div class="text-sm font-medium truncate" style="color: var(--color-text-primary);"></div>
+                        </div>
+                    </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm local-file-size" style="color: var(--color-text-secondary);">—</td>
+            </tr>
+        `;
+    }).join('');
+
+    // 填充文件名、绑定事件、异步获取文件大小
+    listEl.querySelectorAll('.local-file-row').forEach(row => {
+        const entry = entries[parseInt(row.dataset.index)];
+        if (!entry) return;
+        row.querySelector('.text-sm.font-medium').textContent = entry.name;
+        if (entry.kind === 'directory') {
+            row.addEventListener('click', () => enterLocalDir(entry.handle));
+            // 异步统计子项数量作为"大小"列展示
+            (async () => {
+                try {
+                    let count = 0;
+                    for await (const _ of entry.handle.entries()) count++;
+                    const sizeCell = row.querySelector('.local-file-size');
+                    if (sizeCell) sizeCell.textContent = `${count} 项`;
+                } catch (_) {}
+            })();
+        } else {
+            row.setAttribute('draggable', 'true');
+            row.addEventListener('dragstart', (e) => {
+                draggingFileHandle = entry.handle;
+                row.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'copy';
+                e.dataTransfer.setData('text/plain', entry.name);
+            });
+            row.addEventListener('dragend', () => {
+                row.classList.remove('dragging');
+                draggingFileHandle = null;
+            });
+            // 异步获取文件大小
+            (async () => {
+                try {
+                    const file = await entry.handle.getFile();
+                    const sizeCell = row.querySelector('.local-file-size');
+                    if (sizeCell) sizeCell.textContent = formatFileSize(file.size || 0);
+                } catch (_) {}
+            })();
+        }
+    });
+}
+
+function enterLocalDir(handle) {
+    dirStack.push(handle);
+    renderLocalDir();
+}
+
+function backLocalDir() {
+    if (dirStack.length > 1) {
+        dirStack.pop();
+        renderLocalDir();
+    }
 }
 
 // Show loading overlay

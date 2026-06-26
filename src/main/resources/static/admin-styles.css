@@ -77,6 +77,16 @@
     }
 }
 
+/* Floating selection action bar：选中态从底部滑入 */
+@keyframes floatingBarEnter {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+#selectedToolbar:not(.hidden) {
+    animation: floatingBarEnter 0.25s ease-out;
+}
+
 /* Badge animations */
 .badge {
     transition: all 0.15s ease;
@@ -119,6 +129,87 @@
     #sidebar.active {
         transform: translateX(0);
     }
+}
+
+/* Local folder panel: right sidebar dual-pane */
+#openLocalFolderBtn {
+    transition: opacity 0.25s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+#openLocalFolderBtn.view-hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#openLocalFolderBtn.active {
+    background-color: var(--color-accent-primary) !important;
+    color: white;
+}
+
+#localFolderPanel {
+    width: 50vw;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+#localFolderPanel.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+#localFolderPanel.no-transition {
+    transition: none !important;
+}
+
+#mainView {
+    transition: margin-right 0.3s ease;
+}
+
+#mainView.local-panel-active {
+    margin-right: 50vw;
+}
+
+#mainView.no-transition {
+    transition: none !important;
+}
+
+/* Local file list table rows */
+.local-file-row {
+    transition: background-color 0.15s ease;
+}
+
+#localFolderBack:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.local-file-row:hover {
+    background-color: var(--color-bg-tertiary) !important;
+}
+
+.local-file-row[data-kind="dir"] {
+    cursor: pointer;
+}
+
+.local-file-row[data-kind="file"] {
+    cursor: grab;
+}
+
+.local-file-row.dragging {
+    opacity: 0.5;
+}
+
+.local-file-row .local-file-icon {
+    flex-shrink: 0;
+}
+
+.local-file-row[data-kind="dir"] .local-file-icon {
+    color: var(--color-accent-primary);
+}
+
+.local-file-row[data-kind="file"] .local-file-icon {
+    color: var(--color-text-tertiary);
 }
 
 /* File type icons */

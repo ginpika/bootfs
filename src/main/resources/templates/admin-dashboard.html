@@ -4,6 +4,46 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TFS</title>
+    <!-- 全局加载遮罩：内联关键 CSS + 主题引导，先于外部样式表执行以避免弱网 FOUC -->
+    <style>
+        /* 主题变量最小子集（完整定义见 themes.css），保证遮罩与 body 背景在样式表到达前即按正确主题渲染 */
+        :root, :root.theme-light { --color-bg-primary:#f9fafb; --color-accent-primary:#0ea5e9; --color-text-secondary:#374151; }
+        :root.theme-dark { --color-bg-primary:#0a0a0a; --color-accent-primary:#00d98a; --color-text-secondary:#a8a8a8; }
+        :root.theme-sakura { --color-bg-primary:#fef2f2; --color-accent-primary:#ec4899; --color-text-secondary:#9d174d; }
+        :root.theme-starry-night { --color-bg-primary:#0f0f23; --color-accent-primary:#e94560; --color-text-secondary:#c4c4c4; }
+        :root.theme-forest { --color-bg-primary:#f0fdf4; --color-accent-primary:#16a34a; --color-text-secondary:#166534; }
+        :root.theme-ocean { --color-bg-primary:#0c1929; --color-accent-primary:#29b6f6; --color-text-secondary:#bbdefb; }
+        :root.theme-sunset { --color-bg-primary:#fffbeb; --color-accent-primary:#f59e0b; --color-text-secondary:#92400e; }
+        :root.theme-lavender { --color-bg-primary:#faf5ff; --color-accent-primary:#a855f7; --color-text-secondary:#6b21a8; }
+
+        #globalLoadingMask {
+            position: fixed; inset: 0; z-index: 9999;
+            display: flex; align-items: center; justify-content: center;
+            background-color: var(--color-bg-primary, #f9fafb);
+            font-family: 'Outfit', 'Space Grotesk', system-ui, -apple-system, sans-serif;
+            transition: opacity 0.3s ease;
+        }
+        #globalLoadingMask.is-hidden { opacity: 0; pointer-events: none; }
+        #globalLoadingMask__spinner {
+            width: 40px; height: 40px;
+            color: var(--color-accent-primary, #0ea5e9);
+            animation: glm-spin 1s linear infinite;
+        }
+        #globalLoadingMask__text {
+            margin-top: 12px; font-size: 14px; font-weight: 500;
+            color: var(--color-text-secondary, #374151);
+        }
+        @keyframes glm-spin { to { transform: rotate(360deg); } }
+    </style>
+    <script>
+        // 立即应用已保存的主题，避免主题闪烁并让遮罩使用正确配色
+        (function () {
+            try {
+                var t = localStorage.getItem('tfs-theme') || 'light';
+                document.documentElement.classList.add('theme-' + t);
+            } catch (e) {}
+        })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -42,17 +82,47 @@
     </script>
 </head>
 <body class="overflow-hidden font-body" style="background-color: var(--color-bg-primary);">
+    <!-- 全局加载遮罩：在样式表与脚本全部就绪后淡出移除 -->
+    <div id="globalLoadingMask" role="status" aria-live="polite">
+        <div style="display:flex; flex-direction:column; align-items:center;">
+            <svg id="globalLoadingMask__spinner" fill="none" viewBox="0 0 24 24">
+                <circle style="opacity:0.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path style="opacity:0.75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span id="globalLoadingMask__text">加载中...</span>
+        </div>
+    </div>
+    <script>
+        (function () {
+            var mask = document.getElementById('globalLoadingMask');
+            if (!mask) return;
+            var removed = false;
+            function removeMask() {
+                if (removed) return;
+                removed = true;
+                mask.classList.add('is-hidden');
+                setTimeout(function () { if (mask.parentNode) mask.parentNode.removeChild(mask); }, 320);
+            }
+            if (document.readyState === 'complete') {
+                removeMask();
+            } else {
+                window.addEventListener('load', removeMask);
+            }
+            // 兜底：无论资源是否就绪，最多 5 秒后移除遮罩，避免卡死
+            setTimeout(removeMask, 5000);
+        })();
+    </script>
     <div class="flex h-screen overflow-hidden">
         <!-- Main Content -->
-        <div class="flex-1 flex flex-col overflow-hidden">
+        <div id="mainContent" class="flex-1 flex flex-col overflow-hidden">
             <!-- Top Bar -->
             <header class="shadow-sm border-b flex-shrink-0 z-40" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
                 <div class="px-4 sm:px-6 lg:px-8">
                     <div class="flex items-center justify-between h-16">
-                        <!-- Left: Search -->
-                        <div class="flex-1 max-w-xl">
-                            <div class="relative">
-                                <input type="text" id="searchInput" placeholder="搜索文件..." 
+                        <!-- Left: Search + Filter -->
+                        <div class="flex-1 flex items-center gap-2 max-w-2xl">
+                            <div class="relative flex-1 max-w-xl">
+                                <input type="text" id="searchInput" placeholder="搜索文件..."
                                     class="w-full pl-10 pr-12 py-2 border rounded-lg text-sm theme-input focus:outline-none">
                                 <svg class="w-5 h-5 absolute left-3 top-2.5" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
@@ -67,10 +137,23 @@
                                     </div>
                                 </div>
                             </div>
+                            <button id="showOnlyIndexedBtn" class="flex-shrink-0 px-3 py-2 text-sm font-medium theme-rounded-lg transition-colors theme-btn-secondary whitespace-nowrap" title="只显示主存储">
+                                <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                <span class="hidden md:inline ml-1">只显示主存储</span>
+                            </button>
                         </div>
 
                         <!-- Right: Actions -->
                         <div class="flex items-center space-x-3">
+                            <!-- Open Local Folder (list view only, fades with view mode) -->
+                            <button id="openLocalFolderBtn" class="theme-icon-btn p-2 rounded-lg" title="打开本地文件夹" style="background-color: var(--color-bg-tertiary);">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                                </svg>
+                            </button>
+
                             <!-- View Toggle -->
                             <div class="hidden sm:flex items-center rounded-lg p-1" style="background-color: var(--color-bg-tertiary);">
                                 <button id="listViewBtn" class="view-toggle-btn p-2 rounded-md transition-all active" data-view="list">
@@ -91,13 +174,6 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                                 </svg>
                             </button>
-
-                            <!-- Old UI -->
-                            <a href="/old-admin" class="theme-icon-btn p-2 rounded-lg" title="老版界面">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
-                                </svg>
-                            </a>
 
                             <!-- Theme Selector -->
                             <div class="relative">
@@ -147,14 +223,31 @@
                                 </div>
                             </div>
 
-                            <!-- Upload Button -->
-                            <label class="flex items-center px-4 py-2 rounded-lg cursor-pointer transition-colors shadow-sm theme-btn-primary">
-                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
-                                </svg>
-                                <span class="text-sm font-medium">上传</span>
-                                <input type="file" id="uploadFileBtn" class="hidden" multiple>
-                            </label>
+                            <!-- Upload Split Button：主按钮普通上传，右侧下拉含 TS 切片上传 -->
+                            <div class="flex items-stretch rounded-lg shadow-sm">
+                                <label class="flex items-center px-4 py-2 cursor-pointer transition-colors theme-btn-primary rounded-l-lg">
+                                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                                    </svg>
+                                    <span class="text-sm font-medium">上传</span>
+                                    <input type="file" id="uploadFileBtn" class="hidden" multiple>
+                                </label>
+                                <div class="relative">
+                                    <button id="uploadMenuBtn" type="button" class="h-full flex items-center px-2 transition-colors theme-btn-primary rounded-r-lg" style="border-left: 1px solid rgba(128,128,128,0.4);" title="更多上传方式">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                        </svg>
+                                    </button>
+                                    <div id="uploadDropdown" class="hidden absolute right-0 mt-2 w-48 rounded-lg shadow-lg border py-1 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+                                        <button id="tsUploadBtn" class="theme-dropdown-item w-full flex items-center px-4 py-2 text-sm">
+                                            <svg class="w-4 h-4 mr-2" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"></path>
+                                            </svg>
+                                            TS 切片上传
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                             
                             <!-- User Menu -->
                             <div class="relative">
@@ -176,6 +269,12 @@
                                         <p class="text-sm font-medium" style="color: var(--color-text-primary);" th:text="${ssoUser != null ? ssoUser.username : 'Admin'}">Admin</p>
                                         <p class="text-xs" style="color: var(--color-text-muted);" th:text="${ssoUser != null ? ssoUser.email : 'admin@tfs.com'}">admin@tfs.com</p>
                                     </div>
+                                    <a href="/old-admin" class="theme-dropdown-item flex items-center px-4 py-2 text-sm">
+                                        <svg class="w-4 h-4 mr-2" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                        </svg>
+                                        老版界面
+                                    </a>
                                     <a href="/gallery" class="theme-dropdown-item flex items-center px-4 py-2 text-sm">
                                         <svg class="w-4 h-4 mr-2" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
@@ -224,68 +323,8 @@
                 </div>
             </header>
 
-            <!-- Action Toolbar (Sticky) -->
-            <div class="sticky top-0 z-30 px-6 py-4 border-b" style="background-color: var(--color-bg-primary); border-color: var(--color-border-primary);">
-                <div class="theme-card theme-rounded-xl theme-shadow overflow-hidden">
-                    <div class="p-4 border-b" style="border-color: var(--color-border-primary);">
-                        <div class="flex flex-wrap items-center justify-between gap-3">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <button id="showOnlyIndexedBtn" class="px-4 py-2 text-sm font-medium theme-rounded-lg transition-colors theme-btn-secondary">
-                                    <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                    </svg>
-                                    只显示主存储
-                                </button>
-                                <button id="hlsConvertBtn" class="px-4 py-2 text-sm font-medium theme-rounded-lg transition-colors theme-btn-success">
-                                    <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                    </svg>
-                                    HLS 转码
-                                </button>
-                                <button id="publishToGalleryBtn" class="px-4 py-2 text-sm font-medium theme-rounded-lg transition-colors theme-btn-primary">
-                                    <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                                    </svg>
-                                    发布到图床
-                                </button>
-                                <button id="tsUploadBtn" class="px-4 py-2 text-sm font-medium theme-rounded-lg transition-colors theme-btn-warning">
-                                    <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"></path>
-                                    </svg>
-                                    TS 切片上传
-                                </button>
-                            </div>
-                            
-                            <div class="flex flex-wrap items-center gap-2">
-                                <button id="batchDownloadBtn" class="px-4 py-2 text-sm font-medium theme-rounded-lg transition-colors theme-btn-secondary">
-                                    <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                                    </svg>
-                                    批量下载
-                                </button>
-                                <button id="batchDeleteBtn" class="px-4 py-2 text-sm font-medium theme-rounded-lg transition-colors theme-btn-danger">
-                                    <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                    </svg>
-                                    批量删除
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Selected Items Toolbar -->
-                    <div id="selectedToolbar" class="hidden p-4" style="background-color: var(--color-accent-muted); border-top: 1px solid var(--color-border-primary);">
-                        <div class="flex items-center justify-between">
-                            <span class="text-sm font-medium" style="color: var(--color-accent-primary);" id="selectedCount">已选择 0 项</span>
-                            <button id="cancelSelection" class="text-sm transition-colors" style="color: var(--color-accent-secondary);">取消选择</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- Page Content -->
-            <main class="flex-1 overflow-y-auto p-6 theme-page-bg">
+            <main id="mainView" class="flex-1 overflow-y-auto p-6 theme-page-bg">
                 
                 <!-- File Grid/List View -->
                 <div class="theme-card theme-rounded-xl theme-shadow relative">
@@ -340,13 +379,32 @@
                     </div>
 
                     <!-- Pagination -->
-                    <div id="paginationRow" class="px-6 py-4 border-t flex items-center justify-between" style="border-color: var(--color-border-primary);">
-                        <div class="text-sm theme-page-text-secondary">
-                            显示 <span id="currentPage">1</span> 页，共 <span id="totalPages">-</span> 页
+                    <div id="paginationRow" class="px-6 py-3 border-t flex items-center justify-between flex-wrap gap-x-4 gap-y-2" style="border-color: var(--color-border-primary);">
+                        <div class="flex items-center gap-3 text-sm theme-page-text-secondary">
+                            <span>共 <span id="totalRecords">0</span> 条</span>
+                            <label class="flex items-center gap-1.5">
+                                每页
+                                <select id="pageSizeSelect" class="pagination-select">
+                                    <option value="10">10</option>
+                                    <option value="20">20</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                </select>
+                            </label>
                         </div>
-                        <div class="flex items-center space-x-2">
-                            <button id="prevPage" class="px-3 py-1 text-sm border rounded-md transition-colors theme-btn-secondary theme-rounded" style="border-color: var(--color-border-secondary);">上一页</button>
-                            <button id="nextPage" class="px-3 py-1 text-sm border rounded-md transition-colors theme-btn-secondary theme-rounded" style="border-color: var(--color-border-secondary);">下一页</button>
+                        <div class="flex items-center gap-1.5">
+                            <button id="prevPage" class="pagination-btn" aria-label="上一页" disabled>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            </button>
+                            <nav id="pageNumbers" class="flex items-center gap-1"></nav>
+                            <button id="nextPage" class="pagination-btn" aria-label="下一页" disabled>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </button>
+                            <label class="flex items-center gap-1.5 text-sm theme-page-text-secondary ml-1.5">
+                                跳至
+                                <input id="jumpPageInput" type="number" min="1" class="pagination-input" />
+                                页
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -414,28 +472,28 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
             </svg>
         </button>
-        <div class="relative max-w-7xl max-h-screen p-4" onclick="event.stopPropagation()">
-            <img id="imagePreviewSrc" src="" alt="Preview" class="max-w-full max-h-[90vh] object-contain mx-auto">
-            <div class="text-center text-white mt-4">
-                <p id="imagePreviewName" class="text-lg font-medium"></p>
-            </div>
-        </div>
-    </div>
-
-    <!-- Video Preview Modal -->
-    <div id="videoPreviewModal" class="hidden fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center" onclick="closeVideoPreview()">
-        <!-- Close button at top-right corner -->
-        <button onclick="closeVideoPreview()" class="fixed top-4 right-4 text-white hover:text-gray-300 z-10 bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-70 transition-colors">
+        <!-- Previous image button -->
+        <button id="prevImageBtn" onclick="previewPreviousImage(event)" class="fixed left-4 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 z-10 bg-black bg-opacity-50 rounded-full p-3 hover:bg-opacity-70 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-white" title="上一张 (←)">
             <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
             </svg>
         </button>
-        <div class="relative max-w-5xl w-full p-4" onclick="event.stopPropagation()">
-            <video id="videoPreviewSrc" class="video-js vjs-big-play-centered vjs-theme-fantasy w-full max-h-[85vh]" controls preload="auto">
-                您的浏览器不支持视频播放
-            </video>
+        <!-- Next image button -->
+        <button id="nextImageBtn" onclick="previewNextImage(event)" class="fixed right-4 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 z-10 bg-black bg-opacity-50 rounded-full p-3 hover:bg-opacity-70 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-white" title="下一张 (→)">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+            </svg>
+        </button>
+        <div class="relative max-w-7xl max-h-screen p-4 w-full" onclick="event.stopPropagation()">
+            <img id="imagePreviewSrc" src="" alt="Preview" class="max-w-full max-h-[90vh] object-contain mx-auto">
+            <div id="imagePreviewVideoWrap" class="hidden max-w-5xl mx-auto">
+                <video id="imagePreviewVideo" class="video-js vjs-big-play-centered vjs-theme-fantasy w-full max-h-[85vh]" controls preload="auto">
+                    您的浏览器不支持视频播放
+                </video>
+            </div>
             <div class="text-center text-white mt-4">
-                <p id="videoPreviewName" class="text-lg font-medium"></p>
+                <p id="imagePreviewName" class="text-lg font-medium"></p>
+                <p id="imagePreviewCounter" class="text-sm text-gray-400 mt-1"></p>
             </div>
         </div>
     </div>
@@ -565,12 +623,116 @@
         </div>
     </div>
 
+    <!-- Floating Selection Action Bar：选中文件时从底部滑入，聚合所有批量操作 -->
+    <div class="fixed bottom-6 inset-x-0 z-50 flex justify-center px-4 pointer-events-none">
+    <div id="selectedToolbar" class="hidden theme-rounded-xl theme-shadow border max-w-[calc(100vw-2rem)] pointer-events-auto" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.18), 0 8px 10px -6px rgba(0,0,0,0.1);">
+        <div class="flex items-center gap-2 px-4 py-3">
+            <span class="text-sm font-medium whitespace-nowrap" style="color: var(--color-accent-primary);" id="selectedCount">已选择 0 项</span>
+            <div class="w-px h-6 flex-shrink-0" style="background-color: var(--color-border-primary);"></div>
+            <button id="hlsConvertBtn" class="px-3 py-1.5 text-sm font-medium theme-rounded-lg transition-colors theme-btn-secondary whitespace-nowrap">
+                <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                HLS 转码
+            </button>
+            <button id="publishToGalleryBtn" class="px-3 py-1.5 text-sm font-medium theme-rounded-lg transition-colors theme-btn-primary whitespace-nowrap">
+                <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                </svg>
+                发布到图床
+            </button>
+            <button id="batchDownloadBtn" class="px-3 py-1.5 text-sm font-medium theme-rounded-lg transition-colors theme-btn-secondary whitespace-nowrap">
+                <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                </svg>
+                批量下载
+            </button>
+            <button id="batchDeleteBtn" class="px-3 py-1.5 text-sm font-medium theme-rounded-lg transition-colors theme-btn-danger whitespace-nowrap">
+                <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+                批量删除
+            </button>
+            <div class="w-px h-6 flex-shrink-0" style="background-color: var(--color-border-primary);"></div>
+            <button id="cancelSelection" class="text-sm transition-colors px-2 py-1.5 whitespace-nowrap" style="color: var(--color-accent-secondary);">取消选择</button>
+        </div>
+    </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast" class="hidden fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 translate-y-2 opacity-0 z-50">
         <div class="flex items-center space-x-3">
             <svg id="toastIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"></svg>
             <span id="toastMessage" class="font-medium"></span>
         </div>
+    </div>
+
+    <!-- Local Folder Panel (right sidebar, list view only) -->
+    <div id="localFolderPanel" class="fixed top-16 right-0 bottom-0 z-30 flex flex-col shadow-xl" style="background-color: var(--color-bg-secondary); border-left: 1px solid var(--color-border-primary);">
+        <!-- Panel Header -->
+        <header class="shadow-sm border-b flex-shrink-0" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+            <div class="px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex items-center gap-2 min-w-0 flex-1">
+                        <button id="localFolderBack" class="theme-icon-btn p-1.5 rounded-md flex-shrink-0" title="返回上级">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                            </svg>
+                        </button>
+                        <span class="text-sm font-medium truncate" style="color: var(--color-text-primary);" id="localFolderPath">本地文件夹</span>
+                    </div>
+                    <div class="flex items-center gap-1 flex-shrink-0">
+                        <!-- Save bookmark -->
+                        <button id="localFolderBookmark" class="theme-icon-btn p-1.5 rounded-md" title="保存书签">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"></path>
+                            </svg>
+                        </button>
+                        <!-- Bookmarks & recent dropdown -->
+                        <div class="relative">
+                            <button id="localFolderBookmarksBtn" class="theme-icon-btn p-1.5 rounded-md" title="书签与历史">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            </button>
+                            <div id="bookmarksDropdown" class="hidden absolute right-0 mt-2 w-64 max-h-96 overflow-y-auto rounded-lg shadow-lg border py-2 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+                            </div>
+                        </div>
+                        <button id="localFolderChange" class="theme-icon-btn p-1.5 rounded-md" title="更换文件夹" style="background-color: var(--color-bg-tertiary);">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776"></path>
+                            </svg>
+                        </button>
+                        <button id="localFolderClose" class="theme-icon-btn p-1.5 rounded-md" title="关闭">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+        <!-- File List -->
+        <div class="flex-1 overflow-y-auto p-6 theme-page-bg">
+            <div class="theme-card theme-rounded-xl theme-shadow relative overflow-hidden">
+                <div class="overflow-hidden">
+                    <table class="min-w-full divide-y" style="border-color: var(--color-border-primary);">
+                        <thead>
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider theme-page-text-tertiary rounded-tl-xl" style="background-color: var(--color-bg-tertiary);">文件信息</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider theme-page-text-tertiary rounded-tr-xl" style="background-color: var(--color-bg-tertiary);">大小</th>
+                            </tr>
+                        </thead>
+                        <tbody id="localFileList" class="divide-y" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+                        </tbody>
+                    </table>
+                </div>
+                <div id="localEmptyHint" class="hidden px-6 py-12 text-center theme-page-text-secondary">空文件夹</div>
+            </div>
+        </div>
+        <!-- Footer hint -->
+        <div class="px-6 py-2 border-t text-xs flex-shrink-0" style="border-color: var(--color-border-primary); color: var(--color-text-tertiary);">拖拽文件到左侧列表上传</div>
     </div>
 
     <script src="/admin-dashboard.js"></script>

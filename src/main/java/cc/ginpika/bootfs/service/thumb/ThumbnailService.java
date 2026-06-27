@@ -2,6 +2,7 @@ package cc.ginpika.bootfs.service.thumb;
 
 import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.core.Context;
+import cc.ginpika.bootfs.core.io.ContextIO;
 import cc.ginpika.bootfs.domain.dto.FileObject;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +23,8 @@ public class ThumbnailService {
     TfsConfig tfsConfig;
     @Autowired
     Context context;
+    @Autowired
+    ContextIO contextIO;
 
     public static final Set<String> IMAGE_EXTENSIONS = Set.of(".jpg", ".jpeg", ".png", ".gif");
 
@@ -92,6 +95,8 @@ public class ThumbnailService {
             log.error("ffmpeg 生成缩略图失败，退出码 {}，输出: {}", exitCode, new String(output));
             Files.deleteIfExists(thumbFile);
         } else {
+            fileObject.setThumbAvailable("1");
+            contextIO.update(uuid, fileObject);
             log.info("缩略图已生成: {} -> {}", uuid, thumbFile);
         }
     }

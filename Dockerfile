@@ -35,16 +35,16 @@ RUN groupadd -r bootfs && useradd -r -g bootfs bootfs
 WORKDIR /app
 
 # Copy the built jar from builder stage
-COPY --from=builder /build/target/bootfs-*.jar /app/app.jar
+COPY --from=builder /build/target/bootfs-*.jar /app.jar
 
 # Create data directory and set permissions
-RUN mkdir -p /data && chown -R bootfs:bootfs /app /data
+RUN mkdir -p /data && chown -R bootfs:bootfs /app
 
 USER bootfs
 
 EXPOSE 8181
 
-ENTRYPOINT exec java $JAVA_OPTS -Dspring.profiles.active=prod -jar /app/app.jar \
+ENTRYPOINT exec java $JAVA_OPTS -Dspring.profiles.active=prod -jar /app.jar \
     --server.tomcat.connection-timeout=1800000 \
     --tfs.copies=$TFS_COPIES \
     --tfs.web-entrypoint=$TFS_WEB_ENTRYPOINT \

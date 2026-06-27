@@ -95,8 +95,8 @@ public class MediaConvertService {
                         "-i", fileObject.getPath(), "-c:v", "libx264", "-crf", "22.5", "-preset", "medium", "-c:a", "aac",
                         "-b:a", "128k", "-f", "hls", "-hls_list_size", "0", "-hls_time", "6", "-hls_playlist_type", "event",
                         "-hls_segment_type", "mpegts", "-hls_flags", "independent_segments", "-hls_segment_filename",
-                        "\"" + outputSegmentPath + "\"",
-                        "\"" + playlistPath + "\"");
+                        outputSegmentPath.toString(),
+                        playlistPath.toString());
             }
 
             processBuilder.directory(ffmpeg.getParent().toFile());

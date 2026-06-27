@@ -18,6 +18,8 @@ public class FileObject {
     private String copyOf;
     // means hls resource is ready
     private String hlsAvailable;
+    // means webp thumbnail is ready
+    private String thumbAvailable;
     // support download or direct read
     private transient String url;
     // means this object is a child-object

@@ -787,11 +787,19 @@ function createWaterfallCard(file) {
                         <span class="absolute top-2 left-2 px-2 py-1 text-white text-xs rounded-md font-medium" style="background-color: var(--color-accent-primary);">相册</span>
                     </div>
                 ` : isImageFile ? `
-                    <img src="/thumb/${file.uuid}"
-                         alt="${file.fileName}"
-                         class="w-full h-auto object-cover"
-                         loading="lazy"
-                         onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
+                    ${file.thumbAvailable === '1' ? `
+                        <img src="/thumb/${file.uuid}"
+                             alt="${file.fileName}"
+                             class="w-full h-auto object-cover"
+                             loading="lazy"
+                             onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
+                    ` : `
+                        <div class="w-full aspect-[3/4] flex items-center justify-center" style="background-color: var(--color-bg-tertiary);">
+                            <svg class="w-16 h-16" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                        </div>
+                    `}
                 ` : isVideoFile ? `
                     <div class="relative w-full aspect-video" style="background-color: var(--color-bg-tertiary);">
                         <video src="/p/${file.uuid}" 
@@ -849,10 +857,18 @@ function createGridCard(file) {
             <!-- Thumbnail -->
             <div class="card-preview-area relative aspect-square overflow-hidden" style="background-color: var(--color-bg-tertiary);">
                 ${isImageFile ? `
-                    <img src="/thumb/${file.uuid}"
-                         alt="${file.fileName}"
-                         class="w-full h-full object-cover zoom-image"
-                         onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
+                    ${file.thumbAvailable === '1' ? `
+                        <img src="/thumb/${file.uuid}"
+                             alt="${file.fileName}"
+                             class="w-full h-full object-cover zoom-image"
+                             onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
+                    ` : `
+                        <div class="w-full h-full flex items-center justify-center">
+                            <svg class="w-16 h-16" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                        </div>
+                    `}
                 ` : isVideoFile ? `
                     <div class="w-full h-full relative" style="background-color: var(--color-bg-tertiary);">
                         <video src="/p/${file.uuid}" 
@@ -956,10 +972,18 @@ function createListRow(file) {
                 <div class="flex items-center">
                     <div class="flex-shrink-0 h-10 w-10">
                         ${isImageFile ? `
-                            <img class="h-10 w-10 theme-rounded-lg object-cover"
-                                 src="/thumb/${file.uuid}"
-                                 alt=""
-                                 onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 24 22%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
+                            ${file.thumbAvailable === '1' ? `
+                                <img class="h-10 w-10 theme-rounded-lg object-cover"
+                                     src="/thumb/${file.uuid}"
+                                     alt=""
+                                     onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 24 22%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
+                            ` : `
+                                <div class="h-10 w-10 theme-rounded-lg flex items-center justify-center" style="background-color: var(--color-bg-tertiary);">
+                                    <svg class="w-5 h-5" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                </div>
+                            `}
                         ` : isVideoFile ? `
                             <div class="h-10 w-10 theme-rounded-lg flex items-center justify-center" style="background-color: var(--color-bg-tertiary);">
                                 <svg class="w-5 h-5 theme-page-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">

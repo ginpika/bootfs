@@ -787,8 +787,8 @@ function createWaterfallCard(file) {
                         <span class="absolute top-2 left-2 px-2 py-1 text-white text-xs rounded-md font-medium" style="background-color: var(--color-accent-primary);">相册</span>
                     </div>
                 ` : isImageFile ? `
-                    <img src="/p/${file.uuid}" 
-                         alt="${file.fileName}" 
+                    <img src="/thumb/${file.uuid}"
+                         alt="${file.fileName}"
                          class="w-full h-auto object-cover"
                          loading="lazy"
                          onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
@@ -849,8 +849,8 @@ function createGridCard(file) {
             <!-- Thumbnail -->
             <div class="card-preview-area relative aspect-square overflow-hidden" style="background-color: var(--color-bg-tertiary);">
                 ${isImageFile ? `
-                    <img src="/p/${file.uuid}" 
-                         alt="${file.fileName}" 
+                    <img src="/thumb/${file.uuid}"
+                         alt="${file.fileName}"
                          class="w-full h-full object-cover zoom-image"
                          onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
                 ` : isVideoFile ? `
@@ -956,8 +956,8 @@ function createListRow(file) {
                 <div class="flex items-center">
                     <div class="flex-shrink-0 h-10 w-10">
                         ${isImageFile ? `
-                            <img class="h-10 w-10 theme-rounded-lg object-cover" 
-                                 src="/p/${file.uuid}" 
+                            <img class="h-10 w-10 theme-rounded-lg object-cover"
+                                 src="/thumb/${file.uuid}"
                                  alt=""
                                  onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 24 22%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
                         ` : isVideoFile ? `

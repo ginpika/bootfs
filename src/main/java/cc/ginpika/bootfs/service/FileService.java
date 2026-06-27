@@ -11,6 +11,7 @@ import cc.ginpika.bootfs.core.io.ComicArchiveProcessor;
 import cc.ginpika.bootfs.core.io.TransferThreadPool;
 import cc.ginpika.bootfs.service.meilisearch.FullTextDocument;
 import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
+import cc.ginpika.bootfs.service.thumb.ThumbnailService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +44,8 @@ public class FileService {
     private FileTransferService fileTransferService;
     @Autowired
     private MeiliSearchService meiliSearchService;
+    @Autowired
+    private ThumbnailService thumbnailService;
 
     // Thread context parameters passing for function with parent-child-relation
     // like comic zip archive
@@ -134,6 +137,7 @@ public class FileService {
         etcdService.putFile(uuid, localNodeUrl, context.buildMetaJson(file));
         File target = new File(filePath);
         replication(target, uuid, file.getOriginalFilename());
+        thumbnailService.generateAsync(uuid);
         return localNodeUrl;
     }
 

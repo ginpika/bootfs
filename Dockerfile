@@ -24,6 +24,11 @@ FROM eclipse-temurin:17-jre-jammy
 ENV TZ=PRC
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
+# Install ffmpeg (for HLS transcoding + webp thumbnail generation)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 # Create non-root user for security
 RUN groupadd -r bootfs && useradd -r -g bootfs bootfs
 

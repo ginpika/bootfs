@@ -37,7 +37,7 @@ services:
     networks:
       - net
     volumes:
-      - data:/tfs
+      - data:/data
     ports:
       - "8181:8181"
     environment:

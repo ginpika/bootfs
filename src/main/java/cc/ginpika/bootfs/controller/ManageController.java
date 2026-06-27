@@ -11,6 +11,7 @@ import cc.ginpika.bootfs.service.ReverseProxyService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -105,6 +106,24 @@ public class ManageController {
                              HttpServletResponse response,
                              HttpServletRequest request) {
         reverseProxyService.reverseProxyFile(uuid, response, request);
+    }
+
+    // serve webp thumbnail
+    @GetMapping("/thumb/{uuid}")
+    public ResponseEntity<Resource> thumbnail(@PathVariable String uuid) {
+        FileObject fileObject = context.query(uuid);
+        if (fileObject == null) {
+            return ResponseEntity.notFound().build();
+        }
+        Path thumbFile = Path.of(tfsConfig.getPathPrefix(), "thumb", uuid + ".webp");
+        if (!Files.exists(thumbFile)) {
+            return ResponseEntity.notFound().build();
+        }
+        Resource resource = new FileSystemResource(thumbFile);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, "image/webp")
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=2592000, immutable")
+                .body(resource);
     }
 
     // get the replica from other nodes

@@ -1,6 +1,7 @@
 package cc.ginpika.bootfs.config;
 
 import lombok.Data;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
@@ -19,6 +20,8 @@ public class TfsConfig {
     private String ffmpegUrl;
     private String meiliSearchUrl;
     private String etcdUrl;
+    private Integer thumbnailWidth = 480;
+    private Integer thumbnailQuality = 80;
 
     public static final String EXE_SUFFIX =
             System.getProperty("os.name").toLowerCase().startsWith("win") ? ".exe" : "";
@@ -32,6 +35,9 @@ public class TfsConfig {
     }
 
     public String getFfmpegUrl() {
+        if (StringUtils.isNotBlank(this.ffmpegUrl)) {
+            return this.ffmpegUrl;
+        }
         return Path.of(this.rootPath, "ffmpeg", "bin", "ffmpeg") + EXE_SUFFIX;
     }
 }

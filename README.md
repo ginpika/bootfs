@@ -2,7 +2,7 @@
 
 [English](./README-en.md)
 
-一个轻量级，专注于图片、音视频存储的文件管理系统，基于 Spring Boot。
+一个轻量级，专注于图片、音视频存储的文件管理系统，基于 Spring Boot & FFmpeg。
 
 这是一个图床，或者不仅仅是图床。
 
@@ -20,7 +20,7 @@ Build with ：spring-boot + etcd + meilisearch
 
 ## 部署
 
-**前置(optional): [Hostid](https://github.com/ginpika/hostid)**
+**前置(optional):** **[Hostid](https://github.com/ginpika/hostid)**
 
 基于 hostid 的 sso 鉴权实现单点登录。
 
@@ -41,3 +41,4 @@ docker compose up -d
 2. 图片的 webp 转码能力
 3. 更好的对等拓展能力
 4. 软件 hls 转码优化
+

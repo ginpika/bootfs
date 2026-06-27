@@ -78,7 +78,6 @@ public class ThumbnailService {
                 ffmpeg,
                 "-hide_banner",
                 "-loglevel", "error",
-                "-autorotate",
                 "-i", sourceFile.toString(),
                 "-vf", String.format("scale='min(%d,iw)':-2", width),
                 "-quality", String.valueOf(quality),

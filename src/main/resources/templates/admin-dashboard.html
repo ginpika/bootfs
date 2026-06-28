@@ -618,7 +618,7 @@
             
             <div class="flex justify-end space-x-3 mt-6">
                 <button onclick="closeTsUploadModal()" class="px-4 py-2 theme-rounded-lg transition-colors theme-btn-secondary">取消</button>
-                <button id="startTsUploadBtn" class="px-4 py-2 text-white theme-rounded-lg transition-colors" style="background-color: var(--color-warning);">开始上传</button>
+                <button id="startTsUploadBtn" class="px-4 py-2 theme-rounded-lg transition-colors theme-btn-primary">开始上传</button>
             </div>
         </div>
     </div>
@@ -658,6 +658,113 @@
             <button id="cancelSelection" class="text-sm transition-colors px-2 py-1.5 whitespace-nowrap" style="color: var(--color-accent-secondary);">取消选择</button>
         </div>
     </div>
+    </div>
+
+    <!-- File Detail Modal -->
+    <div id="fileDetailModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" onclick="closeFileDetailModal(event)">
+        <div class="theme-card theme-rounded-xl shadow-2xl w-full max-w-xl mx-4 max-h-[90vh] flex flex-col" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between p-5 pb-3 border-b" style="border-color: var(--color-border-primary);">
+                <h3 class="text-lg font-semibold theme-page-text-primary">文件详情</h3>
+                <button onclick="closeFileDetailModal()" class="theme-page-text-muted hover:opacity-70 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="overflow-y-auto p-5 space-y-5">
+                <!-- Loading layer -->
+                <div id="fileDetailLoading" class="hidden flex items-center justify-center py-16">
+                    <svg class="animate-spin h-8 w-8" style="color: var(--color-accent-primary);" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="ml-3 theme-page-text-secondary">加载中...</span>
+                </div>
+                <!-- Detail content -->
+                <div id="fileDetailContent" class="space-y-5">
+                    <!-- 文件名 & 大小 -->
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="min-w-0 flex-1">
+                            <h2 id="detailFileName" class="text-base font-semibold theme-page-text-primary truncate" title=""></h2>
+                            <div class="flex flex-wrap gap-2 mt-2" id="detailStatusBadges"></div>
+                        </div>
+                        <span id="detailFileSize" class="text-sm font-mono theme-page-text-secondary whitespace-nowrap mt-0.5"></span>
+                    </div>
+
+                    <!-- 媒体信息 (仅音频/视频) -->
+                    <div id="detailMediaSection" class="hidden space-y-4">
+                        <!-- 时长 -->
+                        <div class="flex items-center gap-2">
+                            <svg class="w-4 h-4 theme-page-text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><polyline points="12 6 12 12 16 14" stroke-width="2" stroke-linecap="round"/></svg>
+                            <span id="detailDuration" class="text-xl font-mono font-semibold" style="color: var(--color-accent-primary);"></span>
+                        </div>
+
+                        <!-- 流信息：视频和音频并排 -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <!-- 视频流 -->
+                            <div id="detailVideoInfo" class="hidden theme-rounded-lg p-3.5 space-y-2" style="background-color: var(--color-bg-tertiary);">
+                                <div class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider theme-page-text-muted">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke-width="2" stroke-linecap="round"/></svg>
+                                    视频
+                                </div>
+                                <div class="space-y-1.5 text-sm">
+                                    <div class="flex justify-between"><span class="theme-page-text-muted">编码</span><span id="detailVideoCodec" class="theme-page-text-primary font-medium"></span></div>
+                                    <div class="flex justify-between"><span class="theme-page-text-muted">分辨率</span><span id="detailVideoResolution" class="theme-page-text-primary font-medium"></span></div>
+                                    <div class="flex justify-between"><span class="theme-page-text-muted">帧率</span><span id="detailVideoFps" class="theme-page-text-primary"></span></div>
+                                    <div class="flex justify-between"><span class="theme-page-text-muted">码率</span><span id="detailVideoBitrate" class="theme-page-text-primary"></span></div>
+                                    <div class="flex justify-between"><span class="theme-page-text-muted">像素格式</span><span id="detailVideoPixFmt" class="theme-page-text-primary text-xs"></span></div>
+                                </div>
+                            </div>
+                            <!-- 音频流 -->
+                            <div id="detailAudioInfo" class="hidden theme-rounded-lg p-3.5 space-y-2" style="background-color: var(--color-bg-tertiary);">
+                                <div class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider theme-page-text-muted">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" stroke-width="2"/><circle cx="18" cy="16" r="3" stroke-width="2"/></svg>
+                                    音频
+                                </div>
+                                <div class="space-y-1.5 text-sm">
+                                    <div class="flex justify-between"><span class="theme-page-text-muted">编码</span><span id="detailAudioCodec" class="theme-page-text-primary font-medium"></span></div>
+                                    <div class="flex justify-between"><span class="theme-page-text-muted">采样率</span><span id="detailAudioSampleRate" class="theme-page-text-primary"></span></div>
+                                    <div class="flex justify-between"><span class="theme-page-text-muted">声道</span><span id="detailAudioChannels" class="theme-page-text-primary"></span></div>
+                                    <div class="flex justify-between"><span class="theme-page-text-muted">码率</span><span id="detailAudioBitrate" class="theme-page-text-primary"></span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 容器格式 -->
+                        <div id="detailFormatInfo" class="hidden flex items-center gap-4 text-xs theme-rounded-lg px-3.5 py-2" style="background-color: var(--color-bg-tertiary);">
+                            <span class="theme-page-text-muted">容器</span>
+                            <span id="detailFormatName" class="theme-page-text-primary font-medium"></span>
+                            <span class="theme-page-text-muted" style="opacity:0.4;">|</span>
+                            <span class="theme-page-text-muted">总码率</span>
+                            <span id="detailFormatBitrate" class="theme-page-text-primary"></span>
+                        </div>
+                    </div>
+
+                    <!-- 分隔线 -->
+                    <div class="border-t" style="border-color: var(--color-border-primary);"></div>
+
+                    <!-- 路径 & UUID -->
+                    <div class="space-y-2">
+                        <div class="flex items-start gap-2 text-xs">
+                            <span class="theme-page-text-muted whitespace-nowrap mt-0.5">路径</span>
+                            <span id="detailPath" class="theme-page-text-secondary font-mono break-all"></span>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs">
+                            <span class="theme-page-text-muted whitespace-nowrap">UUID</span>
+                            <span id="detailUuid" class="theme-page-text-secondary font-mono"></span>
+                        </div>
+                    </div>
+
+                    <!-- 标签 -->
+                    <div>
+                        <div id="detailTags" class="flex flex-wrap gap-1.5"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end p-5 pt-3 border-t" style="border-color: var(--color-border-primary);">
+                <button onclick="closeFileDetailModal()" class="px-4 py-2 theme-rounded-lg transition-colors theme-btn-secondary">关闭</button>
+            </div>
+        </div>
     </div>
 
     <!-- Toast Notification -->

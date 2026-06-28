@@ -85,8 +85,81 @@ public class WebUIApiController {
     @GetMapping("/queryPageOffset")
     public FileObjectWebVO queryPageOffset(@RequestParam(value = "pageNumber", defaultValue = "0") int pageNumber,
                                            @RequestParam(value = "pageSize", defaultValue = "10") int pageSize,
-                                           @RequestParam(value = "search", defaultValue = "") String search) {
+                                           @RequestParam(value = "search", defaultValue = "") String search,
+                                           @RequestParam(value = "tags", defaultValue = "") String tags) {
+        // 显式指定 tag 过滤 → 强制走 MeiliSearch
+        if (StringUtils.isNotBlank(tags)) {
+            FileObjectWebVO result = meiliSearchQuery(pageNumber, pageSize, search, tags);
+            return result != null ? result : emptyPage(pageNumber, pageSize);
+        }
+
+        // 有搜索词 → 优先 MeiliSearch 全文检索（同时覆盖 tags 和文档内容），空结果回退内存
+        if (StringUtils.isNotBlank(search)) {
+            FileObjectWebVO meiliResult = meiliSearchQuery(pageNumber, pageSize, search, null);
+            if (meiliResult != null && meiliResult.getTotal() > 0) {
+                return meiliResult;
+            }
+        }
+
         return context.queryByOffset(pageNumber, pageSize, search);
+    }
+
+    /**
+     * 走 MeiliSearch，并行搜索 image-host 和 full-text 两个索引，合并结果后从存储中翻页
+     * @param tagFilter 逗号分隔的标签，为 null 时不做标签过滤（纯全文搜索）
+     * @return 搜索结果，UUID 集合为空时返回 null
+     */
+    private FileObjectWebVO meiliSearchQuery(int pageNumber, int pageSize, String query, String tagFilter) {
+        List<String> tagList = tagFilter != null
+                ? Arrays.stream(tagFilter.split(","))
+                        .map(String::trim)
+                        .filter(StringUtils::isNotBlank)
+                        .collect(Collectors.toList())
+                : null;
+
+        Set<String> uuidSet = new LinkedHashSet<>();
+
+        SearchResult r1 = meiliSearchService.searchByTags(query, tagList, 0, 1000, "image-host");
+        if (r1 != null && r1.getHits() != null) {
+            r1.getHits().forEach(hit -> uuidSet.add((String) hit.get("uuid")));
+        }
+
+        SearchResult r2 = meiliSearchService.searchByTags(query, tagList, 0, 1000, "full-text");
+        if (r2 != null && r2.getHits() != null) {
+            r2.getHits().forEach(hit -> uuidSet.add((String) hit.get("uuid")));
+        }
+
+        if (uuidSet.isEmpty()) return null;
+
+        List<String> allUuids = new ArrayList<>(uuidSet);
+        int total = allUuids.size();
+
+        int from = pageNumber * pageSize;
+        int to = Math.min(from + pageSize, allUuids.size());
+        if (from >= allUuids.size()) {
+            return FileObjectWebVO.builder()
+                    .pageNumber(pageNumber).pageSize(pageSize).total(total)
+                    .rows(Collections.emptyList()).build();
+        }
+
+        List<FileObject> files = new ArrayList<>();
+        for (String uuid : allUuids.subList(from, to)) {
+            FileObject tf = context.query(uuid);
+            if (tf != null) {
+                tf.setUrl(context.buildUrl(tf.getUuid()));
+                files.add(tf);
+            }
+        }
+
+        return FileObjectWebVO.builder()
+                .pageNumber(pageNumber).pageSize(pageSize).total(total)
+                .rows(files).build();
+    }
+
+    private FileObjectWebVO emptyPage(int pageNumber, int pageSize) {
+        return FileObjectWebVO.builder()
+                .pageNumber(pageNumber).pageSize(pageSize).total(0)
+                .rows(Collections.emptyList()).build();
     }
 
     @PostMapping("/removeFileByUuid")
@@ -355,5 +428,166 @@ public class WebUIApiController {
     public ResponseEntity<Map<String, Integer>> tagList(@RequestParam(value = "index", defaultValue = "full-text") String index) {
         Map<String, Integer> tags = meiliSearchService.listAllTags(index);
         return ResponseEntity.ok(tags);
+    }
+
+    // ======================== 文件详情 API ========================
+
+    /**
+     * 获取文件详情，包含多媒体元数据（异步提取）
+     */
+    @GetMapping("/api/file/{uuid}/details")
+    public ResponseEntity<?> getFileDetails(@PathVariable("uuid") String uuid) {
+        FileObject fileObject = context.query(uuid);
+        if (fileObject == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        JSONObject details = new JSONObject();
+        details.put("uuid", fileObject.getUuid());
+        details.put("fileName", fileObject.getFileName());
+        details.put("size", fileObject.getSize());
+        details.put("path", fileObject.getPath());
+        details.put("url", context.buildUrl(fileObject.getUuid()));
+        details.put("copyOf", fileObject.getCopyOf());
+        details.put("hlsAvailable", fileObject.getHlsAvailable());
+        details.put("thumbAvailable", fileObject.getThumbAvailable());
+        details.put("albumAvailable", fileObject.getAlbumAvailable());
+        details.put("nsfw", fileObject.getNsfw());
+        details.put("isPublicAccess", fileObject.getIsPublicAccess());
+        details.put("parent", fileObject.getParent());
+
+        List<Tag> tags = fileObject.getTags();
+        details.put("tags", tags != null ? tags : Collections.emptyList());
+
+        // 提取多媒体元数据（音频/视频）
+        String fileName = fileObject.getFileName();
+        if (fileName != null) {
+            String lower = fileName.toLowerCase();
+            boolean isVideo = lower.matches(".*\\.(mp4|webm|avi|mov|mkv|flv|wmv|m4v|ts)$");
+            boolean isAudio = lower.matches(".*\\.(mp3|wav|flac|aac|ogg|wma|m4a|opus)$");
+            if (isVideo || isAudio) {
+                try {
+                    JSONObject mediaInfo = extractMediaInfo(fileObject.getPath());
+                    details.put("mediaInfo", mediaInfo);
+                } catch (Exception e) {
+                    log.warn("提取媒体信息失败: {} - {}", uuid, e.getMessage());
+                    details.put("mediaInfo", null);
+                }
+            }
+        }
+
+        return ResponseEntity.ok(details);
+    }
+
+    private JSONObject extractMediaInfo(String filePath) {
+        JSONObject info = new JSONObject();
+
+        String ffmpegUrl = tfsConfig.getFfmpegUrl();
+        int lastIdx = ffmpegUrl.lastIndexOf("ffmpeg");
+        String ffprobePath = ffmpegUrl.substring(0, lastIdx) + "ffprobe" + ffmpegUrl.substring(lastIdx + 6);
+
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                    ffprobePath,
+                    "-v", "quiet",
+                    "-print_format", "json",
+                    "-show_format",
+                    "-show_streams",
+                    filePath
+            );
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line);
+                }
+            }
+            process.waitFor(10, TimeUnit.SECONDS);
+
+            JSONObject probeResult = JSONObject.parseObject(output.toString());
+
+            // 解析 format 信息
+            JSONObject format = probeResult.getJSONObject("format");
+            if (format != null) {
+                info.put("formatName", format.getString("format_name"));
+                info.put("formatLongName", format.getString("format_long_name"));
+                info.put("duration", format.getDouble("duration"));
+                info.put("bitRate", format.getLong("bit_rate"));
+                info.put("size", format.getLong("size"));
+            }
+
+            // 解析 streams
+            JSONArray streams = probeResult.getJSONArray("streams");
+            if (streams != null) {
+                JSONObject videoStream = null;
+                JSONObject audioStream = null;
+
+                for (int i = 0; i < streams.size(); i++) {
+                    JSONObject stream = streams.getJSONObject(i);
+                    String codecType = stream.getString("codec_type");
+                    if ("video".equals(codecType) && videoStream == null) {
+                        videoStream = stream;
+                    } else if ("audio".equals(codecType) && audioStream == null) {
+                        audioStream = stream;
+                    }
+                }
+
+                if (videoStream != null) {
+                    JSONObject video = new JSONObject();
+                    video.put("codec", videoStream.getString("codec_name"));
+                    video.put("codecLong", videoStream.getString("codec_long_name"));
+                    video.put("width", videoStream.getInteger("width"));
+                    video.put("height", videoStream.getInteger("height"));
+                    video.put("pixFmt", videoStream.getString("pix_fmt"));
+                    if (videoStream.containsKey("r_frame_rate")) {
+                        String fpsStr = videoStream.getString("r_frame_rate");
+                        video.put("frameRate", parseFrameRate(fpsStr));
+                    }
+                    if (videoStream.containsKey("bit_rate")) {
+                        video.put("bitRate", videoStream.getLong("bit_rate"));
+                    }
+                    if (videoStream.containsKey("profile")) {
+                        video.put("profile", videoStream.getString("profile"));
+                    }
+                    info.put("video", video);
+                }
+
+                if (audioStream != null) {
+                    JSONObject audio = new JSONObject();
+                    audio.put("codec", audioStream.getString("codec_name"));
+                    audio.put("codecLong", audioStream.getString("codec_long_name"));
+                    audio.put("sampleRate", audioStream.getInteger("sample_rate"));
+                    audio.put("channels", audioStream.getInteger("channels"));
+                    if (audioStream.containsKey("bit_rate")) {
+                        audio.put("bitRate", audioStream.getLong("bit_rate"));
+                    }
+                    if (audioStream.containsKey("channel_layout")) {
+                        audio.put("channelLayout", audioStream.getString("channel_layout"));
+                    }
+                    info.put("audio", audio);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("ffprobe 执行失败: {}", e.getMessage());
+            info.put("error", "无法提取媒体信息");
+        }
+
+        return info;
+    }
+
+    private Double parseFrameRate(String fpsStr) {
+        if (fpsStr == null || fpsStr.isEmpty()) return null;
+        try {
+            if (fpsStr.contains("/")) {
+                String[] parts = fpsStr.split("/");
+                return Double.parseDouble(parts[0]) / Double.parseDouble(parts[1]);
+            }
+            return Double.parseDouble(fpsStr);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

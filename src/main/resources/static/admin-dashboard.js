@@ -184,6 +184,14 @@ function initializeEventListeners() {
             loadGridView(true);
         }
     }
+
+    const homeBtn = document.getElementById('homeBtn');
+    if (homeBtn) {
+        homeBtn.addEventListener('click', () => {
+            searchInput.value = '';
+            performSearch();
+        });
+    }
     
     if (searchInput) {
         searchInput.addEventListener('input', function(e) {

@@ -121,6 +121,11 @@
                     <div class="flex items-center justify-between h-16">
                         <!-- Left: Search + Filter -->
                         <div class="flex-1 flex items-center gap-2 max-w-2xl">
+                            <button id="homeBtn" class="flex-shrink-0 p-2 theme-rounded-lg transition-colors theme-btn-secondary" title="回到首页">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                                </svg>
+                            </button>
                             <div class="relative flex-1 max-w-xl">
                                 <input type="text" id="searchInput" placeholder="搜索文件..."
                                     class="w-full pl-10 pr-12 py-2 border rounded-lg text-sm theme-input focus:outline-none">
@@ -339,7 +344,7 @@
             <main id="mainView" class="flex-1 overflow-y-auto p-6 theme-page-bg">
                 
                 <!-- File Grid/List View -->
-                <div class="theme-card theme-rounded-xl theme-shadow relative">
+                <div class="theme-card theme-rounded-xl theme-shadow relative overflow-hidden">
                     <!-- Loading Overlay -->
                     <div id="loadingOverlay" class="hidden absolute inset-0 flex items-center justify-center z-50 theme-rounded-xl" style="background-color: var(--color-bg-secondary); opacity: 0.9;">
                         <div class="flex flex-col items-center">

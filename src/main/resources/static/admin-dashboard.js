@@ -2268,18 +2268,20 @@ function debounce(func, wait) {
 // Drag and drop
 function initializeDragAndDrop() {
     const dropZone = document.body;
-    
+    const overlay = document.getElementById('listDropOverlay');
+
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         dropZone.addEventListener(eventName, preventDefaults, false);
     });
-    
+
     function preventDefaults(e) {
         e.preventDefault();
         e.stopPropagation();
     }
-    
+
     dropZone.addEventListener('dragenter', () => {
         dropZone.classList.add('drag-active');
+        if (overlay) overlay.classList.remove('hidden');
     }, false);
 
     dropZone.addEventListener('dragover', (e) => {
@@ -2291,11 +2293,13 @@ function initializeDragAndDrop() {
     dropZone.addEventListener('dragleave', (e) => {
         if (e.relatedTarget === null) {
             dropZone.classList.remove('drag-active');
+            if (overlay) overlay.classList.add('hidden');
         }
     }, false);
 
     dropZone.addEventListener('drop', async (e) => {
         dropZone.classList.remove('drag-active');
+        if (overlay) overlay.classList.add('hidden');
         let files = e.dataTransfer.files;
         // 右栏拖拽：files 为空时从 draggingFileHandle 异步获取 File
         if (files.length === 0 && draggingFileHandle) {

@@ -101,41 +101,16 @@
                 <div class="text-xs mt-1" style="color: var(--color-text-muted);">总时长</div>
             </div>
             <div class="theme-rounded-xl p-5 text-center" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-                <div class="text-2xl font-bold" style="color: var(--color-accent-primary);" id="cacheOneSize" th:text="${stats.cacheOneSize}">0</div>
-                <div class="text-xs mt-1" style="color: var(--color-text-muted);">缓存一</div>
+                <div class="text-2xl font-bold" style="color: var(--color-accent-primary);" id="playlistWindowSize" th:text="${stats.playlistWindowSize}">5</div>
+                <div class="text-xs mt-1" style="color: var(--color-text-muted);">播放窗口</div>
             </div>
             <div class="theme-rounded-xl p-5 text-center" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-                <div class="text-2xl font-bold" style="color: var(--color-accent-primary);" id="cacheTwoSize" th:text="${stats.cacheTwoSize}">0</div>
-                <div class="text-xs mt-1" style="color: var(--color-text-muted);">缓存二</div>
+                <div class="text-2xl font-bold" style="color: var(--color-accent-primary);" id="elapsedSeconds" th:text="${stats.elapsedSeconds}">0s</div>
+                <div class="text-xs mt-1" style="color: var(--color-text-muted);">已播时长</div>
             </div>
             <div class="theme-rounded-xl p-5 text-center" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-                <div class="text-2xl font-bold" style="color: var(--color-accent-primary);" id="mediaSequence" th:text="${stats.mediaSequence}">0</div>
-                <div class="text-xs mt-1" style="color: var(--color-text-muted);">播放序号</div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div class="theme-rounded-xl p-5" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-                <h3 class="text-base font-semibold mb-4 flex items-center gap-2" style="color: var(--color-text-primary);">
-                    缓存一 (面向客户端)
-                    <span class="px-2 py-0.5 text-xs rounded-full" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);" id="cacheOneBadge">0/5</span>
-                </h3>
-                <div class="flex flex-col gap-2 max-h-52 overflow-y-auto" id="cacheOneList">
-                    <div class="px-3 py-2.5 text-sm theme-rounded-lg" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);">
-                        加载中...
-                    </div>
-                </div>
-            </div>
-            <div class="theme-rounded-xl p-5" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-                <h3 class="text-base font-semibold mb-4 flex items-center gap-2" style="color: var(--color-text-primary);">
-                    缓存二 (预备队列)
-                    <span class="px-2 py-0.5 text-xs rounded-full" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);" id="cacheTwoBadge">0/20</span>
-                </h3>
-                <div class="flex flex-col gap-2 max-h-52 overflow-y-auto" id="cacheTwoList">
-                    <div class="px-3 py-2.5 text-sm theme-rounded-lg" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);">
-                        加载中...
-                    </div>
-                </div>
+                <div class="text-2xl font-bold" style="color: var(--color-accent-primary);" id="currentCyclePosition" th:text="${stats.currentCyclePosition}">0s</div>
+                <div class="text-xs mt-1" style="color: var(--color-text-muted);">周期内位置</div>
             </div>
         </div>
     </div>
@@ -213,12 +188,9 @@
                 .then(data => {
                     document.getElementById('totalSegments').textContent = data.allTsListSize;
                     document.getElementById('totalDuration').textContent = data.totalDurationFormatted;
-                    document.getElementById('cacheOneSize').textContent = data.cacheOneSize;
-                    document.getElementById('cacheTwoSize').textContent = data.cacheTwoSize;
-                    document.getElementById('mediaSequence').textContent = data.mediaSequence;
-                    
-                    document.getElementById('cacheOneBadge').textContent = data.cacheOneSize + '/5';
-                    document.getElementById('cacheTwoBadge').textContent = data.cacheTwoSize + '/20';
+                    document.getElementById('playlistWindowSize').textContent = data.playlistWindowSize;
+                    document.getElementById('elapsedSeconds').textContent = data.elapsedSeconds || '--';
+                    document.getElementById('currentCyclePosition').textContent = data.currentCyclePosition || '--';
                     
                     updateStatus(data.initialized);
                 })

@@ -11,12 +11,14 @@ import com.meilisearch.sdk.model.SearchResult;
 import cc.ginpika.bootfs.config.MeiliSearchConfig;
 import cc.ginpika.bootfs.domain.dto.Tag;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.*;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -159,6 +161,184 @@ public class MeiliSearchService {
         } catch (Exception e) {
             log.error("从索引删除文档失败, index={}, uuid={}", indexUid, uuid, e);
         }
+    }
+
+    // ======================== 索引/文档管理（通过 OkHttp 直接调用 MeiliSearch REST API） ========================
+
+    private OkHttpClient httpClient = new OkHttpClient();
+
+    private String apiBaseUrl() {
+        return meiliSearchConfig.getUrl();
+    }
+
+    private String authHeader() {
+        return "Bearer " + meiliSearchConfig.getMasterKey();
+    }
+
+    private String get(String path) throws IOException {
+        Request request = new Request.Builder()
+                .url(apiBaseUrl() + path)
+                .header("Authorization", authHeader())
+                .build();
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("HTTP " + response.code() + ": " + response.message());
+            }
+            return response.body() != null ? response.body().string() : "";
+        }
+    }
+
+    private String delete(String path) throws IOException {
+        Request request = new Request.Builder()
+                .url(apiBaseUrl() + path)
+                .header("Authorization", authHeader())
+                .delete()
+                .build();
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("HTTP " + response.code() + ": " + response.message());
+            }
+            return response.body() != null ? response.body().string() : "";
+        }
+    }
+
+    private String post(String path, String jsonBody) throws IOException {
+        RequestBody body = RequestBody.create(jsonBody, MediaType.parse("application/json"));
+        Request request = new Request.Builder()
+                .url(apiBaseUrl() + path)
+                .header("Authorization", authHeader())
+                .post(body)
+                .build();
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("HTTP " + response.code() + ": " + response.message());
+            }
+            return response.body() != null ? response.body().string() : "";
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> getAllIndexesWithStats() {
+        List<Map<String, Object>> result = new ArrayList<>();
+        try {
+            String raw = get("/indexes");
+            JSONObject json = JSON.parseObject(raw);
+            JSONArray results = json.getJSONArray("results");
+            if (results != null) {
+                for (int i = 0; i < results.size(); i++) {
+                    JSONObject idx = results.getJSONObject(i);
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("uid", idx.getString("uid"));
+                    item.put("primaryKey", idx.getString("primaryKey"));
+                    // 查询该索引的文档数
+                    try {
+                        String statsRaw = get("/indexes/" + idx.getString("uid") + "/stats");
+                        JSONObject statsJson = JSON.parseObject(statsRaw);
+                        item.put("numberOfDocuments", statsJson.getIntValue("numberOfDocuments"));
+                    } catch (Exception e) {
+                        item.put("numberOfDocuments", 0);
+                    }
+                    result.add(item);
+                }
+            }
+        } catch (Exception e) {
+            log.error("获取 MeiliSearch 索引列表失败", e);
+        }
+        return result;
+    }
+
+    public Map<String, Object> getDocuments(String indexUid, int offset, int limit) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            String path = "/indexes/" + indexUid + "/documents?offset=" + offset + "&limit=" + limit;
+            String raw = get(path);
+            result.put("succeed", true);
+            result.put("data", JSON.parse(raw));
+        } catch (Exception e) {
+            log.error("获取 MeiliSearch 文档列表失败, index={}", indexUid, e);
+            result.put("succeed", false);
+            result.put("message", e.getMessage());
+        }
+        return result;
+    }
+
+    public Map<String, Object> getDocument(String indexUid, String docId) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            String path = "/indexes/" + indexUid + "/documents/" + docId;
+            String raw = get(path);
+            result.put("succeed", true);
+            result.put("data", JSON.parse(raw));
+        } catch (Exception e) {
+            log.error("获取 MeiliSearch 文档失败, index={}, id={}", indexUid, docId, e);
+            result.put("succeed", false);
+            result.put("message", e.getMessage());
+        }
+        return result;
+    }
+
+    public Map<String, Object> deleteDocument(String indexUid, String docId) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            String path = "/indexes/" + indexUid + "/documents/" + docId;
+            delete(path);
+            result.put("succeed", true);
+            result.put("message", "删除成功");
+        } catch (Exception e) {
+            log.error("删除 MeiliSearch 文档失败, index={}, id={}", indexUid, docId, e);
+            result.put("succeed", false);
+            result.put("message", e.getMessage());
+        }
+        return result;
+    }
+
+    public Map<String, Object> deleteAllDocuments(String indexUid) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            String path = "/indexes/" + indexUid + "/documents";
+            delete(path);
+            result.put("succeed", true);
+            result.put("message", "已清空索引中的所有文档");
+        } catch (Exception e) {
+            log.error("清空 MeiliSearch 索引失败, index={}", indexUid, e);
+            result.put("succeed", false);
+            result.put("message", e.getMessage());
+        }
+        return result;
+    }
+
+    public Map<String, Object> searchDocuments(String indexUid, String query, int offset, int limit) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            JSONObject body = new JSONObject();
+            body.put("q", query != null ? query : "");
+            body.put("offset", offset);
+            body.put("limit", limit);
+            String path = "/indexes/" + indexUid + "/search";
+            String raw = post(path, body.toJSONString());
+            result.put("succeed", true);
+            result.put("data", JSON.parse(raw));
+        } catch (Exception e) {
+            log.error("搜索 MeiliSearch 文档失败, index={}, query={}", indexUid, query, e);
+            result.put("succeed", false);
+            result.put("message", e.getMessage());
+        }
+        return result;
+    }
+
+    public Map<String, Object> addDocuments(String indexUid, String jsonBody) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            String path = "/indexes/" + indexUid + "/documents";
+            String raw = post(path, jsonBody);
+            result.put("succeed", true);
+            result.put("data", JSON.parse(raw));
+        } catch (Exception e) {
+            log.error("新增 MeiliSearch 文档失败, index={}", indexUid, e);
+            result.put("succeed", false);
+            result.put("message", e.getMessage());
+        }
+        return result;
     }
 
     // ======================== 原有方法 ========================

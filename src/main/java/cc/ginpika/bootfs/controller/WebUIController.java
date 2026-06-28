@@ -131,4 +131,26 @@ public class WebUIController {
         mv.setViewName("gallery");
         return mv;
     }
+
+    // Etcd metadata management
+    @GetMapping("/etcd")
+    public ModelAndView etcdManage(HttpServletRequest request) {
+        ModelAndView mv = new ModelAndView();
+        mv.setViewName("etcd-manage");
+        if (StringUtils.isNotBlank(ssoConfig.getInfoUrl())) {
+            mv.getModel().put("ssoInfoUrl", ssoConfig.getInfoUrl());
+        }
+        return mv;
+    }
+
+    // MeiliSearch metadata management
+    @GetMapping("/meilisearch")
+    public ModelAndView meilisearchManage(HttpServletRequest request) {
+        ModelAndView mv = new ModelAndView();
+        mv.setViewName("meilisearch-manage");
+        if (StringUtils.isNotBlank(ssoConfig.getInfoUrl())) {
+            mv.getModel().put("ssoInfoUrl", ssoConfig.getInfoUrl());
+        }
+        return mv;
+    }
 }

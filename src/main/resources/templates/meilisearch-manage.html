@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MeiliSearch 元数据管理 - TFS</title>
+    <style>
+        :root, :root.theme-light { --color-bg-primary:#f9fafb; --color-accent-primary:#0ea5e9; --color-text-secondary:#374151; }
+        :root.theme-dark { --color-bg-primary:#0a0a0a; --color-accent-primary:#00d98a; --color-text-secondary:#a8a8a8; }
+        :root.theme-sakura { --color-bg-primary:#fef2f2; --color-accent-primary:#ec4899; --color-text-secondary:#9d174d; }
+        :root.theme-starry-night { --color-bg-primary:#0f0f23; --color-accent-primary:#e94560; --color-text-secondary:#c4c4c4; }
+        :root.theme-forest { --color-bg-primary:#f0fdf4; --color-accent-primary:#16a34a; --color-text-secondary:#166534; }
+        :root.theme-ocean { --color-bg-primary:#0c1929; --color-accent-primary:#29b6f6; --color-text-secondary:#bbdefb; }
+        :root.theme-sunset { --color-bg-primary:#fffbeb; --color-accent-primary:#f59e0b; --color-text-secondary:#92400e; }
+        :root.theme-lavender { --color-bg-primary:#faf5ff; --color-accent-primary:#a855f7; --color-text-secondary:#6b21a8; }
+
+        /* 自定义 Select */
+        .custom-select-wrap { position: relative; min-width: 180px; }
+        .custom-select-trigger {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 12px; border-radius: 8px; cursor: pointer; user-select: none;
+            border: 1px solid var(--color-border-primary);
+            background-color: var(--color-bg-secondary);
+            color: var(--color-text-primary); font-size: 14px;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .custom-select-trigger:hover { border-color: var(--color-accent-primary); }
+        .custom-select-trigger.open { border-color: var(--color-accent-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-primary) 20%, transparent); }
+        .custom-select-chevron { transition: transform 0.15s; color: var(--color-text-muted); }
+        .custom-select-trigger.open .custom-select-chevron { transform: rotate(180deg); }
+        .custom-select-dropdown {
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
+            border-radius: 8px; overflow: hidden;
+            border: 1px solid var(--color-border-primary);
+            background-color: var(--color-bg-secondary);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            max-height: 240px; overflow-y: auto;
+            display: none;
+        }
+        .custom-select-dropdown.show { display: block; }
+        .custom-select-option {
+            padding: 8px 12px; cursor: pointer; font-size: 14px;
+            color: var(--color-text-primary);
+            transition: background-color 0.1s;
+        }
+        .custom-select-option:hover { background-color: var(--color-bg-tertiary); }
+        .custom-select-option.selected { color: var(--color-accent-primary); font-weight: 500; }
+
+        /* Toast */
+        .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+        .toast {
+            padding: 12px 20px; border-radius: 10px; font-size: 14px; max-width: 420px;
+            pointer-events: auto;
+            animation: toast-in 0.25s ease-out;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+        .toast.toast-out { animation: toast-out 0.2s ease-in forwards; }
+        .toast-warn { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+        .toast-error { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+        @keyframes toast-in { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes toast-out { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(40px); } }
+    </style>
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('tfs-theme') || 'light';
+                document.documentElement.classList.add('theme-' + t);
+            } catch (e) {}
+        })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/admin-styles.css">
+    <link rel="stylesheet" href="/themes.css">
+    <link rel="stylesheet" href="/admin-theme.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        display: ['Space Grotesk', 'system-ui', 'sans-serif'],
+                        body: ['Outfit', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="overflow-hidden font-body" style="background-color: var(--color-bg-primary);">
+    <!-- Toast -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="flex h-screen overflow-hidden">
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- Header -->
+            <header class="shadow-sm border-b flex-shrink-0 z-40" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+                <div class="px-4 sm:px-6 lg:px-8">
+                    <div class="flex items-center justify-between h-16">
+                        <div class="flex items-center gap-4">
+                            <a href="/" class="flex items-center gap-2" style="color: var(--color-text-primary);">
+                                <svg class="w-6 h-6" style="color: var(--color-accent-primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                                </svg>
+                            </a>
+                            <h1 class="text-lg font-semibold font-display" style="color: var(--color-text-primary);">MeiliSearch 元数据管理</h1>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <div class="relative">
+                                <button id="themeMenuBtn" class="p-2 rounded-lg" style="background-color: var(--color-bg-tertiary);" title="主题">
+                                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--color-text-primary);">
+                                        <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.8 0 1.5-.4 1.9-1.1.4-.6.4-1.3.1-1.9-.3-.6-.9-1-1.6-1.1-.5-.1-.9-.3-1-.6-.1-.1-.2-.3-.2-.5 0-.6.4-1.1 1-1.3 2-.6 4.5-2.1 5.8-4.2C19.3 8.8 20 6.7 20 5c0-1.7-1.3-3-3-3h-5zM6.5 13c-.8 0-1.5-.7-1.5-1.5S5.7 10 6.5 10s1.5.7 1.5 1.5S7.3 13 6.5 13zm3-4c-.8 0-1.5-.7-1.5-1.5S8.7 6 9.5 6s1.5.7 1.5 1.5S10.3 9 9.5 9zm5 0c-.8 0-1.5-.7-1.5-1.5S13.7 6 14.5 6s1.5.7 1.5 1.5S15.3 9 14.5 9z"/>
+                                    </svg>
+                                </button>
+                                <div id="themeDropdown" class="hidden absolute right-0 mt-2 w-56 rounded-xl shadow-lg border py-2 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+                                    <div class="px-3 py-2 border-b" style="border-color: var(--color-border-primary);"><p class="text-sm font-medium" style="color: var(--color-text-primary);">选择主题</p></div>
+                                    <div class="py-1">
+                                        <button onclick="setTheme('light')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #0ea5e9;"></span>浅色模式</button>
+                                        <button onclick="setTheme('dark')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #00d98a;"></span>深色模式</button>
+                                        <button onclick="setTheme('sakura')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #ec4899;"></span>樱花</button>
+                                        <button onclick="setTheme('starry-night')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #e94560;"></span>星空夜景</button>
+                                        <button onclick="setTheme('forest')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #16a34a;"></span>森林</button>
+                                        <button onclick="setTheme('ocean')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #29b6f6;"></span>海洋</button>
+                                        <button onclick="setTheme('sunset')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #f59e0b;"></span>日落</button>
+                                        <button onclick="setTheme('lavender')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #a855f7;"></span>薰衣草</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <main class="flex-1 flex flex-col overflow-hidden p-6 theme-page-bg">
+                <!-- Toolbar -->
+                <div class="theme-card theme-rounded-xl theme-shadow p-4 mb-4 flex-shrink-0">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <label class="text-sm font-medium" style="color: var(--color-text-secondary);">索引：</label>
+                        <!-- 自定义 Select -->
+                        <div class="custom-select-wrap" id="indexSelectWrap">
+                            <div class="custom-select-trigger" id="indexSelectTrigger" onclick="toggleIndexSelect()">
+                                <span id="indexSelectLabel">-- 选择索引 --</span>
+                                <svg class="w-4 h-4 custom-select-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </div>
+                            <div class="custom-select-dropdown" id="indexSelectDropdown"></div>
+                        </div>
+                        <button onclick="refreshIndexes()" class="px-3 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-bg-tertiary); color: var(--color-text-primary);">
+                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>刷新
+                        </button>
+                        <button onclick="showAddModal()" class="px-3 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-accent-primary); color: #fff;">
+                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>新增
+                        </button>
+                        <button onclick="clearDocuments()" class="px-3 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-danger); color: #fff;">
+                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>清空索引
+                        </button>
+                        <span id="resultCount" class="text-sm" style="color: var(--color-text-muted);"></span>
+                    </div>
+                </div>
+
+                <!-- 搜索栏 - 居中 -->
+                <div class="flex justify-center mb-4 flex-shrink-0">
+                    <div class="flex items-center w-full max-w-2xl gap-2">
+                        <div class="relative flex-1">
+                            <input type="text" id="searchInput" placeholder="搜索 MeiliSearch 文档..."
+                                   class="w-full pl-10 pr-4 py-3 border rounded-xl text-base focus:outline-none"
+                                   style="background-color: var(--color-bg-secondary); color: var(--color-text-primary); border-color: var(--color-border-primary);">
+                            <svg class="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
+                        <button onclick="doSearch()" class="px-5 py-3 text-sm font-medium rounded-xl transition-colors flex-shrink-0" style="background-color: var(--color-accent-primary); color: #fff;">搜索</button>
+                    </div>
+                </div>
+
+                <!-- 结果计数 -->
+                <div id="searchResultInfo" class="hidden text-sm mb-3" style="color: var(--color-text-muted);"></div>
+
+                <!-- 双栏布局 -->
+                <div class="flex-1 flex gap-4 min-h-0">
+                    <!-- 左侧：uuid 列表 -->
+                    <div class="w-80 flex-shrink-0 flex flex-col min-h-0">
+                        <div class="theme-card theme-rounded-xl theme-shadow overflow-hidden flex flex-col flex-1 min-h-0">
+                            <div class="px-4 py-2.5 border-b text-xs font-medium" style="color: var(--color-text-secondary); background-color: var(--color-bg-tertiary); border-color: var(--color-border-primary);">
+                                <span class="mr-2">uuid</span>
+                                <span style="color: var(--color-text-muted);">/ 标签</span>
+                            </div>
+                            <div id="docList" class="flex-1 overflow-y-auto">
+                                <div class="px-4 py-12 text-center text-sm" style="color: var(--color-text-muted);">选择索引后可搜索文档</div>
+                            </div>
+                            <!-- 分页 -->
+                            <div class="flex items-center justify-between px-4 py-2 border-t" style="border-color: var(--color-border-primary);">
+                                <button onclick="prevPage()" id="prevBtn" class="px-2.5 py-1 text-xs rounded transition-colors" style="background-color: var(--color-bg-tertiary); color: var(--color-text-primary);" disabled>
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                                </button>
+                                <span class="text-xs" style="color: var(--color-text-secondary);" id="pageInfo">-</span>
+                                <button onclick="nextPage()" id="nextBtn" class="px-2.5 py-1 text-xs rounded transition-colors" style="background-color: var(--color-bg-tertiary); color: var(--color-text-primary);" disabled>
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧：文档详情 -->
+                    <div class="flex-1 flex flex-col min-h-0">
+                        <div class="theme-card theme-rounded-xl theme-shadow overflow-hidden flex flex-col flex-1 min-h-0">
+                            <div class="flex items-center justify-between px-4 py-2.5 border-b" style="border-color: var(--color-border-primary); background-color: var(--color-bg-tertiary);">
+                                <span class="text-xs font-medium" style="color: var(--color-text-secondary);">文档详情</span>
+                                <span id="detailDocId" class="text-xs font-mono" style="color: var(--color-accent-primary);"></span>
+                            </div>
+                            <div class="flex-1 overflow-y-auto p-4">
+                                <pre id="detailContent" class="text-xs font-mono whitespace-pre-wrap break-all" style="color: var(--color-text-primary);">点击左侧 uuid 查看文档详情</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- 新增文档 Modal -->
+    <div id="addModal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background-color: rgba(0,0,0,0.5);">
+        <div class="theme-card theme-rounded-xl theme-shadow w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col fade-in">
+            <div class="flex items-center justify-between p-4 border-b" style="border-color: var(--color-border-primary);">
+                <h2 class="text-lg font-semibold font-display" style="color: var(--color-text-primary);">新增文档</h2>
+                <button onclick="closeAddModal()" class="p-1 rounded-lg hover:opacity-70" style="color: var(--color-text-muted);">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="overflow-y-auto p-4 flex-1">
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-sm" style="color: var(--color-text-muted);">粘贴 JSON，支持单条对象或数组。uuid 字段为必填。</p>
+                    <button onclick="formatAddJson()" class="px-3 py-1 text-xs font-medium rounded-lg transition-colors" style="background-color: var(--color-bg-tertiary); color: var(--color-text-primary);">
+                        <svg class="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>整理
+                    </button>
+                </div>
+                <textarea id="addDocJson" rows="14" class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none resize-y font-mono"
+                          style="background-color: var(--color-bg-primary); color: var(--color-text-primary); border-color: var(--color-border-primary);"></textarea>
+            </div>
+            <div class="flex justify-end gap-3 p-4 border-t" style="border-color: var(--color-border-primary);">
+                <button onclick="closeAddModal()" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-bg-tertiary); color: var(--color-text-primary);">取消</button>
+                <button onclick="addDocument()" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-accent-primary); color: #fff;">提交</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 确认删除 Modal -->
+    <div id="confirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background-color: rgba(0,0,0,0.5);">
+        <div class="theme-card theme-rounded-xl theme-shadow w-full max-w-sm mx-4 p-6 fade-in">
+            <h2 class="text-lg font-semibold mb-2 font-display" style="color: var(--color-text-primary);">确认删除</h2>
+            <p class="text-sm mb-4" style="color: var(--color-text-muted);" id="confirmMsg"></p>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeConfirmModal()" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-bg-tertiary); color: var(--color-text-primary);">取消</button>
+                <button id="confirmDeleteBtn" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-danger); color: #fff;">删除</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentIndexUid = '';
+        let currentPage = 0;
+        let pageSize = 30;
+        let totalDocs = 0;
+        let pendingDeleteId = null;
+        let currentResults = [];
+        let selectedDocId = null;
+        let lastSearchQuery = '';
+        let searchMode = false;
+        let indexOptions = []; // [{uid, label}]
+
+        // ===== Toast =====
+        let toastTimer = 0;
+        function toast(msg, type) {
+            type = type || 'warn';
+            var c = document.getElementById('toastContainer');
+            var el = document.createElement('div');
+            el.className = 'toast toast-' + type;
+            el.textContent = msg;
+            c.appendChild(el);
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(function () {
+                el.classList.add('toast-out');
+                setTimeout(function () { el.remove(); }, 200);
+            }, 2500);
+        }
+
+        function setTheme(theme) {
+            document.documentElement.classList.forEach(c => { if (c.startsWith('theme-')) document.documentElement.classList.remove(c); });
+            document.documentElement.classList.add('theme-' + theme);
+            try { localStorage.setItem('tfs-theme', theme); } catch (e) {}
+            document.getElementById('themeDropdown').classList.add('hidden');
+        }
+
+        // ===== 自定义 Select =====
+        function toggleIndexSelect() {
+            var dd = document.getElementById('indexSelectDropdown');
+            var tr = document.getElementById('indexSelectTrigger');
+            if (dd.classList.contains('show')) { closeIndexSelect(); return; }
+            dd.classList.add('show');
+            tr.classList.add('open');
+        }
+
+        function closeIndexSelect() {
+            var dd = document.getElementById('indexSelectDropdown');
+            var tr = document.getElementById('indexSelectTrigger');
+            dd.classList.remove('show');
+            tr.classList.remove('open');
+        }
+
+        function selectIndexOption(uid, label) {
+            currentIndexUid = uid;
+            document.getElementById('indexSelectLabel').textContent = label || '-- 选择索引 --';
+            closeIndexSelect();
+            // 重新渲染下拉选项更新选中态
+            renderIndexDropdown();
+            currentPage = 0;
+            selectedDocId = null;
+            lastSearchQuery = '';
+            searchMode = false;
+            document.getElementById('detailContent').textContent = '点击左侧 uuid 查看文档详情';
+            document.getElementById('detailDocId').textContent = '';
+            if (currentIndexUid) {
+                loadDocuments();
+            } else {
+                document.getElementById('docList').innerHTML = '<div class="px-4 py-12 text-center text-sm" style="color: var(--color-text-muted);">选择索引后可搜索文档</div>';
+                document.getElementById('resultCount').textContent = '';
+                document.getElementById('pageInfo').textContent = '-';
+                document.getElementById('prevBtn').disabled = true;
+                document.getElementById('nextBtn').disabled = true;
+                document.getElementById('searchResultInfo').classList.add('hidden');
+            }
+        }
+
+        function renderIndexDropdown() {
+            var dd = document.getElementById('indexSelectDropdown');
+            var html = '<div class="custom-select-option' + (currentIndexUid === '' ? ' selected' : '') + '" onclick="selectIndexOption(\'\', \'-- 选择索引 --\')">-- 选择索引 --</div>';
+            indexOptions.forEach(function (opt) {
+                var sel = opt.uid === currentIndexUid ? ' selected' : '';
+                html += '<div class="custom-select-option' + sel + '" onclick="selectIndexOption(\'' + escapeJs(opt.uid) + '\', \'' + escapeJs(opt.label) + '\')">' + escapeHtml(opt.label) + '</div>';
+            });
+            dd.innerHTML = html;
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('themeMenuBtn').addEventListener('click', function (e) {
+                e.stopPropagation();
+                document.getElementById('themeDropdown').classList.toggle('hidden');
+            });
+            document.addEventListener('click', function (e) {
+                var dd = document.getElementById('themeDropdown');
+                if (dd && !dd.classList.contains('hidden') && !dd.contains(e.target) && e.target !== document.getElementById('themeMenuBtn')) {
+                    dd.classList.add('hidden');
+                }
+                var sd = document.getElementById('indexSelectDropdown');
+                var sw = document.getElementById('indexSelectWrap');
+                if (sd && sd.classList.contains('show') && !sw.contains(e.target)) {
+                    closeIndexSelect();
+                }
+            });
+            document.getElementById('searchInput').addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') doSearch();
+            });
+            refreshIndexes();
+        });
+
+        function refreshIndexes() {
+            fetch('/api/meilisearch/indexes')
+                .then(r => r.json())
+                .then(res => {
+                    indexOptions = [];
+                    if (res.succeed && res.data) {
+                        res.data.forEach(function (idx) {
+                            indexOptions.push({ uid: idx.uid, label: idx.uid + ' (' + idx.numberOfDocuments + ' 条)' });
+                        });
+                    }
+                    renderIndexDropdown();
+                    if (currentIndexUid) {
+                        var found = indexOptions.some(function (o) { return o.uid === currentIndexUid; });
+                        if (!found) {
+                            currentIndexUid = '';
+                            document.getElementById('indexSelectLabel').textContent = '-- 选择索引 --';
+                        }
+                    }
+                }).catch(function (err) { console.error('获取索引失败', err); });
+        }
+
+        function doSearch() {
+            if (!currentIndexUid) { toast('请先选择索引'); return; }
+            var q = document.getElementById('searchInput').value.trim();
+            lastSearchQuery = q;
+            currentPage = 0;
+            searchMode = true;
+            executeSearch(q);
+        }
+
+        function loadDocuments() {
+            searchMode = false;
+            var tbody = document.getElementById('docList');
+            tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-text-muted);">加载中...</div>';
+
+            var url = '/api/meilisearch/indexes/' + encodeURIComponent(currentIndexUid) + '/documents?offset=' + (currentPage * pageSize) + '&limit=' + pageSize;
+            fetch(url)
+                .then(r => r.json())
+                .then(res => {
+                    if (!res.succeed) { tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-danger);">查询失败: ' + (res.message || '') + '</div>'; return; }
+                    var data = res.data;
+                    var results = data.results || [];
+                    currentResults = results;
+                    totalDocs = data.total || 0;
+                    renderList(results, null);
+                }).catch(function () { tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-danger);">请求失败</div>'; });
+        }
+
+        function executeSearch(q) {
+            var tbody = document.getElementById('docList');
+            tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-text-muted);">搜索中...</div>';
+
+            var url = '/api/meilisearch/indexes/' + encodeURIComponent(currentIndexUid) + '/search?q=' + encodeURIComponent(q) + '&offset=' + (currentPage * pageSize) + '&limit=' + pageSize;
+            fetch(url)
+                .then(r => r.json())
+                .then(res => {
+                    if (!res.succeed) { tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-danger);">搜索失败: ' + (res.message || '') + '</div>'; return; }
+                    var data = res.data;
+                    var hits = data.hits || [];
+                    var results = hits.map(function (h) { return h; });
+                    currentResults = results;
+                    totalDocs = data.estimatedTotalHits || data.totalHits || 0;
+                    renderList(results, q ? ('搜索 "' + q + '"') : null);
+                }).catch(function () { tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-danger);">请求失败</div>'; });
+        }
+
+        function renderList(results, modeLabel) {
+            var el = document.getElementById('docList');
+            document.getElementById('resultCount').textContent = '共 ' + totalDocs + ' 条';
+            document.getElementById('pageInfo').textContent = (currentPage + 1) + ' / ' + Math.max(1, Math.ceil(totalDocs / pageSize));
+            document.getElementById('prevBtn').disabled = currentPage === 0;
+            document.getElementById('nextBtn').disabled = (currentPage + 1) * pageSize >= totalDocs;
+
+            var infoEl = document.getElementById('searchResultInfo');
+            if (modeLabel) {
+                infoEl.classList.remove('hidden');
+                infoEl.textContent = modeLabel + ' — ' + totalDocs + ' 条结果';
+            } else {
+                infoEl.classList.add('hidden');
+            }
+
+            if (results.length === 0) {
+                el.innerHTML = '<div class="px-4 py-12 text-center text-sm" style="color: var(--color-text-muted);">无结果</div>';
+                return;
+            }
+
+            el.innerHTML = results.map(function (doc) {
+                var docId = doc.uuid || doc.id || '';
+                var tags = doc.tags || [];
+                var tagsStr = Array.isArray(tags) ? tags.join(', ') : (typeof tags === 'string' ? tags : '');
+                if (tagsStr.length > 50) tagsStr = tagsStr.substring(0, 50) + '...';
+                var isSelected = docId === selectedDocId;
+                return '<div onclick="selectDoc(\'' + escapeJs(String(docId)) + '\')" ' +
+                    'class="px-4 py-2.5 border-b cursor-pointer transition-colors flex items-center justify-between group" ' +
+                    'style="border-color: var(--color-border-primary); ' + (isSelected ? 'background-color: var(--color-bg-tertiary);' : '') + '">' +
+                    '<div class="min-w-0 flex-1">' +
+                        '<div class="text-xs font-mono truncate" style="color: var(--color-accent-primary);">' + escapeHtml(String(docId)) + '</div>' +
+                        '<div class="text-xs truncate mt-0.5" style="color: var(--color-text-muted);">' + (tagsStr || '—') + '</div>' +
+                    '</div>' +
+                    '<button onclick="event.stopPropagation(); showConfirmDelete(\'' + escapeJs(String(docId)) + '\')" ' +
+                        'class="ml-2 opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs rounded transition-opacity" ' +
+                        'style="color: var(--color-danger); background-color: rgba(239,68,68,0.1);">删除</button>' +
+                '</div>';
+            }).join('');
+        }
+
+        function selectDoc(docId) {
+            selectedDocId = docId;
+            document.getElementById('detailContent').textContent = '加载中...';
+            document.getElementById('detailDocId').textContent = docId;
+            renderCurrentList();
+
+            fetch('/api/meilisearch/indexes/' + encodeURIComponent(currentIndexUid) + '/documents/' + encodeURIComponent(docId))
+                .then(r => r.json())
+                .then(res => {
+                    if (res.succeed) {
+                        document.getElementById('detailContent').textContent = JSON.stringify(res.data, null, 2);
+                    } else {
+                        document.getElementById('detailContent').textContent = '获取失败: ' + (res.message || '');
+                    }
+                }).catch(function () { document.getElementById('detailContent').textContent = '请求失败'; });
+        }
+
+        function renderCurrentList() {
+            var modeLabel = searchMode && lastSearchQuery ? ('搜索 "' + lastSearchQuery + '"') : null;
+            renderList(currentResults, modeLabel);
+        }
+
+        function prevPage() {
+            if (currentPage > 0) { currentPage--; searchMode ? executeSearch(lastSearchQuery) : loadDocuments(); }
+        }
+
+        function nextPage() {
+            if ((currentPage + 1) * pageSize < totalDocs) { currentPage++; searchMode ? executeSearch(lastSearchQuery) : loadDocuments(); }
+        }
+
+        function showConfirmDelete(docId) {
+            pendingDeleteId = docId;
+            document.getElementById('confirmMsg').textContent = '确定要删除文档: ' + docId + ' 吗？';
+            document.getElementById('confirmModal').classList.remove('hidden');
+            document.getElementById('confirmDeleteBtn').onclick = function () { confirmDeleteSingle(); };
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirmModal').classList.add('hidden');
+            pendingDeleteId = null;
+        }
+
+        function confirmDeleteSingle() {
+            if (!pendingDeleteId) return;
+            fetch('/api/meilisearch/indexes/' + encodeURIComponent(currentIndexUid) + '/documents/' + encodeURIComponent(pendingDeleteId), { method: 'DELETE' })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.succeed) {
+                        closeConfirmModal();
+                        if (pendingDeleteId === selectedDocId) {
+                            selectedDocId = null;
+                            document.getElementById('detailContent').textContent = '点击左侧 uuid 查看文档详情';
+                            document.getElementById('detailDocId').textContent = '';
+                        }
+                        searchMode ? executeSearch(lastSearchQuery) : loadDocuments();
+                        refreshIndexes();
+                    } else { toast('删除失败: ' + (res.message || ''), 'error'); }
+                }).catch(function () { toast('请求失败', 'error'); });
+        }
+
+        function clearDocuments() {
+            if (!currentIndexUid) { toast('请先选择索引'); return; }
+            var confirmed = showConfirmToast('确定要清空索引 "' + currentIndexUid + '" 中的所有文档吗？此操作不可恢复！', function () {
+                fetch('/api/meilisearch/indexes/' + encodeURIComponent(currentIndexUid) + '/documents', { method: 'DELETE' })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.succeed) {
+                            currentPage = 0;
+                            selectedDocId = null;
+                            document.getElementById('detailContent').textContent = '点击左侧 uuid 查看文档详情';
+                            document.getElementById('detailDocId').textContent = '';
+                            loadDocuments();
+                            refreshIndexes();
+                        } else { toast('清空失败: ' + (res.message || ''), 'error'); }
+                    }).catch(function () { toast('请求失败', 'error'); });
+            });
+        }
+
+        // 确认 toast（替代 confirm）
+        function showConfirmToast(msg, onConfirm) {
+            var c = document.getElementById('toastContainer');
+            var el = document.createElement('div');
+            el.className = 'toast toast-warn';
+            el.style.cssText = 'display:flex;align-items:center;gap:12px;';
+            el.innerHTML = '<span style="flex:1;">' + escapeHtml(msg) + '</span>' +
+                '<button style="background:#92400e;color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:13px;cursor:pointer;">确认</button>' +
+                '<button style="background:transparent;color:#92400e;border:1px solid #92400e;border-radius:6px;padding:3px 11px;font-size:13px;cursor:pointer;">取消</button>';
+            c.appendChild(el);
+            var btns = el.querySelectorAll('button');
+            btns[0].onclick = function () { el.classList.add('toast-out'); setTimeout(function () { el.remove(); }, 200); onConfirm(); };
+            btns[1].onclick = function () { el.classList.add('toast-out'); setTimeout(function () { el.remove(); }, 200); };
+            return false;
+        }
+
+        function showAddModal() {
+            if (!currentIndexUid) { toast('请先选择索引'); return; }
+            var template = {
+                "uuid": "",
+                "title": "",
+                "tags": ["tag1", "tag2"]
+            };
+            document.getElementById('addDocJson').value = JSON.stringify(template, null, 2);
+            document.getElementById('addModal').classList.remove('hidden');
+        }
+
+        function closeAddModal() {
+            document.getElementById('addModal').classList.add('hidden');
+        }
+
+        function formatAddJson() {
+            var ta = document.getElementById('addDocJson');
+            var raw = ta.value.trim();
+            if (!raw) { toast('文本框为空'); return; }
+            try {
+                var obj = JSON.parse(raw);
+                ta.value = JSON.stringify(obj, null, 2);
+                toast('整理完成，JSON 合法');
+            } catch (e) {
+                toast('JSON 格式无效: ' + e.message, 'error');
+            }
+        }
+
+        function addDocument() {
+            var raw = document.getElementById('addDocJson').value.trim();
+            if (!raw) { toast('请输入 JSON'); return; }
+            try { JSON.parse(raw); } catch (e) { toast('JSON 格式无效: ' + e.message, 'error'); return; }
+
+            fetch('/api/meilisearch/indexes/' + encodeURIComponent(currentIndexUid) + '/documents', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: raw
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.succeed) {
+                    closeAddModal();
+                    currentPage = 0;
+                    searchMode ? executeSearch(lastSearchQuery) : loadDocuments();
+                    refreshIndexes();
+                } else {
+                    toast('新增失败: ' + (res.message || ''), 'error');
+                }
+            })
+            .catch(function () { toast('请求失败', 'error'); });
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function escapeJs(str) {
+            if (!str) return '';
+            return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Etcd 元数据管理 - TFS</title>
+    <style>
+        :root, :root.theme-light { --color-bg-primary:#f9fafb; --color-accent-primary:#0ea5e9; --color-text-secondary:#374151; }
+        :root.theme-dark { --color-bg-primary:#0a0a0a; --color-accent-primary:#00d98a; --color-text-secondary:#a8a8a8; }
+        :root.theme-sakura { --color-bg-primary:#fef2f2; --color-accent-primary:#ec4899; --color-text-secondary:#9d174d; }
+        :root.theme-starry-night { --color-bg-primary:#0f0f23; --color-accent-primary:#e94560; --color-text-secondary:#c4c4c4; }
+        :root.theme-forest { --color-bg-primary:#f0fdf4; --color-accent-primary:#16a34a; --color-text-secondary:#166534; }
+        :root.theme-ocean { --color-bg-primary:#0c1929; --color-accent-primary:#29b6f6; --color-text-secondary:#bbdefb; }
+        :root.theme-sunset { --color-bg-primary:#fffbeb; --color-accent-primary:#f59e0b; --color-text-secondary:#92400e; }
+        :root.theme-lavender { --color-bg-primary:#faf5ff; --color-accent-primary:#a855f7; --color-text-secondary:#6b21a8; }
+    </style>
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('tfs-theme') || 'light';
+                document.documentElement.classList.add('theme-' + t);
+            } catch (e) {}
+        })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/admin-styles.css">
+    <link rel="stylesheet" href="/themes.css">
+    <link rel="stylesheet" href="/admin-theme.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        display: ['Space Grotesk', 'system-ui', 'sans-serif'],
+                        body: ['Outfit', 'system-ui', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: 'var(--color-accent-primary)',
+                        secondary: 'var(--color-text-secondary)',
+                        success: 'var(--color-success)',
+                        danger: 'var(--color-danger)',
+                        warning: 'var(--color-warning)',
+                        info: 'var(--color-accent-primary)',
+                    },
+                    textColor: {
+                        DEFAULT: 'var(--color-text-primary)',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="overflow-hidden font-body" style="background-color: var(--color-bg-primary);">
+    <div class="flex h-screen overflow-hidden">
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- Header -->
+            <header class="shadow-sm border-b flex-shrink-0 z-40" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+                <div class="px-4 sm:px-6 lg:px-8">
+                    <div class="flex items-center justify-between h-16">
+                        <div class="flex items-center gap-4">
+                            <a href="/" class="flex items-center gap-2" style="color: var(--color-text-primary);">
+                                <svg class="w-6 h-6" style="color: var(--color-accent-primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                                </svg>
+                            </a>
+                            <h1 class="text-lg font-semibold font-display" style="color: var(--color-text-primary);">Etcd 元数据管理</h1>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <div class="relative">
+                                <button id="themeMenuBtn" class="p-2 rounded-lg" style="background-color: var(--color-bg-tertiary);" title="主题">
+                                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--color-text-primary);">
+                                        <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.8 0 1.5-.4 1.9-1.1.4-.6.4-1.3.1-1.9-.3-.6-.9-1-1.6-1.1-.5-.1-.9-.3-1-.6-.1-.1-.2-.3-.2-.5 0-.6.4-1.1 1-1.3 2-.6 4.5-2.1 5.8-4.2C19.3 8.8 20 6.7 20 5c0-1.7-1.3-3-3-3h-5zM6.5 13c-.8 0-1.5-.7-1.5-1.5S5.7 10 6.5 10s1.5.7 1.5 1.5S7.3 13 6.5 13zm3-4c-.8 0-1.5-.7-1.5-1.5S8.7 6 9.5 6s1.5.7 1.5 1.5S10.3 9 9.5 9zm5 0c-.8 0-1.5-.7-1.5-1.5S13.7 6 14.5 6s1.5.7 1.5 1.5S15.3 9 14.5 9z"/>
+                                    </svg>
+                                </button>
+                                <div id="themeDropdown" class="hidden absolute right-0 mt-2 w-56 rounded-xl shadow-lg border py-2 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+                                    <div class="px-3 py-2 border-b" style="border-color: var(--color-border-primary);">
+                                        <p class="text-sm font-medium" style="color: var(--color-text-primary);">选择主题</p>
+                                    </div>
+                                    <div class="py-1">
+                                        <button onclick="setTheme('light')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);">
+                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #0ea5e9;"></span>浅色模式
+                                        </button>
+                                        <button onclick="setTheme('dark')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);">
+                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #00d98a;"></span>深色模式
+                                        </button>
+                                        <button onclick="setTheme('sakura')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);">
+                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #ec4899;"></span>樱花
+                                        </button>
+                                        <button onclick="setTheme('starry-night')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);">
+                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #e94560;"></span>星空夜景
+                                        </button>
+                                        <button onclick="setTheme('forest')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);">
+                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #16a34a;"></span>森林
+                                        </button>
+                                        <button onclick="setTheme('ocean')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);">
+                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #29b6f6;"></span>海洋
+                                        </button>
+                                        <button onclick="setTheme('sunset')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);">
+                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #f59e0b;"></span>日落
+                                        </button>
+                                        <button onclick="setTheme('lavender')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);">
+                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #a855f7;"></span>薰衣草
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Main Content -->
+            <main class="flex-1 overflow-y-auto p-6 theme-page-bg">
+                <!-- Toolbar -->
+                <div class="theme-card theme-rounded-xl theme-shadow p-4 mb-6">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <div class="relative flex-1 min-w-[200px] max-w-xl">
+                            <input type="text" id="prefixInput" placeholder="搜索 key，支持模糊匹配..."
+                                   class="w-full pl-10 pr-4 py-2 border rounded-lg text-sm theme-input focus:outline-none">
+                            <svg class="w-5 h-5 absolute left-3 top-2.5" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
+                        <button onclick="searchKeys()" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors theme-btn-primary">
+                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                            查询
+                        </button>
+                        <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                            <input type="checkbox" id="exactMatchCheck" class="w-4 h-4 rounded" style="accent-color: var(--color-accent-primary);">
+                            <span class="text-sm" style="color: var(--color-text-secondary);">精确匹配</span>
+                        </label>
+                        <button onclick="showAddModal()" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors theme-btn-primary">
+                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                            </svg>
+                            新增
+                        </button>
+                        <button onclick="showDeletePrefixModal()" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-danger); color: #fff;">
+                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                            </svg>
+                            按前缀删除
+                        </button>
+                        <span id="resultCount" class="text-sm" style="color: var(--color-text-muted);"></span>
+                    </div>
+                </div>
+
+                <!-- Table -->
+                <div class="theme-card theme-rounded-xl theme-shadow overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr style="background-color: var(--color-bg-tertiary);">
+                                    <th class="px-4 py-3 text-left font-medium" style="color: var(--color-text-secondary); width: 60px;">#</th>
+                                    <th class="px-4 py-3 text-left font-medium" style="color: var(--color-text-secondary); min-width: 250px;">Key</th>
+                                    <th class="px-4 py-3 text-left font-medium" style="color: var(--color-text-secondary);">Value</th>
+                                    <th class="px-4 py-3 text-right font-medium" style="color: var(--color-text-secondary); width: 160px;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody">
+                                <tr>
+                                    <td colspan="4" class="px-4 py-12 text-center" style="color: var(--color-text-muted);">
+                                        输入前缀后点击查询
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div id="editModal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background-color: rgba(0,0,0,0.5);">
+        <div class="theme-card theme-rounded-xl theme-shadow w-full max-w-lg mx-4 p-6 fade-in">
+            <h2 id="editModalTitle" class="text-lg font-semibold mb-4 font-display" style="color: var(--color-text-primary);">新增 Key</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1" style="color: var(--color-text-secondary);">Key</label>
+                    <input type="text" id="editKey" placeholder="/example/key"
+                           class="w-full px-3 py-2 border rounded-lg text-sm theme-input focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1" style="color: var(--color-text-secondary);">Value</label>
+                    <textarea id="editValue" rows="5" placeholder="value..."
+                              class="w-full px-3 py-2 border rounded-lg text-sm theme-input focus:outline-none resize-y font-mono"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button onclick="closeEditModal()" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors theme-btn-secondary">取消</button>
+                <button onclick="saveKey()" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors theme-btn-primary">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Prefix Modal -->
+    <div id="deletePrefixModal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background-color: rgba(0,0,0,0.5);">
+        <div class="theme-card theme-rounded-xl theme-shadow w-full max-w-md mx-4 p-6 fade-in">
+            <h2 class="text-lg font-semibold mb-2 font-display" style="color: var(--color-text-primary);">按前缀删除</h2>
+            <p class="text-sm mb-4" style="color: var(--color-text-muted);">此操作将删除所有匹配前缀的 key，不可恢复。</p>
+            <div>
+                <label class="block text-sm font-medium mb-1" style="color: var(--color-text-secondary);">前缀</label>
+                <input type="text" id="deletePrefix" placeholder="/example/"
+                       class="w-full px-3 py-2 border rounded-lg text-sm theme-input focus:outline-none">
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button onclick="closeDeletePrefixModal()" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors theme-btn-secondary">取消</button>
+                <button onclick="confirmDeletePrefix()" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-danger); color: #fff;">确认删除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Single Modal -->
+    <div id="confirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background-color: rgba(0,0,0,0.5);">
+        <div class="theme-card theme-rounded-xl theme-shadow w-full max-w-sm mx-4 p-6 fade-in">
+            <h2 class="text-lg font-semibold mb-2 font-display" style="color: var(--color-text-primary);">确认删除</h2>
+            <p class="text-sm mb-4" style="color: var(--color-text-muted);" id="confirmMsg"></p>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeConfirmModal()" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors theme-btn-secondary">取消</button>
+                <button id="confirmDeleteBtn" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-danger); color: #fff;">删除</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentEditMode = 'add'; // 'add' or 'edit'
+        let pendingDeleteKey = null;
+
+        function setTheme(theme) {
+            document.documentElement.classList.forEach(c => { if (c.startsWith('theme-')) document.documentElement.classList.remove(c); });
+            document.documentElement.classList.add('theme-' + theme);
+            try { localStorage.setItem('tfs-theme', theme); } catch (e) {}
+            document.getElementById('themeDropdown').classList.add('hidden');
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('themeMenuBtn').addEventListener('click', function (e) {
+                e.stopPropagation();
+                document.getElementById('themeDropdown').classList.toggle('hidden');
+            });
+            document.addEventListener('click', function (e) {
+                var dd = document.getElementById('themeDropdown');
+                if (dd && !dd.classList.contains('hidden') && !dd.contains(e.target) && e.target !== document.getElementById('themeMenuBtn')) {
+                    dd.classList.add('hidden');
+                }
+            });
+            document.getElementById('prefixInput').addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') searchKeys();
+            });
+        });
+
+        function searchKeys() {
+            var prefix = document.getElementById('prefixInput').value.trim();
+            var exact = document.getElementById('exactMatchCheck').checked;
+            var tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center" style="color: var(--color-text-muted);">加载中...</td></tr>';
+
+            var url = '/api/etcd/keys?prefix=' + encodeURIComponent(prefix) + '&mode=' + (exact ? 'exact' : 'fuzzy');
+            fetch(url)
+                .then(r => r.json())
+                .then(res => {
+                    if (!res.succeed) {
+                        tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center" style="color: var(--color-danger);">查询失败: ' + (res.message || '未知错误') + '</td></tr>';
+                        document.getElementById('resultCount').textContent = '';
+                        return;
+                    }
+                    var items = res.data || [];
+                    document.getElementById('resultCount').textContent = '共 ' + items.length + ' 条';
+                    if (items.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center" style="color: var(--color-text-muted);">无匹配结果</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = items.map(function (item, idx) {
+                        var valueDisplay = item.value || '';
+                        if (valueDisplay.length > 200) valueDisplay = valueDisplay.substring(0, 200) + '...';
+                        var escapedKey = item.key.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        return '<tr class="border-t" style="border-color: var(--color-border-primary);">' +
+                            '<td class="px-4 py-3" style="color: var(--color-text-muted);">' + (idx + 1) + '</td>' +
+                            '<td class="px-4 py-3 font-mono text-xs break-all" style="color: var(--color-accent-primary);">' + escapeHtml(item.key) + '</td>' +
+                            '<td class="px-4 py-3 font-mono text-xs break-all" style="color: var(--color-text-primary);">' + escapeHtml(valueDisplay) + '</td>' +
+                            '<td class="px-4 py-3 text-right whitespace-nowrap">' +
+                                '<button onclick="showEditModal(\'' + escapeJs(item.key) + '\',\'' + escapeJs(item.value) + '\')" class="px-2.5 py-1 text-xs rounded transition-colors mr-1" style="color: var(--color-accent-primary); background-color: var(--color-accent-muted);">编辑</button>' +
+                                '<button onclick="showConfirmDelete(\'' + escapeJs(item.key) + '\')" class="px-2.5 py-1 text-xs rounded transition-colors" style="color: var(--color-danger); background-color: rgba(239,68,68,0.1);">删除</button>' +
+                            '</td>' +
+                        '</tr>';
+                    }).join('');
+                })
+                .catch(err => {
+                    tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center" style="color: var(--color-danger);">请求失败</td></tr>';
+                });
+        }
+
+        function showAddModal() {
+            currentEditMode = 'add';
+            document.getElementById('editModalTitle').textContent = '新增 Key';
+            document.getElementById('editKey').value = '';
+            document.getElementById('editKey').readOnly = false;
+            document.getElementById('editValue').value = '';
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        function showEditModal(key, value) {
+            currentEditMode = 'edit';
+            document.getElementById('editModalTitle').textContent = '编辑 Key';
+            document.getElementById('editKey').value = key;
+            document.getElementById('editKey').readOnly = true;
+            document.getElementById('editValue').value = value;
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').classList.add('hidden');
+        }
+
+        function saveKey() {
+            var key = document.getElementById('editKey').value.trim();
+            var value = document.getElementById('editValue').value;
+            if (!key) {
+                alert('Key 不能为空');
+                return;
+            }
+            fetch('/api/etcd/key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: key, value: value })
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.succeed) {
+                    closeEditModal();
+                    searchKeys();
+                } else {
+                    alert('保存失败: ' + (res.message || '未知错误'));
+                }
+            })
+            .catch(err => alert('请求失败'));
+        }
+
+        function showConfirmDelete(key) {
+            pendingDeleteKey = key;
+            document.getElementById('confirmMsg').textContent = '确定要删除 key: ' + key + ' 吗？';
+            document.getElementById('confirmModal').classList.remove('hidden');
+            document.getElementById('confirmDeleteBtn').onclick = function () {
+                confirmDeleteSingle();
+            };
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirmModal').classList.add('hidden');
+            pendingDeleteKey = null;
+        }
+
+        function confirmDeleteSingle() {
+            if (!pendingDeleteKey) return;
+            fetch('/api/etcd/key?key=' + encodeURIComponent(pendingDeleteKey), { method: 'DELETE' })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.succeed) {
+                        closeConfirmModal();
+                        searchKeys();
+                    } else {
+                        alert('删除失败: ' + (res.message || '未知错误'));
+                    }
+                })
+                .catch(err => alert('请求失败'));
+        }
+
+        function showDeletePrefixModal() {
+            document.getElementById('deletePrefix').value = document.getElementById('prefixInput').value.trim();
+            document.getElementById('deletePrefixModal').classList.remove('hidden');
+        }
+
+        function closeDeletePrefixModal() {
+            document.getElementById('deletePrefixModal').classList.add('hidden');
+        }
+
+        function confirmDeletePrefix() {
+            var prefix = document.getElementById('deletePrefix').value.trim();
+            if (!prefix) {
+                alert('前缀不能为空');
+                return;
+            }
+            if (!confirm('确定要删除所有前缀为 "' + prefix + '" 的 key 吗？此操作不可恢复！')) return;
+            fetch('/api/etcd/keys/prefix?prefix=' + encodeURIComponent(prefix), { method: 'DELETE' })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.succeed) {
+                        closeDeletePrefixModal();
+                        searchKeys();
+                    } else {
+                        alert('删除失败: ' + (res.message || '未知错误'));
+                    }
+                })
+                .catch(err => alert('请求失败'));
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function escapeJs(str) {
+            if (!str) return '';
+            return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '');
+        }
+    </script>
+</body>
+</html>

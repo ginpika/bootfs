@@ -335,11 +335,12 @@ function initializeEventListeners() {
         if (e.key === 'Escape') {
             clearSelection();
             closeImagePreview();
+            closeAudioPreview();
             closeDeleteModal();
         }
-        // Arrow keys: navigate image preview when modal is open
+        // Arrow keys: navigate image preview when modal is open (grid mode only)
         const imagePreviewOpen = !document.getElementById('imagePreviewModal').classList.contains('hidden');
-        if (imagePreviewOpen) {
+        if (imagePreviewOpen && currentView === 'grid') {
             // Let video.js handle arrow keys when the player is focused
             const target = e.target;
             const isVideoControl = target && target.closest && (target.closest('.video-js') || target.tagName === 'VIDEO');
@@ -765,7 +766,7 @@ function renderFileList(data) {
         });
 
         const previewBtn = row.querySelector('.list-preview-btn');
-        if (previewBtn && isImage(file)) {
+        if (previewBtn && (isImage(file) || isVideo(file) || isAudio(file))) {
             previewBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 previewFile(file);
@@ -1079,7 +1080,7 @@ function createListRow(file) {
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                 <div class="flex space-x-2">
-                    <button class="list-preview-btn" style="color: var(--color-accent-primary); ${isImageFile ? '' : 'visibility: hidden;'}">预览</button>
+                    <button class="list-preview-btn" style="color: var(--color-accent-primary); ${(isImageFile || isVideoFile || isAudioFile) ? '' : 'visibility: hidden;'}">${isImageFile ? '预览' : '播放'}</button>
                     <button class="list-detail-btn" style="color: var(--color-accent-secondary);">详情</button>
                     <a href="/f/${file.uuid}" download style="color: var(--color-success);">下载</a>
                     <button class="list-delete-btn" style="color: var(--color-danger);">删除</button>
@@ -1101,6 +1102,8 @@ function previewFile(file) {
         window.location.href = `/album/${file.uuid}`;
     } else if (isImage(file) || isVideo(file)) {
         showImagePreview(file);
+    } else if (isAudio(file)) {
+        showAudioPreview(file);
     }
 }
 
@@ -1110,6 +1113,23 @@ function closeImagePreview() {
         videoPlayer.pause();
     }
     document.getElementById('imagePreviewModal').classList.add('hidden');
+}
+
+// Audio preview
+function showAudioPreview(file) {
+    const player = document.getElementById('audioPreviewPlayer');
+    document.getElementById('audioPreviewName').textContent = file.fileName;
+    player.volume = 0.2;
+    player.src = `/p/${file.uuid}`;
+    document.getElementById('audioPreviewModal').classList.remove('hidden');
+    player.play().catch(() => {});
+}
+
+function closeAudioPreview() {
+    const player = document.getElementById('audioPreviewPlayer');
+    player.pause();
+    player.src = '';
+    document.getElementById('audioPreviewModal').classList.add('hidden');
 }
 
 // Show image preview and locate it in the preview list
@@ -1251,6 +1271,16 @@ function setPreviewNavButtonsLoading(loading) {
 function updatePreviewNavButtons() {
     const prevBtn = document.getElementById('prevImageBtn');
     const nextBtn = document.getElementById('nextImageBtn');
+
+    if (currentView === 'list') {
+        if (prevBtn) prevBtn.classList.add('hidden');
+        if (nextBtn) nextBtn.classList.add('hidden');
+        return;
+    }
+
+    if (prevBtn) prevBtn.classList.remove('hidden');
+    if (nextBtn) nextBtn.classList.remove('hidden');
+
     const hasList = previewMediaFiles.length > 0;
     const atStart = currentPreviewIndex <= 0;
     const atEnd = currentPreviewIndex >= previewMediaFiles.length - 1;
@@ -1258,7 +1288,6 @@ function updatePreviewNavButtons() {
         prevBtn.disabled = !hasList || atStart;
     }
     if (nextBtn) {
-        // Next stays enabled at the end if more grid pages can still be loaded
         const canLoadMore = currentView === 'grid' && gridHasMore;
         nextBtn.disabled = !hasList || (atEnd && !canLoadMore);
     }

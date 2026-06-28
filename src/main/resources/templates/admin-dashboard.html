@@ -518,6 +518,26 @@
         </div>
     </div>
 
+    <!-- Audio Preview Modal -->
+    <div id="audioPreviewModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" onclick="closeAudioPreview()">
+        <div class="theme-card theme-rounded-xl shadow-2xl p-6 w-full max-w-md mx-4" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3 min-w-0">
+                    <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--color-accent-primary);">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"></path>
+                    </svg>
+                    <span id="audioPreviewName" class="text-sm font-medium theme-page-text-primary truncate"></span>
+                </div>
+                <button onclick="closeAudioPreview()" class="theme-page-text-muted hover:theme-page-text-primary transition-colors shrink-0 ml-3">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <audio id="audioPreviewPlayer" controls class="w-full"></audio>
+        </div>
+    </div>
+
     <!-- Delete Confirmation Modal -->
     <div id="deleteConfirmModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
         <div class="theme-card theme-rounded-xl shadow-2xl p-6 w-full max-w-md mx-4">

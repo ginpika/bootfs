@@ -12,14 +12,12 @@ import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -32,21 +30,16 @@ public class TvService {
     @Autowired
     private TfsConfig tfsConfig;
 
-    private static final int CACHE_ONE_SIZE = 5;
-    private static final int CACHE_TWO_SIZE = 20;
-    private static final int SEGMENT_DURATION_SECONDS = 10;
+    private static final int PLAYLIST_WINDOW_SIZE = 5;
 
     private List<TsSegment> allTsList = new ArrayList<>();
-    private AtomicInteger curTsIdx = new AtomicInteger(0);
+    private double totalDuration = 0;
+    private double maxSegmentDuration = 10;
 
-    private LinkedList<TsSegment> cacheOne = new LinkedList<>();
-    private LinkedList<TsSegment> cacheTwo = new LinkedList<>();
-
-    private int mediaSequence = 0;
+    private volatile long streamStartTimestamp = 0;
     private volatile boolean initialized = false;
-    private volatile boolean running = true;
-
-    private Timer timer;
+    private long mediaSequence = 0;
+    private int lastCurrentIdx = -1;
 
     private List<String> playlistUuids = new ArrayList<>();
     private Path playlistConfigPath;
@@ -73,9 +66,9 @@ public class TvService {
     public void init() {
         playlistConfigPath = Path.of(tfsConfig.getPathPrefix(), "tv-playlist.json");
         loadPlaylistConfig();
-        
+
         log.info("TvService initializing...");
-        
+
         new Thread(() -> {
             try {
                 int waitCount = 0;
@@ -84,9 +77,8 @@ public class TvService {
                     waitCount++;
                     log.info("Waiting for Context to load... ({})", waitCount);
                 }
-                
+
                 refreshAllTsList();
-                startTimer();
                 log.info("TvService initialized successfully");
             } catch (Exception e) {
                 log.error("Failed to initialize TvService", e);
@@ -94,73 +86,14 @@ public class TvService {
         }, "TvService-Init").start();
     }
 
-    @PreDestroy
-    public void destroy() {
-        running = false;
-        if (timer != null) {
-            timer.cancel();
-        }
-        log.info("TvService destroyed");
-    }
-
-    private void startTimer() {
-        timer = new Timer("TvService-Timer", true);
-        timer.scheduleAtFixedRate(new TimerTask() {
-            @Override
-            public void run() {
-                try {
-                    tick();
-                } catch (Exception e) {
-                    log.error("Error in timer tick", e);
-                }
-            }
-        }, SEGMENT_DURATION_SECONDS * 1000L, SEGMENT_DURATION_SECONDS * 1000L);
-        log.info("Timer started, interval: {}s", SEGMENT_DURATION_SECONDS);
-    }
-
-    private synchronized void tick() {
-        if (!initialized || !running) {
-            return;
-        }
-
-        if (!cacheOne.isEmpty()) {
-            cacheOne.removeFirst();
-            mediaSequence++;
-        }
-
-        if (!cacheTwo.isEmpty()) {
-            TsSegment segment = cacheTwo.removeFirst();
-            cacheOne.addLast(segment);
-        }
-
-        fillCacheTwo();
-    }
-
-    private synchronized void fillCacheTwo() {
-        while (cacheTwo.size() < CACHE_TWO_SIZE && !allTsList.isEmpty()) {
-            int idx = curTsIdx.getAndIncrement();
-            
-            if (idx >= allTsList.size()) {
-                curTsIdx.set(0);
-                idx = 0;
-            }
-
-            if (idx < allTsList.size()) {
-                TsSegment segment = allTsList.get(idx);
-                cacheTwo.addLast(segment);
-            }
-        }
-    }
-
     public synchronized void reinitialize() {
         log.info("Reinitializing TvService...");
-        initialized = false;
-        curTsIdx.set(0);
-        cacheOne.clear();
-        cacheTwo.clear();
-        mediaSequence = 0;
         allTsList.clear();
-        
+        totalDuration = 0;
+        maxSegmentDuration = 10;
+        lastCurrentIdx = -1;
+        mediaSequence = 0;
+
         refreshAllTsList();
         log.info("TvService reinitialized");
     }
@@ -182,20 +115,22 @@ public class TvService {
             }
 
             this.allTsList = newAllTsList;
-            
+
+            this.totalDuration = newAllTsList.stream()
+                    .mapToDouble(TsSegment::getDuration)
+                    .sum();
+            this.maxSegmentDuration = newAllTsList.stream()
+                    .mapToDouble(TsSegment::getDuration)
+                    .max()
+                    .orElse(10);
+
             if (!initialized) {
-                curTsIdx.set(0);
-                cacheOne.clear();
-                cacheTwo.clear();
-                mediaSequence = 0;
-                
-                fillCacheOne();
-                fillCacheTwo();
-                
+                this.streamStartTimestamp = System.currentTimeMillis();
                 initialized = true;
             }
 
-            log.info("AllTsList refreshed: {} segments", newAllTsList.size());
+            log.info("AllTsList refreshed: {} segments, total duration: {}s",
+                    newAllTsList.size(), String.format("%.1f", totalDuration));
         } catch (Exception e) {
             log.error("Failed to refresh allTsList", e);
         }
@@ -203,13 +138,13 @@ public class TvService {
 
     private List<FileObject> getHlsFilesInOrder() {
         List<FileObject> allFiles = new ArrayList<>(context.STORAGE.values());
-        
+
         Map<String, FileObject> hlsFileMap = allFiles.stream()
                 .filter(f -> "1".equalsIgnoreCase(f.getHlsAvailable()))
                 .collect(Collectors.toMap(FileObject::getUuid, f -> f, (a, b) -> a));
 
         List<FileObject> orderedFiles = new ArrayList<>();
-        
+
         if (playlistUuids.isEmpty()) {
             return new ArrayList<>(hlsFileMap.values());
         }
@@ -222,20 +157,6 @@ public class TvService {
         }
 
         return orderedFiles;
-    }
-
-    private void fillCacheOne() {
-        while (cacheOne.size() < CACHE_ONE_SIZE && !allTsList.isEmpty()) {
-            int idx = curTsIdx.getAndIncrement();
-            
-            if (idx >= allTsList.size()) {
-                curTsIdx.set(1);
-                idx = 0;
-            }
-
-            TsSegment segment = allTsList.get(idx);
-            cacheOne.addLast(segment);
-        }
     }
 
     private List<TsSegment> parseHlsSegments(FileObject file) {
@@ -282,25 +203,57 @@ public class TvService {
     }
 
     public synchronized String generatePlaylistM3u8() {
+        if (allTsList.isEmpty()) {
+            return "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXT-X-ENDLIST\n";
+        }
+
+        // 服务端时钟减一点缓冲，避免因系统时钟微小偏差让播放器被推着跳帧
+        double elapsed = (System.currentTimeMillis() - streamStartTimestamp) / 1000.0 - 3.0;
+        if (elapsed < 0) elapsed = 0;
+        double positionInCycle = elapsed % totalDuration;
+
+        // 根据时间流逝计算当前应播到的切片位置
+        int currentIdx = 0;
+        double accumulated = 0;
+        for (int i = 0; i < allTsList.size(); i++) {
+            accumulated += allTsList.get(i).getDuration();
+            if (accumulated > positionInCycle) {
+                currentIdx = i;
+                break;
+            }
+        }
+
+        // 基于 currentIdx 的实际变化推进序列号，保证单调递增且不跳变
+        if (lastCurrentIdx >= 0 && currentIdx != lastCurrentIdx) {
+            int advance = (currentIdx - lastCurrentIdx + allTsList.size()) % allTsList.size();
+            if (advance == 0) advance = allTsList.size();
+            mediaSequence += advance;
+        }
+        lastCurrentIdx = currentIdx;
+
+        // 生成当前窗口的 playlist
         StringBuilder sb = new StringBuilder();
         sb.append("#EXTM3U\n");
         sb.append("#EXT-X-VERSION:3\n");
-        sb.append("#EXT-X-TARGETDURATION:").append(SEGMENT_DURATION_SECONDS).append("\n");
+        sb.append("#EXT-X-TARGETDURATION:").append((int) Math.ceil(maxSegmentDuration)).append("\n");
         sb.append("#EXT-X-MEDIA-SEQUENCE:").append(mediaSequence).append("\n");
 
         String previousUuid = null;
         int previousSegmentIndex = -1;
-        for (TsSegment segment : cacheOne) {
+        for (int i = 0; i < PLAYLIST_WINDOW_SIZE; i++) {
+            int idx = (currentIdx + i) % allTsList.size();
+            TsSegment segment = allTsList.get(idx);
+
             boolean isDifferentSource = previousUuid != null && !previousUuid.equals(segment.getUuid());
             boolean isLoopPlayback = previousSegmentIndex >= 0 && segment.getSegmentIndex() <= previousSegmentIndex;
-            
+
             if (isDifferentSource || isLoopPlayback) {
                 sb.append("#EXT-X-DISCONTINUITY\n");
             }
-            
+
             sb.append("#EXTINF:").append(String.format("%.3f", segment.getDuration())).append(",\n");
             sb.append("/tv/ts/").append(segment.getUuid()).append("/").append(segment.getFileName()).append("\n");
-            
+
             previousUuid = segment.getUuid();
             previousSegmentIndex = segment.getSegmentIndex();
         }
@@ -321,13 +274,19 @@ public class TvService {
         Map<String, Object> status = new HashMap<>();
         status.put("initialized", initialized);
         status.put("allTsListSize", allTsList.size());
-        status.put("curTsIdx", curTsIdx.get());
-        status.put("cacheOneSize", cacheOne.size());
-        status.put("cacheTwoSize", cacheTwo.size());
-        status.put("mediaSequence", mediaSequence);
-        status.put("totalDuration", calculateTotalDuration());
-        status.put("totalDurationFormatted", formatDuration(calculateTotalDuration()));
+        status.put("totalDuration", totalDuration);
+        status.put("totalDurationFormatted", formatDuration(totalDuration));
+        status.put("maxSegmentDuration", maxSegmentDuration);
+        status.put("playlistWindowSize", PLAYLIST_WINDOW_SIZE);
         status.put("playlistSize", playlistUuids.size());
+        status.put("streamStartTimestamp", streamStartTimestamp);
+
+        if (initialized && !allTsList.isEmpty()) {
+            double elapsed = (System.currentTimeMillis() - streamStartTimestamp) / 1000.0;
+            status.put("elapsedSeconds", String.format("%.1f", elapsed));
+            status.put("currentCyclePosition", String.format("%.1f", elapsed % totalDuration));
+        }
+
         return status;
     }
 
@@ -355,19 +314,11 @@ public class TvService {
         return initialized;
     }
 
-    public List<TsSegment> getCacheOne() {
-        return new ArrayList<>(cacheOne);
-    }
-
-    public List<TsSegment> getCacheTwo() {
-        return new ArrayList<>(cacheTwo);
-    }
-
     // ========== 管理功能 ==========
 
     public List<HlsVideoInfo> getAllHlsVideos() {
         List<FileObject> allFiles = new ArrayList<>(context.STORAGE.values());
-        
+
         return allFiles.stream()
                 .filter(f -> "1".equalsIgnoreCase(f.getHlsAvailable()))
                 .map(f -> {
@@ -376,7 +327,7 @@ public class TvService {
                     info.setFileName(f.getFileName());
                     info.setEnabled(playlistUuids.contains(f.getUuid()));
                     info.setOrder(playlistUuids.indexOf(f.getUuid()));
-                    
+
                     List<TsSegment> segments = parseHlsSegments(f);
                     if (segments != null) {
                         info.setSegmentCount(segments.size());
@@ -385,7 +336,7 @@ public class TvService {
                         info.setSegmentCount(0);
                         info.setTotalDuration(0);
                     }
-                    
+
                     return info;
                 })
                 .sorted((a, b) -> {
@@ -424,7 +375,7 @@ public class TvService {
         try {
             JSONObject json = new JSONObject();
             json.put("uuids", playlistUuids);
-            
+
             Files.writeString(playlistConfigPath, json.toJSONString());
             log.info("Saved playlist config: {} videos", playlistUuids.size());
         } catch (IOException e) {

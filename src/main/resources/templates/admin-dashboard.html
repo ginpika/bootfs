@@ -261,7 +261,7 @@
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                                         </svg>
                                     </div>
-                                    <span class="text-sm font-medium hidden sm:block" style="color: var(--color-text-primary);" th:text="${ssoUser != null ? ssoUser.username : 'Admin'}">Admin</span>
+                                    <span class="text-sm font-medium hidden sm:block" style="color: var(--color-text-primary);" th:text="${ssoUser != null ? ssoUser.username : 'admin'}">admin</span>
                                     <svg class="w-4 h-4" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                                     </svg>
@@ -270,8 +270,8 @@
                                 <!-- Dropdown Menu -->
                                 <div id="userDropdown" class="hidden absolute right-0 mt-2 w-48 theme-rounded-lg shadow-lg border py-1 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
                                     <div class="px-4 py-3 border-b" style="border-color: var(--color-border-primary);">
-                                        <p class="text-sm font-medium" style="color: var(--color-text-primary);" th:text="${ssoUser != null ? ssoUser.username : 'Admin'}">Admin</p>
-                                        <p class="text-xs" style="color: var(--color-text-muted);" th:text="${ssoUser != null ? ssoUser.email : 'admin@tfs.com'}">admin@tfs.com</p>
+                                        <p class="text-sm font-medium" style="color: var(--color-text-primary);" th:text="${ssoUser != null ? ssoUser.username : 'admin'}">admin</p>
+                                        <p class="text-xs" style="color: var(--color-text-muted);" th:text="${ssoUser != null ? ssoUser.email : 'admin@bootfs'}">admin@bootfs</p>
                                     </div>
                                     <a href="/old-admin" class="theme-dropdown-item flex items-center px-4 py-2 text-sm">
                                         <svg class="w-4 h-4 mr-2" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -306,8 +306,8 @@
                                         </svg>
                                         TV 节目单管理
                                     </a>
-                                    <div class="border-t" style="border-color: var(--color-border-primary);"></div>
-                                    <a th:href="${ssoInfoUrl}" href="#" target="_blank" class="theme-dropdown-item flex items-center px-4 py-2 text-sm">
+                                    <div th:if="${ssoEnabled}" class="border-t" style="border-color: var(--color-border-primary);"></div>
+                                    <a th:if="${ssoEnabled}" th:href="${ssoInfoUrl}" href="#" target="_blank" class="theme-dropdown-item flex items-center px-4 py-2 text-sm">
                                         <svg class="w-4 h-4 mr-2" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"></path>
                                         </svg>
@@ -326,8 +326,8 @@
                                         </svg>
                                         MeiliSearch 元数据
                                     </a>
-                                    <div class="border-t" style="border-color: var(--color-border-primary);"></div>
-                                    <a href="/api/logout" class="theme-dropdown-item theme-dropdown-item-danger flex items-center px-4 py-2 text-sm">
+                                    <div th:if="${ssoEnabled}" class="border-t" style="border-color: var(--color-border-primary);"></div>
+                                    <a th:if="${ssoEnabled}" href="/api/logout" class="theme-dropdown-item theme-dropdown-item-danger flex items-center px-4 py-2 text-sm">
                                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
                                         </svg>
@@ -885,6 +885,13 @@
                         <span class="text-sm font-medium truncate" style="color: var(--color-text-primary);" id="localFolderPath">本地文件夹</span>
                     </div>
                     <div class="flex items-center gap-1 flex-shrink-0">
+                        <!-- Preview toggle -->
+                        <button id="localFolderPreviewToggle" class="theme-icon-btn p-1.5 rounded-md" title="悬停预览">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                            </svg>
+                        </button>
                         <!-- Save bookmark -->
                         <button id="localFolderBookmark" class="theme-icon-btn p-1.5 rounded-md" title="保存书签">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

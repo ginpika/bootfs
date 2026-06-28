@@ -2594,6 +2594,7 @@ function initializeLocalFolderPanel() {
     const bookmarkBtn = document.getElementById('localFolderBookmark');
     const bookmarksBtn = document.getElementById('localFolderBookmarksBtn');
     const bookmarksDropdown = document.getElementById('bookmarksDropdown');
+    const previewToggleBtn = document.getElementById('localFolderPreviewToggle');
 
     if (!openBtn) return;
 
@@ -2617,6 +2618,17 @@ function initializeLocalFolderPanel() {
     if (bookmarkBtn) {
         bookmarkBtn.disabled = true;
         bookmarkBtn.addEventListener('click', toggleCurrentBookmark);
+    }
+    if (previewToggleBtn) {
+        previewToggleBtn.classList.toggle('active', localPreviewEnabled);
+        previewToggleBtn.title = localPreviewEnabled ? '关闭悬停预览' : '开启悬停预览';
+        previewToggleBtn.addEventListener('click', () => {
+            localPreviewEnabled = !localPreviewEnabled;
+            localStorage.setItem('tfs-local-preview-enabled', String(localPreviewEnabled));
+            previewToggleBtn.classList.toggle('active', localPreviewEnabled);
+            previewToggleBtn.title = localPreviewEnabled ? '关闭悬停预览' : '开启悬停预览';
+            if (!localPreviewEnabled) hideLocalImagePreview();
+        });
     }
     if (bookmarksBtn) {
         bookmarksBtn.addEventListener('click', async (e) => {
@@ -2945,6 +2957,54 @@ async function restoreLocalPanel() {
     } catch (_) {}
 }
 
+// 本地文件图片 hover 预览
+let localPreviewTimer = null;
+let localPreviewUrl = null;
+let localPreviewEnabled = localStorage.getItem('tfs-local-preview-enabled') !== 'false';
+
+function showLocalImagePreview(row, url) {
+    let previewEl = document.getElementById('localImagePreview');
+    if (!previewEl) {
+        previewEl = document.createElement('div');
+        previewEl.id = 'localImagePreview';
+        previewEl.className = 'fixed z-50 pointer-events-none';
+        previewEl.style.display = 'none';
+        const img = document.createElement('img');
+        img.className = 'rounded-lg shadow-xl';
+        img.style.cssText = 'max-width: 240px; max-height: 240px; border: 1px solid var(--color-border-primary);';
+        previewEl.appendChild(img);
+        document.body.appendChild(previewEl);
+    }
+    const img = previewEl.querySelector('img');
+    img.onload = () => {
+        const rect = row.getBoundingClientRect();
+        const previewH = img.offsetHeight || 240;
+        const previewW = img.offsetWidth || 240;
+        let top = rect.bottom + 8;
+        if (top + previewH > window.innerHeight) {
+            top = rect.top - previewH - 8;
+            if (top < 0) top = 8;
+        }
+        let left = rect.left;
+        if (left + previewW > window.innerWidth) {
+            left = window.innerWidth - previewW - 8;
+        }
+        previewEl.style.left = left + 'px';
+        previewEl.style.top = top + 'px';
+        previewEl.style.display = 'block';
+    };
+    img.src = url;
+}
+
+function hideLocalImagePreview() {
+    const previewEl = document.getElementById('localImagePreview');
+    if (previewEl) previewEl.style.display = 'none';
+    if (localPreviewUrl) {
+        URL.revokeObjectURL(localPreviewUrl);
+        localPreviewUrl = null;
+    }
+}
+
 async function renderLocalDir() {
     const listEl = document.getElementById('localFileList');
     const emptyHint = document.getElementById('localEmptyHint');
@@ -3031,6 +3091,35 @@ async function renderLocalDir() {
                     if (sizeCell) sizeCell.textContent = formatFileSize(file.size || 0);
                 } catch (_) {}
             })();
+
+            // 图片 hover 预览
+            const lowerName = entry.name.toLowerCase();
+            const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico', 'tiff', 'tif'];
+            if (imageExtensions.some(ext => lowerName.endsWith('.' + ext))) {
+                let hoverActive = false;
+                row.addEventListener('mouseenter', () => {
+                    if (!localPreviewEnabled) return;
+                    hoverActive = true;
+                    localPreviewTimer = setTimeout(async () => {
+                        if (!hoverActive) return;
+                        try {
+                            const file = await entry.handle.getFile();
+                            if (!hoverActive) return;
+                            if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl);
+                            localPreviewUrl = URL.createObjectURL(file);
+                            showLocalImagePreview(row, localPreviewUrl);
+                        } catch (_) {}
+                    }, 300);
+                });
+                row.addEventListener('mouseleave', () => {
+                    hoverActive = false;
+                    if (localPreviewTimer) {
+                        clearTimeout(localPreviewTimer);
+                        localPreviewTimer = null;
+                    }
+                    hideLocalImagePreview();
+                });
+            }
         }
     });
 

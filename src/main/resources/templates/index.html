@@ -99,8 +99,8 @@
 
                     <!-- 功能按钮组 -->
                     <div class="btn-group" role="group">
-                        <button type="button" class="btn btn-primary" id="onlyIndexedBtn">
-                            <i class="bi bi-database me-1"></i>主存储
+                        <button type="button" class="btn btn-primary" id="showAllBtn">
+                            <i class="bi bi-database me-1"></i>显示副本
                         </button>
                         <button type="button" class="btn btn-success" id="pushToHlsConvert">
                             <i class="bi bi-play-circle me-1"></i>HLS 转码
@@ -501,10 +501,11 @@
                         })
                     });
 
-                    $("#onlyIndexedBtn").on("click", function () {
-                        $($(".search-input")[0]).val("meta:index")
-                        $('#fileListDynamic').bootstrapTable("refreshOptions", { searchText: "meta:index" })
-                        // $('#fileListDynamic').bootstrapTable("refresh", {url:"/queryPageOffset", query:{search:"meta:index"}})
+                    $("#showAllBtn").on("click", function () {
+                        var $input = $(".search-input")[0];
+                        var isAll = $($input).val() === "meta:all";
+                        $($input).val(isAll ? "" : "meta:all")
+                        $('#fileListDynamic').bootstrapTable("refreshOptions", { searchText: isAll ? "" : "meta:all" })
                     });
 
                     $("#pushToHlsConvert").on("click", function () {

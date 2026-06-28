@@ -24,6 +24,7 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -111,7 +112,9 @@ public class Context {
             }
             JSONObject finalJson = json;
             json.keySet().forEach(key -> {
-                STORAGE.put(key, ContextIO.jsonObjectToFileObject(finalJson.getJSONObject(key)));
+                FileObject fo = ContextIO.jsonObjectToFileObject(finalJson.getJSONObject(key));
+                fillCreatedAt(fo);
+                STORAGE.put(key, fo);
             });
             bis.close();
             Context.loaded = true;
@@ -167,6 +170,7 @@ public class Context {
                             JSONObject json = JSONObject.parseObject(jsonStr);
                             String uuid = rawLine.substring(1, idxFrom - 2);
                             FileObject loaded = ContextIO.jsonObjectToFileObject(json);
+                            fillCreatedAt(loaded);
                             STORAGE.put(uuid, loaded);
                             if (processCount.incrementAndGet() == gcCountLabel) {
                                 logTest(batchCount, lastST);
@@ -185,6 +189,7 @@ public class Context {
                                 JSONObject json = JSONObject.parseObject(jsonStr);
                                 String uuid = json.getString("uuid");
                                 FileObject loaded = ContextIO.jsonObjectToFileObject(json);
+                                fillCreatedAt(loaded);
                                 STORAGE.put(uuid, loaded);
                                 if (processCount.incrementAndGet() == gcCountLabel) {
                                     logTest(batchCount, lastST);
@@ -246,6 +251,9 @@ public class Context {
 
     public synchronized void record(FileObject file, String id) {
         // 写入 webUI 索引
+        if (file.getCreatedAt() == null) {
+            file.setCreatedAt(System.currentTimeMillis());
+        }
         STORAGE.put(id, file);
         contextIO.append(id, file);
         log.info(file.getFileName());
@@ -255,6 +263,17 @@ public class Context {
     public void remove(String id) {
         STORAGE.remove(id);
         contextIO.remove(id);
+    }
+
+    private void fillCreatedAt(FileObject file) {
+        if (file.getCreatedAt() != null) return;
+        try {
+            Path path = Path.of(file.getPath());
+            if (Files.exists(path)) {
+                BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
+                file.setCreatedAt(attrs.creationTime().toMillis());
+            }
+        } catch (Exception ignored) {}
     }
 
     public FileObject query(String uuid) {
@@ -267,21 +286,23 @@ public class Context {
             if (etcdService != null) Context.MAIN_RESOURCES_COUNT.set(etcdService.getMainResourceCount());
         }
 
-        int length = STORAGE.size();
         int total = 0;
 
         Set<Map.Entry<String, FileObject>> sets = STORAGE.entrySet();
 
         List<FileObject> files = new ArrayList<>();
         int skip = 0;
+        boolean includeAll = StringUtils.isNotBlank(search) && search.contains("meta:all");
+
         for (Map.Entry<String, FileObject> entry : sets) {
+            FileObject tFile = entry.getValue();
+
+            // 默认只显示主资源，meta:all 时显示所有
+            if (!includeAll && (StringUtils.isNotBlank(tFile.getCopyOf()) || StringUtils.isNotBlank(tFile.getParent()))) {
+                continue;
+            }
+
             if (StringUtils.isNotBlank(search)) {
-                FileObject tFile = entry.getValue();
-                if (search.contains("meta:index")) {
-                    if (StringUtils.isNotBlank(tFile.getCopyOf()) || StringUtils.isNotBlank(tFile.getParent())) {
-                        continue;
-                    }
-                }
                 String[] words = search.split(" ");
                 boolean uuidHit = false;
                 boolean filenameHit = false;
@@ -300,24 +321,15 @@ public class Context {
                 }
 
                 if (!uuidHit && !filenameHit && keyCount != 0) continue;
+            }
 
-                total++;
-                if (skip++ < offset) continue;
-                if (skip <= offset + limit) {
-                    tFile.setUrl(buildUrl(tFile.getUuid()));
-                    files.add(tFile);
-                } else {
-                    break;
-                }
+            total++;
+            if (skip++ < offset) continue;
+            if (skip <= offset + limit) {
+                tFile.setUrl(buildUrl(tFile.getUuid()));
+                files.add(tFile);
             } else {
-                if (skip++ < offset) continue;
-                if (skip <= offset + limit) {
-                    FileObject tFile = entry.getValue();
-                    tFile.setUrl(buildUrl(tFile.getUuid()));
-                    files.add(tFile);
-                } else {
-                    break;
-                }
+                break;
             }
         }
 
@@ -333,7 +345,7 @@ public class Context {
         });
 
         // update main-resource-count, to support scroll search paged query
-        if (search.equals("meta:index")) {
+        if (!includeAll && etcdService != null) {
             if (total - offset > 10) {
                 total = Math.max(MAIN_RESOURCES_COUNT.get(), total);
             } else {
@@ -344,13 +356,7 @@ public class Context {
             }
         }
 
-        if (StringUtils.isNotBlank(search)) {
-            return FileObjectWebVO.builder().total(total).pageNumber(offset).pageSize(limit)
-                    .rows(files)
-                    .build();
-        }
-
-        return FileObjectWebVO.builder().total(length).pageNumber(offset).pageSize(limit)
+        return FileObjectWebVO.builder().total(total).pageNumber(offset).pageSize(limit)
                 .rows(files)
                 .build();
     }

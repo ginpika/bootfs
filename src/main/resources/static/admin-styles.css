@@ -433,7 +433,8 @@ input[type="checkbox"]:checked {
 }
 
 /* Hide tag column when local folder panel is active */
-#mainView.local-panel-active .tag-col {
+#mainView.local-panel-active .tag-col,
+#mainView.local-panel-active .created-col {
     display: none;
 }
 

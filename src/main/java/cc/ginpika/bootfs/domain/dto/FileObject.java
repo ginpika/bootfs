@@ -35,6 +35,8 @@ public class FileObject {
     private String isPublicAccess;
     // tags for classification and search
     private List<Tag> tags;
+    // upload timestamp in milliseconds
+    private Long createdAt;
 
     public FileObject(String path, String uuid, String fileName) {
         this.path = path;

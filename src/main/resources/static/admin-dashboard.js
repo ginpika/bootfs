@@ -68,6 +68,7 @@ let gridPage = 0;
 let gridHasMore = true;
 let gridLoading = false;
 const GRID_PAGE_SIZE = 10;
+
 const GRID_TARGET_COUNT = 10;
 const WATERFALL_COLUMNS = 6;
 let columnHeights = new Array(WATERFALL_COLUMNS).fill(0);
@@ -758,8 +759,13 @@ function renderFileList(data) {
             showDeleteConfirm();
         });
 
+        row.querySelector('.list-detail-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            showFileDetail(uuid);
+        });
+
         const previewBtn = row.querySelector('.list-preview-btn');
-        if (previewBtn && file) {
+        if (previewBtn && isImage(file)) {
             previewBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 previewFile(file);
@@ -1064,9 +1070,8 @@ function createListRow(file) {
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                 <div class="flex space-x-2">
-                    ${isImageFile ? `
-                        <button class="list-preview-btn" style="color: var(--color-accent-primary);">预览</button>
-                    ` : ''}
+                    <button class="list-preview-btn" style="color: var(--color-accent-primary); ${isImageFile ? '' : 'visibility: hidden;'}">预览</button>
+                    <button class="list-detail-btn" style="color: var(--color-accent-secondary);">详情</button>
                     <a href="/f/${file.uuid}" download style="color: var(--color-success);">下载</a>
                     <button class="list-delete-btn" style="color: var(--color-danger);">删除</button>
                 </div>
@@ -1843,6 +1848,181 @@ function refreshFileList() {
         loadGridView(true);
     }
     showToast('已刷新', 'success');
+}
+
+// ======================== File Detail Modal ========================
+
+/**
+ * 显示文件详情弹窗，异步加载详情数据
+ */
+function showFileDetail(uuid) {
+    const modal = document.getElementById('fileDetailModal');
+    const loading = document.getElementById('fileDetailLoading');
+    const content = document.getElementById('fileDetailContent');
+    const mediaSection = document.getElementById('detailMediaSection');
+
+    // 显示弹窗，展示加载层
+    modal.classList.remove('hidden');
+    loading.classList.remove('hidden');
+    content.style.opacity = '0.4';
+    mediaSection.classList.add('hidden');
+
+    // 异步请求文件详情
+    fetch(`/api/file/${uuid}/details`)
+        .then(res => {
+            if (!res.ok) throw new Error('文件不存在');
+            return res.json();
+        })
+        .then(data => {
+            renderFileDetail(data);
+        })
+        .catch(err => {
+            content.innerHTML = `<div class="text-center py-8 theme-page-text-muted">加载失败: ${err.message}</div>`;
+            showToast('文件详情加载失败', 'error');
+        })
+        .finally(() => {
+            loading.classList.add('hidden');
+            content.style.opacity = '1';
+        });
+}
+
+/**
+ * 渲染文件详情内容
+ */
+function renderFileDetail(data) {
+    // 文件名（含 title 用于截断时 tooltip）
+    const nameEl = document.getElementById('detailFileName');
+    nameEl.textContent = data.fileName || '-';
+    nameEl.title = data.fileName || '';
+    document.getElementById('detailFileSize').textContent = formatFileSize(data.size || 0);
+    document.getElementById('detailUuid').textContent = data.uuid || '-';
+    document.getElementById('detailPath').textContent = data.path || '-';
+
+    // 状态标识
+    const badges = document.getElementById('detailStatusBadges');
+    badges.innerHTML = '';
+    if (data.copyOf) {
+        badges.appendChild(createBadge('副本', 'var(--color-accent-muted)', 'var(--color-accent-primary)'));
+    }
+    if (data.hlsAvailable) {
+        badges.appendChild(createBadge('HLS', 'rgba(16, 185, 129, 0.1)', 'var(--color-success)'));
+    }
+    if (data.albumAvailable) {
+        badges.appendChild(createBadge('相册', 'rgba(6, 182, 212, 0.1)', '#06b6d4'));
+    }
+    if (data.isPublicAccess) {
+        badges.appendChild(createBadge('公开', 'var(--color-bg-tertiary)', 'var(--color-text-secondary)'));
+    }
+
+    // 标签
+    const detailTags = document.getElementById('detailTags');
+    detailTags.innerHTML = '';
+    if (data.tags && data.tags.length > 0) {
+        data.tags.forEach(tag => {
+            const label = tag.namespace && tag.namespace !== 'manual' ? `${tag.namespace}:${tag.name}` : tag.name;
+            const span = document.createElement('span');
+            span.className = 'tag-badge';
+            span.title = label;
+            const textSpan = document.createElement('span');
+            textSpan.className = 'tag-badge-text';
+            textSpan.textContent = label;
+            span.appendChild(textSpan);
+            detailTags.appendChild(span);
+        });
+    } else {
+        detailTags.innerHTML = '<span class="text-sm theme-page-text-muted">无标签</span>';
+    }
+
+    // 媒体信息
+    const mediaInfo = data.mediaInfo;
+    if (mediaInfo) {
+        const mediaSection = document.getElementById('detailMediaSection');
+        mediaSection.classList.remove('hidden');
+
+        // 容器格式
+        const formatInfo = document.getElementById('detailFormatInfo');
+        if (mediaInfo.formatName) {
+            formatInfo.classList.remove('hidden');
+            document.getElementById('detailFormatName').textContent = mediaInfo.formatLongName || mediaInfo.formatName;
+            document.getElementById('detailFormatBitrate').textContent = mediaInfo.bitRate ? formatBitrate(mediaInfo.bitRate) : '-';
+            document.getElementById('detailDuration').textContent = mediaInfo.duration ? formatDuration(mediaInfo.duration) : '-';
+        } else {
+            formatInfo.classList.add('hidden');
+        }
+
+        // 视频流
+        const videoInfo = document.getElementById('detailVideoInfo');
+        const video = mediaInfo.video;
+        if (video) {
+            videoInfo.classList.remove('hidden');
+            document.getElementById('detailVideoCodec').textContent = video.codecLong || video.codec || '-';
+            document.getElementById('detailVideoResolution').textContent = (video.width && video.height) ? `${video.width} × ${video.height}` : '-';
+            document.getElementById('detailVideoFps').textContent = video.frameRate ? `${video.frameRate.toFixed(2)} fps` : '-';
+            document.getElementById('detailVideoBitrate').textContent = video.bitRate ? formatBitrate(video.bitRate) : '-';
+            document.getElementById('detailVideoPixFmt').textContent = video.pixFmt || '-';
+        } else {
+            videoInfo.classList.add('hidden');
+        }
+
+        // 音频流
+        const audioInfo = document.getElementById('detailAudioInfo');
+        const audio = mediaInfo.audio;
+        if (audio) {
+            audioInfo.classList.remove('hidden');
+            document.getElementById('detailAudioCodec').textContent = audio.codecLong || audio.codec || '-';
+            document.getElementById('detailAudioSampleRate').textContent = audio.sampleRate ? `${(audio.sampleRate / 1000).toFixed(1)} kHz` : '-';
+            document.getElementById('detailAudioChannels').textContent = audio.channels ? formatChannels(audio.channels) : '-';
+            document.getElementById('detailAudioBitrate').textContent = audio.bitRate ? formatBitrate(audio.bitRate) : '-';
+        } else {
+            audioInfo.classList.add('hidden');
+        }
+    }
+}
+
+function createBadge(text, bgColor, textColor) {
+    const span = document.createElement('span');
+    span.className = 'px-2 py-1 text-xs rounded-md';
+    span.style.backgroundColor = bgColor;
+    span.style.color = textColor;
+    span.textContent = text;
+    return span;
+}
+
+function formatBitrate(bitRate) {
+    if (!bitRate) return '-';
+    if (bitRate >= 1000000) return (bitRate / 1000000).toFixed(2) + ' Mbps';
+    if (bitRate >= 1000) return (bitRate / 1000).toFixed(0) + ' Kbps';
+    return bitRate + ' bps';
+}
+
+function formatDuration(seconds) {
+    if (!seconds) return '-';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) {
+        return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+    return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function formatChannels(channels) {
+    switch (channels) {
+        case 1: return '单声道 (Mono)';
+        case 2: return '立体声 (Stereo)';
+        case 6: return '5.1 环绕声';
+        case 8: return '7.1 环绕声';
+        default: return channels + ' 声道';
+    }
+}
+
+/**
+ * 关闭文件详情弹窗
+ */
+function closeFileDetailModal(event) {
+    // 如果点击了弹窗外部背景，关闭
+    if (event && event.target !== document.getElementById('fileDetailModal')) return;
+    document.getElementById('fileDetailModal').classList.add('hidden');
 }
 
 // Toast notification
@@ -2659,7 +2839,8 @@ function openTsUploadModalUI() {
         fileNameInput.value = editingFileObject.fileName;
         fileNameInput.disabled = true;
         startBtn.textContent = '追加切片';
-        startBtn.style.backgroundColor = 'var(--color-success)';
+        startBtn.classList.remove('theme-btn-primary');
+        startBtn.classList.add('theme-btn-success');
         
         if (infoDiv) {
             infoDiv.innerHTML = `
@@ -2680,7 +2861,8 @@ function openTsUploadModalUI() {
         fileNameInput.value = '';
         fileNameInput.disabled = false;
         startBtn.textContent = '开始上传';
-        startBtn.style.backgroundColor = 'var(--color-warning)';
+        startBtn.classList.remove('theme-btn-success');
+        startBtn.classList.add('theme-btn-primary');
         
         if (infoDiv) {
             infoDiv.innerHTML = `

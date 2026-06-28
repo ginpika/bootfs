@@ -1875,6 +1875,8 @@ function showFileDetail(uuid) {
     loading.classList.remove('hidden');
     content.style.opacity = '0.4';
     mediaSection.classList.add('hidden');
+    document.getElementById('detailHlsSection').classList.add('hidden');
+    document.getElementById('detailMetadataSection').classList.add('hidden');
 
     // 异步请求文件详情
     fetch(`/api/file/${uuid}/details`)
@@ -2021,7 +2023,7 @@ function renderFileDetail(data) {
                     titleAttr = ` title="${value.replace(/"/g, '&quot;')}"`;
                     value = value.substring(0, f.maxLen) + '…';
                 }
-                return `<div${titleAttr}><span class="theme-page-text-muted">${f.label}</span><span class="ml-2 theme-page-text-primary" style="${f.maxLen ? 'max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom;' : ''}">${value}</span></div>`;
+                return `<div class="flex justify-between"${titleAttr}><span class="theme-page-text-muted">${f.label}</span><span class="theme-page-text-primary font-medium text-right" style="max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${value}</span></div>`;
             });
             if (items.length > 0) {
                 metadataGrid.innerHTML = items.join('');
@@ -2032,6 +2034,25 @@ function renderFileDetail(data) {
         } else {
             metadataSection.classList.add('hidden');
         }
+    }
+
+    // HLS 媒体规格
+    const hlsSection = document.getElementById('detailHlsSection');
+    if (data.hlsAvailable) {
+        fetch(`/hls/${data.uuid}/segments/info`)
+            .then(res => res.json())
+            .then(hlsInfo => {
+                document.getElementById('detailHlsSegments').textContent = hlsInfo.segmentCount + ' 段';
+                document.getElementById('detailHlsSize').textContent = formatFileSize(hlsInfo.totalSize || 0);
+                document.getElementById('detailHlsStatus').textContent = hlsInfo.isFinalized ? '已完结' : '未完结';
+                document.getElementById('detailHlsPlaylist').textContent = `/hls/${data.uuid}/playlist.m3u8`;
+                hlsSection.classList.remove('hidden');
+            })
+            .catch(() => {
+                hlsSection.classList.add('hidden');
+            });
+    } else {
+        hlsSection.classList.add('hidden');
     }
 }
 

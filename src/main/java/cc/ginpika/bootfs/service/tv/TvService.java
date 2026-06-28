@@ -143,12 +143,11 @@ public class TvService {
                 .filter(f -> "1".equalsIgnoreCase(f.getHlsAvailable()))
                 .collect(Collectors.toMap(FileObject::getUuid, f -> f, (a, b) -> a));
 
-        List<FileObject> orderedFiles = new ArrayList<>();
-
         if (playlistUuids.isEmpty()) {
-            return new ArrayList<>(hlsFileMap.values());
+            return Collections.emptyList();
         }
 
+        List<FileObject> orderedFiles = new ArrayList<>();
         for (String uuid : playlistUuids) {
             FileObject file = hlsFileMap.get(uuid);
             if (file != null) {
@@ -273,6 +272,7 @@ public class TvService {
     public Map<String, Object> getStatus() {
         Map<String, Object> status = new HashMap<>();
         status.put("initialized", initialized);
+        status.put("live", initialized && !allTsList.isEmpty());
         status.put("allTsListSize", allTsList.size());
         status.put("totalDuration", totalDuration);
         status.put("totalDurationFormatted", formatDuration(totalDuration));
@@ -285,6 +285,9 @@ public class TvService {
             double elapsed = (System.currentTimeMillis() - streamStartTimestamp) / 1000.0;
             status.put("elapsedSeconds", String.format("%.1f", elapsed));
             status.put("currentCyclePosition", String.format("%.1f", elapsed % totalDuration));
+        } else {
+            status.put("elapsedSeconds", "--");
+            status.put("currentCyclePosition", "--");
         }
 
         return status;

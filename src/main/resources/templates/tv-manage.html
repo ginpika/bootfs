@@ -101,7 +101,7 @@
 
     <div class="max-w-5xl mx-auto p-5">
         <div class="flex justify-between items-center mb-5 p-5 theme-rounded-xl" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-            <h1 class="text-xl font-bold font-display" style="color: var(--color-text-primary);">TV 播放列表管理</h1>
+            <h1 class="text-xl font-bold font-display" style="color: var(--color-text-primary);">TV 节目单管理</h1>
             <a href="/" class="px-4 py-2 text-sm theme-rounded-lg transition-colors theme-btn-secondary">返回首页</a>
         </div>
 
@@ -126,7 +126,7 @@
                     <h2 class="text-base font-semibold" style="color: var(--color-text-primary);">可选视频</h2>
                     <span class="px-3 py-1 text-xs rounded-full" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);" id="availableCount">0 个</span>
                 </div>
-                <div class="flex flex-col gap-2 max-h-[500px] overflow-y-auto" id="availableList">
+                <div class="flex flex-col gap-2 min-h-[400px] max-h-[500px] overflow-y-auto" id="availableList">
                 </div>
             </div>
 
@@ -135,7 +135,7 @@
                     <h2 class="text-base font-semibold" style="color: var(--color-text-primary);">播放列表 (拖拽排序)</h2>
                     <span class="px-3 py-1 text-xs rounded-full" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);" id="playlistCount">0 个</span>
                 </div>
-                <div class="flex flex-col gap-2 max-h-[500px] overflow-y-auto" id="playlistList">
+                <div class="flex flex-col gap-2 min-h-[400px] max-h-[500px] overflow-y-auto" id="playlistList">
                 </div>
             </div>
         </div>
@@ -311,84 +311,69 @@
             const playlistList = document.getElementById('playlistList');
             const availableList = document.getElementById('availableList');
             
-            if (sortableInstance) {
-                sortableInstance.destroy();
-            }
-            if (availableSortableInstance) {
-                availableSortableInstance.destroy();
-            }
+            if (sortableInstance) sortableInstance.destroy();
+            if (availableSortableInstance) availableSortableInstance.destroy();
             
-            // 事件委托处理 checkbox 点击
             document.removeEventListener('click', handleCheckboxClick);
             document.addEventListener('click', handleCheckboxClick);
             
-            // 可选视频列表
+            const onDragStart = function() {
+                playlistList.style.overflowY = 'visible';
+                availableList.style.overflowY = 'visible';
+            };
+            const onDragEnd = function() {
+                playlistList.style.overflowY = '';
+                availableList.style.overflowY = '';
+            };
+            
             availableSortableInstance = new Sortable(availableList, {
-                group: {
-                    name: 'available',
-                    pull: 'clone',
-                    put: ['playlist']
-                },
+                group: 'tv-playlist',
                 sort: false,
                 animation: 150,
                 ghostClass: 'sortable-ghost',
                 chosenClass: 'sortable-chosen',
-                filter: '.checkbox',
-                preventOnFilter: false,
+                onStart: onDragStart,
+                onEnd: onDragEnd,
                 onAdd: function(evt) {
                     const uuid = evt.item.dataset.uuid;
-                    const index = playlistUuids.indexOf(uuid);
-                    if (index > -1) {
-                        playlistUuids.splice(index, 1);
-                    }
-                    evt.item.remove();
-                    renderLists();
-                    initDragAndDrop();
+                    const idx = playlistUuids.indexOf(uuid);
+                    if (idx > -1) playlistUuids.splice(idx, 1);
+                    evt.item.querySelector('.checkbox').classList.remove('checked');
+                    updateOrderBadges();
+                    updateStats();
                 }
             });
             
-            // 播放列表
             sortableInstance = new Sortable(playlistList, {
-                group: {
-                    name: 'playlist',
-                    put: ['available']
-                },
+                group: 'tv-playlist',
                 animation: 150,
                 ghostClass: 'sortable-ghost',
                 chosenClass: 'sortable-chosen',
-                dragClass: 'sortable-drag',
-                filter: '.checkbox',
-                preventOnFilter: false,
+                onStart: onDragStart,
+                onEnd: onDragEnd,
                 onAdd: function(evt) {
                     const items = playlistList.querySelectorAll('.video-item');
-                    const newOrder = [];
-                    items.forEach(item => {
-                        const uuid = item.dataset.uuid;
-                        if (!newOrder.includes(uuid)) {
-                            newOrder.push(uuid);
-                        }
-                    });
-                    playlistUuids = newOrder;
-                    renderLists();
-                    initDragAndDrop();
+                    playlistUuids = [];
+                    items.forEach(item => playlistUuids.push(item.dataset.uuid));
+                    evt.item.querySelector('.checkbox').classList.add('checked');
+                    updateOrderBadges();
+                    updateStats();
                 },
                 onUpdate: function(evt) {
                     const items = playlistList.querySelectorAll('.video-item');
-                    const newOrder = [];
-                    items.forEach(item => {
-                        newOrder.push(item.dataset.uuid);
-                    });
-                    playlistUuids = newOrder;
-                    
-                    items.forEach((item, index) => {
-                        const orderBadge = item.querySelector('.w-6.h-6.rounded-full');
-                        if (orderBadge) {
-                            orderBadge.textContent = index + 1;
-                        }
-                    });
-                    
+                    playlistUuids = [];
+                    items.forEach(item => playlistUuids.push(item.dataset.uuid));
+                    updateOrderBadges();
                     updateStats();
                 }
+            });
+        }
+
+        function updateOrderBadges() {
+            const items = document.getElementById('playlistList').querySelectorAll('.video-item');
+            items.forEach((item, index) => {
+                const badge = item.querySelector('.w-6.h-6.rounded-full');
+                if (badge) badge.textContent = index + 1;
             });
         }
 

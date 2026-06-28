@@ -73,7 +73,7 @@
         <div class="flex justify-between items-center mb-5 p-5 theme-rounded-xl" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
             <div class="flex items-center gap-4">
                 <h1 class="text-2xl font-bold font-display" style="color: var(--color-text-primary);">TFS TV</h1>
-                <span class="live-badge flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white rounded-full" style="background-color: var(--color-danger);">
+                <span class="live-badge flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white rounded-full" style="background-color: var(--color-danger);" id="liveBadge">
                     <span class="w-2 h-2 bg-white rounded-full"></span>
                     LIVE
                 </span>
@@ -84,11 +84,17 @@
             </div>
         </div>
 
-        <div class="theme-rounded-xl overflow-hidden mb-5 shadow-lg" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
+        <div class="theme-rounded-xl overflow-hidden mb-5 shadow-lg relative" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
             <video id="tvPlayer" width="1280" height="720" class="video-js vjs-big-play-centered vjs-theme-fantasy w-full" controls preload="auto">
                 <source src="/tv/playlist.m3u8" type="application/x-mpegURL">
                 您的浏览器不支持视频播放
             </video>
+            <div id="notStartedPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center" style="background-color: #0a0a0a;">
+                <svg class="w-12 h-12 mb-3" style="color: #4a4a4a;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"></path>
+                </svg>
+                <span style="color: #4a4a4a;">未开播</span>
+            </div>
         </div>
 
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-5">
@@ -117,7 +123,7 @@
 
     <script>
         let player;
-        
+
         document.addEventListener('DOMContentLoaded', function() {
             player = videojs('tvPlayer', {
                 fluid: false,
@@ -141,25 +147,11 @@
                 }
             });
 
-            player.on('seeking', function() {
-                player.currentTime(player.duration());
-            });
-
             player.on('loadedmetadata', function() {
-                console.log('Video metadata loaded');
-                updateStatus(true);
-                player.play().catch(function(error) {
-                    console.log('Autoplay was prevented:', error);
-                });
-            });
-
-            player.on('error', function(e) {
-                console.error('Player error:', e);
-                updateStatus(false);
+                player.play().catch(function(err) {});
             });
 
             player.on('playing', function() {
-                console.log('Playing');
                 player.muted(false);
             });
 
@@ -167,19 +159,44 @@
             setInterval(updateStatusFromServer, 5000);
         });
 
+        function showPlayer() {
+            document.getElementById('notStartedPlaceholder').style.display = 'none';
+        }
+
+        function hidePlayer() {
+            document.getElementById('notStartedPlaceholder').style.display = '';
+        }
+
         function updateStatus(online) {
             const dot = document.getElementById('statusDot');
             const text = document.getElementById('statusText');
-            
+            const badge = document.getElementById('liveBadge');
+
             if (online) {
                 dot.classList.remove('loading');
                 dot.style.backgroundColor = 'var(--color-success)';
                 text.textContent = '直播中';
+                if (badge) badge.style.display = '';
+                showPlayer();
             } else {
                 dot.classList.add('loading');
                 dot.style.backgroundColor = 'var(--color-warning)';
-                text.textContent = '连接中...';
+                text.textContent = '等待直播...';
+                if (badge) badge.style.display = 'none';
+                hidePlayer();
             }
+        }
+
+        function updateNotStarted() {
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+            const badge = document.getElementById('liveBadge');
+
+            dot.classList.remove('loading');
+            dot.style.backgroundColor = 'var(--color-text-muted)';
+            text.textContent = '未开播';
+            if (badge) badge.style.display = 'none';
+            hidePlayer();
         }
 
         function updateStatusFromServer() {
@@ -191,8 +208,14 @@
                     document.getElementById('playlistWindowSize').textContent = data.playlistWindowSize;
                     document.getElementById('elapsedSeconds').textContent = data.elapsedSeconds || '--';
                     document.getElementById('currentCyclePosition').textContent = data.currentCyclePosition || '--';
-                    
-                    updateStatus(data.initialized);
+
+                    if (data.live) {
+                        updateStatus(true);
+                    } else if (data.initialized) {
+                        updateNotStarted();
+                    } else {
+                        updateStatus(false);
+                    }
                 })
                 .catch(err => {
                     console.error('Failed to get status:', err);

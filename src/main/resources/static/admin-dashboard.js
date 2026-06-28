@@ -994,6 +994,7 @@ function createListRow(file) {
     const isSelected = selectedFiles.has(file.uuid);
     const isImageFile = isImage(file);
     const isVideoFile = isVideo(file);
+    const isAudioFile = isAudio(file);
     const tags = file.tags || [];
     
     return `
@@ -1012,21 +1013,29 @@ function createListRow(file) {
                                      onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 24 22%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
                             ` : `
                                 <div class="h-10 w-10 theme-rounded-lg flex items-center justify-center" style="background-color: var(--color-bg-tertiary);">
-                                    <svg class="w-5 h-5" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg class="w-5 h-5" style="color: var(--color-accent-secondary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                                     </svg>
                                 </div>
                             `}
                         ` : isVideoFile ? `
                             <div class="h-10 w-10 theme-rounded-lg flex items-center justify-center" style="background-color: var(--color-bg-tertiary);">
-                                <svg class="w-5 h-5 theme-page-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg class="w-5 h-5" style="color: var(--color-accent-secondary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                 </svg>
                             </div>
+                        ` : isAudioFile ? `
+                            <div class="h-10 w-10 theme-rounded-lg flex items-center justify-center" style="background-color: var(--color-bg-tertiary);">
+                                <svg class="w-5 h-5" style="color: var(--color-accent-secondary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 18V5l12-2v13"></path>
+                                    <circle cx="6" cy="18" r="3" stroke-width="2"></circle>
+                                    <circle cx="18" cy="16" r="3" stroke-width="2"></circle>
+                                </svg>
+                            </div>
                         ` : `
                             <div class="h-10 w-10 theme-rounded-lg flex items-center justify-center" style="background-color: var(--color-bg-tertiary);">
-                                <svg class="w-5 h-5" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg class="w-5 h-5" style="color: var(--color-accent-secondary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                                 </svg>
                             </div>
@@ -1939,6 +1948,18 @@ function renderFileDetail(data) {
         const mediaSection = document.getElementById('detailMediaSection');
         mediaSection.classList.remove('hidden');
 
+        // 封面图
+        const coverWrap = document.getElementById('detailCoverWrap');
+        const coverImg = document.getElementById('detailCoverImg');
+        const cover = mediaInfo.cover;
+        if (cover) {
+            coverImg.src = `/api/file/${data.uuid}/cover`;
+            coverWrap.classList.remove('hidden');
+        } else {
+            coverImg.src = '';
+            coverWrap.classList.add('hidden');
+        }
+
         // 容器格式
         const formatInfo = document.getElementById('detailFormatInfo');
         if (mediaInfo.formatName) {
@@ -1975,6 +1996,41 @@ function renderFileDetail(data) {
             document.getElementById('detailAudioBitrate').textContent = audio.bitRate ? formatBitrate(audio.bitRate) : '-';
         } else {
             audioInfo.classList.add('hidden');
+        }
+
+        // 元数据标签
+        const metadata = mediaInfo.metadata;
+        const metadataSection = document.getElementById('detailMetadataSection');
+        const metadataGrid = document.getElementById('detailMetadataGrid');
+        if (metadata) {
+            const fields = [
+                { key: 'title', label: '标题' },
+                { key: 'artist', label: '艺术家' },
+                { key: 'album', label: '专辑' },
+                { key: 'albumArtist', label: '专辑艺术家' },
+                { key: 'track', label: '音轨' },
+                { key: 'date', label: '年代' },
+                { key: 'genre', label: '风格' },
+                { key: 'composer', label: '作曲' },
+                { key: 'comment', label: '备注', maxLen: 60 }
+            ];
+            const items = fields.filter(f => metadata[f.key]).map(f => {
+                let value = metadata[f.key];
+                let titleAttr = '';
+                if (f.maxLen && value.length > f.maxLen) {
+                    titleAttr = ` title="${value.replace(/"/g, '&quot;')}"`;
+                    value = value.substring(0, f.maxLen) + '…';
+                }
+                return `<div${titleAttr}><span class="theme-page-text-muted">${f.label}</span><span class="ml-2 theme-page-text-primary" style="${f.maxLen ? 'max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom;' : ''}">${value}</span></div>`;
+            });
+            if (items.length > 0) {
+                metadataGrid.innerHTML = items.join('');
+                metadataSection.classList.remove('hidden');
+            } else {
+                metadataSection.classList.add('hidden');
+            }
+        } else {
+            metadataSection.classList.add('hidden');
         }
     }
 }
@@ -2163,6 +2219,13 @@ function isVideo(file) {
 
 function isAlbum(file) {
     return file && file.albumAvailable === '1';
+}
+
+function isAudio(file) {
+    if (!file || !file.fileName) return false;
+    const audioExtensions = ['mp3', 'wav', 'flac', 'aac', 'ogg', 'wma', 'm4a', 'opus'];
+    const fileName = file.fileName.toLowerCase();
+    return audioExtensions.some(ext => fileName.endsWith('.' + ext) || fileName.endsWith(ext));
 }
 
 async function fetchAlbumPoster(uuid) {

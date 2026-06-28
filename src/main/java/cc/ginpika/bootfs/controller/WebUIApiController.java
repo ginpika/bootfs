@@ -479,6 +479,82 @@ public class WebUIApiController {
         return ResponseEntity.ok(details);
     }
 
+    /**
+     * 提取音频文件内嵌专辑封面
+     */
+    @GetMapping("/api/file/{uuid}/cover")
+    public ResponseEntity<?> getCoverArt(@PathVariable("uuid") String uuid) {
+        FileObject fileObject = context.query(uuid);
+        if (fileObject == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        String ffmpegUrl = tfsConfig.getFfmpegUrl();
+        int lastIdx = ffmpegUrl.lastIndexOf("ffmpeg");
+        String ffmpegPath = ffmpegUrl.substring(0, lastIdx) + "ffmpeg" + ffmpegUrl.substring(lastIdx + 6);
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                    ffmpegPath,
+                    "-v", "quiet",
+                    "-i", fileObject.getPath(),
+                    "-an",
+                    "-vcodec", "copy",
+                    "-f", "image2pipe",
+                    "-"
+            );
+            pb.redirectError(ProcessBuilder.Redirect.DISCARD);
+            Process process = pb.start();
+
+            try (InputStream is = process.getInputStream()) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = is.read(buf)) != -1) {
+                    baos.write(buf, 0, n);
+                }
+            }
+            process.waitFor(10, TimeUnit.SECONDS);
+
+            byte[] imageBytes = baos.toByteArray();
+            if (imageBytes.length == 0) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // 根据文件头判定 MIME 类型
+            String contentType = detectImageMime(imageBytes);
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header("Cache-Control", "private, max-age=3600")
+                    .body(imageBytes);
+        } catch (Exception e) {
+            log.warn("提取封面失败: {} - {}", uuid, e.getMessage());
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    private String detectImageMime(byte[] data) {
+        if (data.length < 4) return "image/jpeg";
+        // JPEG: FF D8 FF
+        if ((data[0] & 0xFF) == 0xFF && (data[1] & 0xFF) == 0xD8 && (data[2] & 0xFF) == 0xFF) {
+            return "image/jpeg";
+        }
+        // PNG: 89 50 4E 47
+        if (data[0] == (byte) 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
+            return "image/png";
+        }
+        // WebP: 52 49 46 46 ... 57 45 42 50
+        if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46) {
+            return "image/webp";
+        }
+        // BMP: 42 4D
+        if (data[0] == 0x42 && data[1] == 0x4D) {
+            return "image/bmp";
+        }
+        return "image/jpeg";
+    }
+
     private JSONObject extractMediaInfo(String filePath) {
         JSONObject info = new JSONObject();
 
@@ -517,6 +593,22 @@ public class WebUIApiController {
                 info.put("duration", format.getDouble("duration"));
                 info.put("bitRate", format.getLong("bit_rate"));
                 info.put("size", format.getLong("size"));
+
+                // 提取元数据标签 (ID3 / Vorbis comments 等)
+                JSONObject tags = format.getJSONObject("tags");
+                if (tags != null && !tags.isEmpty()) {
+                    JSONObject metadata = new JSONObject();
+                    metadata.put("title", tags.getString("title"));
+                    metadata.put("artist", tags.getString("artist"));
+                    metadata.put("album", tags.getString("album"));
+                    metadata.put("albumArtist", tags.getString("album_artist"));
+                    metadata.put("track", tags.getString("track"));
+                    metadata.put("date", tags.getString("date"));
+                    metadata.put("genre", tags.getString("genre"));
+                    metadata.put("composer", tags.getString("composer"));
+                    metadata.put("comment", tags.getString("comment"));
+                    info.put("metadata", metadata);
+                }
             }
 
             // 解析 streams
@@ -524,15 +616,31 @@ public class WebUIApiController {
             if (streams != null) {
                 JSONObject videoStream = null;
                 JSONObject audioStream = null;
+                JSONObject coverStream = null;
 
                 for (int i = 0; i < streams.size(); i++) {
                     JSONObject stream = streams.getJSONObject(i);
                     String codecType = stream.getString("codec_type");
-                    if ("video".equals(codecType) && videoStream == null) {
-                        videoStream = stream;
+                    if ("video".equals(codecType)) {
+                        // 检查是否为内嵌封面 (attached_pic)
+                        JSONObject disposition = stream.getJSONObject("disposition");
+                        if (disposition != null && disposition.getIntValue("attached_pic") == 1) {
+                            coverStream = stream;
+                        } else if (videoStream == null) {
+                            videoStream = stream;
+                        }
                     } else if ("audio".equals(codecType) && audioStream == null) {
                         audioStream = stream;
                     }
+                }
+
+                // 内嵌封面
+                if (coverStream != null) {
+                    JSONObject cover = new JSONObject();
+                    cover.put("codec", coverStream.getString("codec_name"));
+                    cover.put("width", coverStream.getInteger("width"));
+                    cover.put("height", coverStream.getInteger("height"));
+                    info.put("cover", cover);
                 }
 
                 if (videoStream != null) {

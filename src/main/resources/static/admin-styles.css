@@ -432,6 +432,11 @@ input[type="checkbox"]:checked {
     width: 100px;
 }
 
+/* Reserve column width so the inline tag input doesn't trigger a layout shift */
+.tag-col {
+    min-width: 150px;
+}
+
 /* Hide tag column when local folder panel is active */
 #mainView.local-panel-active .tag-col,
 #mainView.local-panel-active .created-col {

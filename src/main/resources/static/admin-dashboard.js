@@ -3034,8 +3034,26 @@ async function renderLocalDir() {
     for await (const [name, handle] of current.entries()) {
         entries.push({ name, handle, kind: handle.kind });
     }
+    // Pre-fetch file metadata (size + lastModified) in parallel for sorting and display
+    await Promise.all(entries.map(async (entry) => {
+        if (entry.kind === 'file') {
+            try {
+                const file = await entry.handle.getFile();
+                entry.lastModified = file.lastModified;
+                entry.size = file.size;
+            } catch (_) {
+                entry.lastModified = 0;
+                entry.size = 0;
+            }
+        }
+    }));
     entries.sort((a, b) => {
         if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1;
+        if (a.kind === 'file') {
+            // Files: newest first by modification time
+            return (b.lastModified || 0) - (a.lastModified || 0);
+        }
+        // Directories: by name
         return a.name.localeCompare(b.name);
     });
 
@@ -3100,14 +3118,9 @@ async function renderLocalDir() {
                 row.classList.remove('dragging');
                 draggingFileHandle = null;
             });
-            // 异步获取文件大小
-            (async () => {
-                try {
-                    const file = await entry.handle.getFile();
-                    const sizeCell = row.querySelector('.local-file-size');
-                    if (sizeCell) sizeCell.textContent = formatFileSize(file.size || 0);
-                } catch (_) {}
-            })();
+            // 文件大小已在排序前预取
+            const sizeCell = row.querySelector('.local-file-size');
+            if (sizeCell) sizeCell.textContent = formatFileSize(entry.size || 0);
 
             // 图片 hover 预览
             const lowerName = entry.name.toLowerCase();

@@ -15,6 +15,7 @@ import cc.ginpika.bootfs.service.ReverseProxyService;
 import cc.ginpika.bootfs.service.etcd.EtcdService;
 import cc.ginpika.bootfs.service.meilisearch.ImageHostDocument;
 import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
+import cc.ginpika.bootfs.service.ai.AiMetadataService;
 import com.meilisearch.sdk.model.SearchResult;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.zip.ParallelScatterZipCreator;
@@ -55,6 +56,8 @@ public class WebUIApiController {
     EtcdService etcdService;
     @Autowired
     MeiliSearchService meiliSearchService;
+    @Autowired
+    AiMetadataService aiMetadataService;
     @Autowired
     ReverseProxyService reverseProxyService;
 
@@ -477,6 +480,36 @@ public class WebUIApiController {
         }
 
         return ResponseEntity.ok(details);
+    }
+
+    /**
+     * 读取图片中的 AI 生成元数据（Stable Diffusion / ComfyUI）
+     */
+    @GetMapping("/api/file/{uuid}/ai-metadata")
+    public ResponseEntity<?> getAiMetadata(@PathVariable("uuid") String uuid) {
+        FileObject fileObject = context.query(uuid);
+        if (fileObject == null) {
+            return ResponseEntity.notFound().build();
+        }
+        try {
+            AiMetadataService.AIResult result = aiMetadataService.extract(fileObject.getPath());
+            if (result == null) {
+                return ResponseEntity.ok(Collections.emptyMap());
+            }
+            JSONObject json = new JSONObject();
+            if (result.positivePrompt != null) json.put("positivePrompt", result.positivePrompt);
+            if (result.negativePrompt != null) json.put("negativePrompt", result.negativePrompt);
+            if (result.model != null) json.put("model", result.model);
+            if (result.sampler != null) json.put("sampler", result.sampler);
+            if (result.steps != null) json.put("steps", result.steps);
+            if (result.cfgScale != null) json.put("cfgScale", result.cfgScale);
+            if (result.seed != null) json.put("seed", result.seed);
+            if (result.size != null) json.put("size", result.size);
+            return ResponseEntity.ok(json);
+        } catch (Exception e) {
+            log.warn("读取 AI 元数据异常: {} - {}", uuid, e.getMessage());
+            return ResponseEntity.ok(Collections.emptyMap());
+        }
     }
 
     /**

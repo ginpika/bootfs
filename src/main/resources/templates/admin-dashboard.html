@@ -522,11 +522,9 @@
     <div id="deleteConfirmModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
         <div class="theme-card theme-rounded-xl shadow-2xl p-6 w-full max-w-md mx-4">
             <div class="flex items-center space-x-4 mb-4">
-                <div class="p-3 theme-rounded-full" style="background-color: var(--color-danger); opacity: 0.1;">
-                    <svg class="w-6 h-6" style="color: var(--color-danger);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-                    </svg>
-                </div>
+                <svg class="w-6 h-6 flex-shrink-0" style="color: var(--color-danger);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                </svg>
                 <h3 class="text-lg font-semibold theme-page-text-primary">确认删除</h3>
             </div>
             <p class="theme-page-text-secondary mb-6">确定要删除选中的文件吗？此操作不可恢复。</p>
@@ -776,6 +774,31 @@
                             <div class="flex justify-between"><span class="theme-page-text-muted">状态</span><span id="detailHlsStatus" class="theme-page-text-primary"></span></div>
                             <div class="flex justify-between"><span class="theme-page-text-muted">播放列表</span><span id="detailHlsPlaylist" class="theme-page-text-primary text-xs font-mono break-all"></span></div>
                         </div>
+                    </div>
+
+                    <!-- AI 生成元数据 -->
+                    <div id="detailAiSection" class="hidden theme-rounded-lg p-3.5 space-y-3" style="background-color: var(--color-bg-tertiary);">
+                        <div class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider theme-page-text-muted">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            AI 生成信息
+                        </div>
+                        <div id="detailAiPrompt" class="hidden space-y-1">
+                            <span class="text-xs theme-page-text-muted">提示词</span>
+                            <p id="detailAiPromptText" class="text-sm theme-page-text-primary leading-relaxed max-h-24 overflow-y-auto"></p>
+                        </div>
+                        <div id="detailAiNegPrompt" class="hidden space-y-1">
+                            <span class="text-xs theme-page-text-muted">反向提示词</span>
+                            <p id="detailAiNegPromptText" class="text-sm theme-page-text-primary leading-relaxed max-h-24 overflow-y-auto"></p>
+                        </div>
+                        <div id="detailAiModel" class="hidden flex justify-between gap-2 text-sm">
+                            <span class="theme-page-text-muted shrink-0">模型</span>
+                            <span class="theme-page-text-primary font-medium text-right truncate"></span>
+                        </div>
+                        <div id="detailAiSampler" class="hidden flex justify-between gap-2 text-sm">
+                            <span class="theme-page-text-muted shrink-0">采样器</span>
+                            <span class="theme-page-text-primary font-medium text-right truncate"></span>
+                        </div>
+                        <div id="detailAiParams" class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm"></div>
                     </div>
 
                     <!-- 元数据标签 (音频: 标题/艺术家/专辑等) -->

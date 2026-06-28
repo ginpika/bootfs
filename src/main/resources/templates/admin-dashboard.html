@@ -485,7 +485,7 @@
     </div>
 
     <!-- Image Preview Modal -->
-    <div id="imagePreviewModal" class="hidden fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center" onclick="closeImagePreview()">
+    <div id="imagePreviewModal" class="hidden fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center" onclick="handlePreviewBackdropClick()">
         <!-- Close button at top-right corner -->
         <button onclick="closeImagePreview()" class="fixed top-4 right-4 text-white hover:text-gray-300 z-10 bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-70 transition-colors">
             <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -525,7 +525,7 @@
     </div>
 
     <!-- Audio Preview Modal -->
-    <div id="audioPreviewModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" onclick="closeAudioPreview()">
+    <div id="audioPreviewModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
         <div class="theme-card theme-rounded-xl shadow-2xl p-6 w-full max-w-md mx-4" onclick="event.stopPropagation()">
             <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center gap-3 min-w-0">

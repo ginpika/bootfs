@@ -1151,6 +1151,13 @@ function showImagePreview(file) {
     updatePreviewNavButtons();
 }
 
+function openPreviewDetail() {
+    if (currentPreviewIndex >= 0 && previewMediaFiles[currentPreviewIndex]) {
+        const uuid = previewMediaFiles[currentPreviewIndex].uuid;
+        showFileDetail(uuid);
+    }
+}
+
 // Update the displayed media (image or video) and caption
 function updateImagePreview(file) {
     const img = document.getElementById('imagePreviewSrc');
@@ -1280,15 +1287,18 @@ function setPreviewNavButtonsLoading(loading) {
 function updatePreviewNavButtons() {
     const prevBtn = document.getElementById('prevImageBtn');
     const nextBtn = document.getElementById('nextImageBtn');
+    const detailBtn = document.getElementById('previewDetailBtn');
 
     if (currentView === 'list') {
         if (prevBtn) prevBtn.classList.add('hidden');
         if (nextBtn) nextBtn.classList.add('hidden');
+        if (detailBtn) detailBtn.classList.add('hidden');
         return;
     }
 
     if (prevBtn) prevBtn.classList.remove('hidden');
     if (nextBtn) nextBtn.classList.remove('hidden');
+    if (detailBtn) detailBtn.classList.remove('hidden');
 
     const hasList = previewMediaFiles.length > 0;
     const atStart = currentPreviewIndex <= 0;

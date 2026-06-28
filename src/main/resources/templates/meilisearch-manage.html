@@ -208,8 +208,17 @@
                                 <span class="text-xs font-medium" style="color: var(--color-text-secondary);">文档详情</span>
                                 <span id="detailDocId" class="text-xs font-mono" style="color: var(--color-accent-primary);"></span>
                             </div>
-                            <div class="flex-1 overflow-y-auto p-4">
-                                <pre id="detailContent" class="text-xs font-mono whitespace-pre-wrap break-all" style="color: var(--color-text-primary);">点击左侧 uuid 查看文档详情</pre>
+                            <div class="flex-1 flex flex-col min-h-0 p-4">
+                                <textarea id="detailContent" class="flex-1 min-h-0 w-full text-xs font-mono whitespace-pre-wrap break-all rounded-lg p-3 focus:outline-none resize-none overflow-y-auto" style="color: var(--color-text-primary); background-color: var(--color-bg-primary); border: 1px solid var(--color-border-primary); display:none;" placeholder="点击左侧 uuid 查看文档详情"></textarea>
+                                <pre id="detailPlaceholder" class="text-xs font-mono whitespace-pre-wrap break-all" style="color: var(--color-text-muted);">点击左侧 uuid 查看文档详情</pre>
+                            </div>
+                            <div id="detailActions" class="hidden items-center justify-end gap-2 px-4 py-2.5 border-t" style="border-color: var(--color-border-primary); background-color: var(--color-bg-tertiary);">
+                                <button onclick="formatDocJson()" class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors" style="background-color: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border-primary);">
+                                    <svg class="w-3.5 h-3.5 inline mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>整理
+                                </button>
+                                <button id="saveDocBtn" onclick="saveDocument()" class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors" style="background-color: var(--color-accent-primary); color: #fff;">
+                                    <svg class="w-3.5 h-3.5 inline mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>保存
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -269,7 +278,6 @@
         let indexOptions = []; // [{uid, label}]
 
         // ===== Toast =====
-        let toastTimer = 0;
         function toast(msg, type) {
             type = type || 'warn';
             var c = document.getElementById('toastContainer');
@@ -277,8 +285,7 @@
             el.className = 'toast toast-' + type;
             el.textContent = msg;
             c.appendChild(el);
-            clearTimeout(toastTimer);
-            toastTimer = setTimeout(function () {
+            setTimeout(function () {
                 el.classList.add('toast-out');
                 setTimeout(function () { el.remove(); }, 200);
             }, 2500);
@@ -317,8 +324,7 @@
             selectedDocId = null;
             lastSearchQuery = '';
             searchMode = false;
-            document.getElementById('detailContent').textContent = '点击左侧 uuid 查看文档详情';
-            document.getElementById('detailDocId').textContent = '';
+            resetDetailPanel();
             if (currentIndexUid) {
                 loadDocuments();
             } else {
@@ -471,7 +477,14 @@
 
         function selectDoc(docId) {
             selectedDocId = docId;
-            document.getElementById('detailContent').textContent = '加载中...';
+            var ta = document.getElementById('detailContent');
+            var ph = document.getElementById('detailPlaceholder');
+            var actions = document.getElementById('detailActions');
+            ta.style.display = 'none';
+            actions.classList.add('hidden');
+            actions.classList.remove('flex');
+            ph.style.display = 'block';
+            ph.textContent = '加载中...';
             document.getElementById('detailDocId').textContent = docId;
             renderCurrentList();
 
@@ -479,11 +492,63 @@
                 .then(r => r.json())
                 .then(res => {
                     if (res.succeed) {
-                        document.getElementById('detailContent').textContent = JSON.stringify(res.data, null, 2);
+                        ta.value = JSON.stringify(res.data, null, 2);
+                        ta.style.display = 'block';
+                        ph.style.display = 'none';
+                        actions.classList.remove('hidden');
+                        actions.classList.add('flex');
                     } else {
-                        document.getElementById('detailContent').textContent = '获取失败: ' + (res.message || '');
+                        ph.textContent = '获取失败: ' + (res.message || '');
                     }
-                }).catch(function () { document.getElementById('detailContent').textContent = '请求失败'; });
+                }).catch(function () { ph.textContent = '请求失败'; });
+        }
+
+        function saveDocument() {
+            var ta = document.getElementById('detailContent');
+            var raw = ta.value.trim();
+            if (!raw) { toast('内容为空'); return; }
+            try { JSON.parse(raw); } catch (e) { toast('JSON 格式无效: ' + e.message, 'error'); return; }
+
+            fetch('/api/meilisearch/indexes/' + encodeURIComponent(currentIndexUid) + '/documents', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: raw
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.succeed) {
+                    toast('保存成功', 'warn');
+                } else {
+                    toast('保存失败: ' + (res.message || ''), 'error');
+                }
+            })
+            .catch(function () { toast('请求失败', 'error'); });
+        }
+
+        function formatDocJson() {
+            var ta = document.getElementById('detailContent');
+            var raw = ta.value.trim();
+            if (!raw) { toast('内容为空'); return; }
+            try {
+                var obj = JSON.parse(raw);
+                ta.value = JSON.stringify(obj, null, 2);
+                toast('JSON 格式正确，已整理', 'warn');
+            } catch (e) {
+                toast('JSON 格式无效: ' + e.message, 'error');
+            }
+        }
+
+        function resetDetailPanel() {
+            var ta = document.getElementById('detailContent');
+            var ph = document.getElementById('detailPlaceholder');
+            var actions = document.getElementById('detailActions');
+            ta.value = '';
+            ta.style.display = 'none';
+            ph.style.display = 'block';
+            ph.textContent = '点击左侧 uuid 查看文档详情';
+            actions.classList.add('hidden');
+            actions.classList.remove('flex');
+            document.getElementById('detailDocId').textContent = '';
         }
 
         function renderCurrentList() {
@@ -520,8 +585,7 @@
                         closeConfirmModal();
                         if (pendingDeleteId === selectedDocId) {
                             selectedDocId = null;
-                            document.getElementById('detailContent').textContent = '点击左侧 uuid 查看文档详情';
-                            document.getElementById('detailDocId').textContent = '';
+                            resetDetailPanel();
                         }
                         searchMode ? executeSearch(lastSearchQuery) : loadDocuments();
                         refreshIndexes();
@@ -538,8 +602,7 @@
                         if (res.succeed) {
                             currentPage = 0;
                             selectedDocId = null;
-                            document.getElementById('detailContent').textContent = '点击左侧 uuid 查看文档详情';
-                            document.getElementById('detailDocId').textContent = '';
+                            resetDetailPanel();
                             loadDocuments();
                             refreshIndexes();
                         } else { toast('清空失败: ' + (res.message || ''), 'error'); }

@@ -693,6 +693,10 @@
 
                     <!-- 媒体信息 (仅音频/视频) -->
                     <div id="detailMediaSection" class="hidden space-y-4">
+                        <!-- 封面图 -->
+                        <div id="detailCoverWrap" class="hidden flex justify-center">
+                            <img id="detailCoverImg" src="" alt="专辑封面" class="theme-rounded-lg object-cover shadow-sm" style="max-height: 200px; max-width: 100%;" onerror="this.parentElement.classList.add('hidden');">
+                        </div>
                         <!-- 时长 -->
                         <div class="flex items-center gap-2">
                             <svg class="w-4 h-4 theme-page-text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><polyline points="12 6 12 12 16 14" stroke-width="2" stroke-linecap="round"/></svg>
@@ -738,6 +742,12 @@
                             <span class="theme-page-text-muted">总码率</span>
                             <span id="detailFormatBitrate" class="theme-page-text-primary"></span>
                         </div>
+                    </div>
+
+                    <!-- 元数据标签 (音频: 标题/艺术家/专辑等) -->
+                    <div id="detailMetadataSection" class="hidden">
+                        <h4 class="text-xs font-semibold uppercase tracking-wider theme-page-text-muted mb-3">元数据</h4>
+                        <div id="detailMetadataGrid" class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm"></div>
                     </div>
 
                     <!-- 分隔线 -->

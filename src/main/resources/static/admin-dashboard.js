@@ -57,8 +57,8 @@ let totalPages = 1;
 let pageSize = 10;
 let selectedFiles = new Set();
 let currentView = localStorage.getItem('tfs-view') || 'list'; // 'grid' or 'list' - default to list
-let showOnlyIndexed = localStorage.getItem('tfs-only-indexed') === 'true';
-let searchQuery = showOnlyIndexed ? 'meta:index' : '';
+let showAllFiles = localStorage.getItem('tfs-show-all') === 'true';
+let searchQuery = showAllFiles ? 'meta:all' : '';
 let dirStack = []; // FileSystemDirectoryHandle 栈，用于本地文件夹右栏返回上级
 let draggingFileHandle = null; // 当前拖拽中的 FileSystemFileHandle
 let storedDirHandle = null; // 持久化的根目录句柄（IndexedDB）
@@ -108,14 +108,14 @@ function restoreViewState() {
         if (paginationRow) paginationRow.classList.remove('hidden');
     }
 
-    if (showOnlyIndexed) {
-        const btn = document.getElementById('showOnlyIndexedBtn');
+    if (showAllFiles) {
+        const btn = document.getElementById('showAllBtn');
         if (btn) {
             btn.style.backgroundColor = 'var(--color-accent-muted)';
             btn.style.color = 'var(--color-accent-primary)';
         }
         const searchInput = document.getElementById('searchInput');
-        if (searchInput) searchInput.value = 'meta:index';
+        if (searchInput) searchInput.value = 'meta:all';
     }
 
     restoreLocalPanel();
@@ -288,7 +288,7 @@ function initializeEventListeners() {
     }
     
     // Action buttons
-    document.getElementById('showOnlyIndexedBtn').addEventListener('click', toggleOnlyIndexed);
+    document.getElementById('showAllBtn').addEventListener('click', toggleShowAll);
     document.getElementById('hlsConvertBtn').addEventListener('click', convertToHLS);
     document.getElementById('publishToGalleryBtn').addEventListener('click', publishToGallery);
     document.getElementById('batchDownloadBtn').addEventListener('click', batchDownload);
@@ -1056,6 +1056,7 @@ function createListRow(file) {
                     </div>
                 </div>
             </td>
+            <td class="created-col px-4 py-3 whitespace-nowrap text-sm" style="color: var(--color-text-secondary);">${file.createdAt ? formatDateTime(file.createdAt) : '—'}</td>
             <td class="tag-col px-4 py-3 whitespace-nowrap">
                 <div class="flex items-center gap-1.5 flex-wrap" style="max-width: 240px;">
                     ${tags.map(tag => {
@@ -1857,22 +1858,22 @@ function downloadFile(file) {
     link.click();
 }
 
-// Toggle only indexed
-function toggleOnlyIndexed() {
-    showOnlyIndexed = !showOnlyIndexed;
-    localStorage.setItem('tfs-only-indexed', showOnlyIndexed);
-    const btn = document.getElementById('showOnlyIndexedBtn');
-    
-    if (showOnlyIndexed) {
+// Toggle show all files (including copies)
+function toggleShowAll() {
+    showAllFiles = !showAllFiles;
+    localStorage.setItem('tfs-show-all', showAllFiles);
+    const btn = document.getElementById('showAllBtn');
+
+    if (showAllFiles) {
         btn.style.backgroundColor = 'var(--color-accent-muted)';
         btn.style.color = 'var(--color-accent-primary)';
-        searchQuery = 'meta:index';
+        searchQuery = 'meta:all';
     } else {
         btn.style.backgroundColor = 'var(--color-bg-tertiary)';
         btn.style.color = 'var(--color-text-secondary)';
         searchQuery = '';
     }
-    
+
     document.getElementById('searchInput').value = searchQuery;
     currentPage = 1;
     gridPage = 0; // 重置网格页码
@@ -2397,6 +2398,12 @@ function formatFileSize(bytes) {
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+function formatDateTime(ts) {
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 function debounce(func, wait) {
@@ -2985,7 +2992,7 @@ function showLocalImagePreview(row, url) {
             top = rect.top - previewH - 8;
             if (top < 0) top = 8;
         }
-        let left = rect.left;
+        let left = rect.left + 8;
         if (left + previewW > window.innerWidth) {
             left = window.innerWidth - previewW - 8;
         }

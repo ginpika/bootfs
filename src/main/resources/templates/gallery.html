@@ -190,6 +190,12 @@
             font-size: 14px;
         }
 
+        #bp_container > .bp-x {
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+        }
+
     </style>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <script src="https://cdn.jsdelivr.net/npm/bigpicture@2.6.2/dist/BigPicture.min.js"></script>
@@ -301,6 +307,8 @@
             function loadRandomImage(container, col, row) {
                 const imgUrl = `${IMAGE_API}`;
                 $.get(imgUrl).done(res => {
+                    const uuid = res.substring(res.lastIndexOf('/') + 1);
+                    const thumbUrl = '/thumb/' + uuid;
                     const img = new Image();
 
                     img.onload = function () {
@@ -317,6 +325,10 @@
                     };
 
                     img.onerror = function () {
+                        if (img.src.indexOf('/thumb/') !== -1) {
+                            img.src = res;
+                            return;
+                        }
                         while (container.firstChild) {
                             container.removeChild(container.firstChild);
                         }
@@ -333,7 +345,7 @@
                         BigPicture({ el: this, imgSrc: res });
                     }
 
-                    img.src = res;
+                    img.src = thumbUrl;
                     img.alt = '随机图片';
                 }).fail(function(xhr) {
                     if (xhr.status === 404) {

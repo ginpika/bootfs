@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -31,6 +33,8 @@ public class FileObject {
     // means this resource is a public resource, always describe for resource of image-hosting
     // support for random-picture
     private String isPublicAccess;
+    // tags for classification and search
+    private List<Tag> tags;
 
     public FileObject(String path, String uuid, String fileName) {
         this.path = path;

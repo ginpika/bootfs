@@ -334,6 +334,125 @@ input[type="checkbox"]:checked {
     }
 }
 
+/* Tag badges in list view */
+.tag-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 12px;
+    line-height: 1.4;
+    font-weight: 500;
+    background-color: var(--color-accent-muted, rgba(14, 165, 233, 0.1));
+    color: var(--color-accent-primary, #0ea5e9);
+    cursor: default;
+    transition: all 0.15s ease;
+    position: relative;
+    max-width: 120px;
+}
+
+.tag-badge-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tag-badge .tag-delete-btn {
+    display: none;
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: none;
+    background-color: var(--color-danger, #ef4444);
+    color: white;
+    cursor: pointer;
+    padding: 0;
+    line-height: 0;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    transition: transform 0.1s ease;
+}
+
+.tag-badge:hover .tag-delete-btn {
+    display: inline-flex;
+}
+
+.tag-badge .tag-delete-btn:hover {
+    transform: scale(1.15);
+}
+
+/* Add tag button */
+.tag-add-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1.5px dashed var(--color-border-secondary, #cbd5e1);
+    background: transparent;
+    color: var(--color-text-tertiary, #94a3b8);
+    cursor: pointer;
+    padding: 0;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.tag-add-btn:hover {
+    border-color: var(--color-accent-primary, #0ea5e9);
+    color: var(--color-accent-primary, #0ea5e9);
+    background-color: var(--color-accent-muted, rgba(14, 165, 233, 0.08));
+}
+
+/* Inline tag input */
+.tag-input-inline {
+    display: inline-flex;
+    align-items: center;
+}
+
+.tag-input-field {
+    width: 80px;
+    padding: 2px 6px;
+    border: 1px solid var(--color-accent-primary, #0ea5e9);
+    border-radius: 9999px;
+    font-size: 12px;
+    line-height: 1.4;
+    outline: none;
+    background-color: var(--color-bg-secondary, #fff);
+    color: var(--color-text-primary, #1e293b);
+    transition: width 0.15s ease;
+}
+
+.tag-input-field:focus {
+    width: 100px;
+}
+
+/* Hide tag column when local folder panel is active */
+#mainView.local-panel-active .tag-col {
+    display: none;
+}
+
+/* Waterfall card tag badges */
+.waterfall-tag-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 9999px;
+    font-size: 10px;
+    line-height: 1.5;
+    font-weight: 500;
+    background-color: var(--color-accent-muted, rgba(14, 165, 233, 0.1));
+    color: var(--color-accent-primary, #0ea5e9);
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Print styles */
 @media print {
     aside, header, .no-print {

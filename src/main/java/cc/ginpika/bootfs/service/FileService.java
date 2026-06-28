@@ -118,6 +118,7 @@ public class FileService {
         String documentUUID = this.threadLocalParent.get();
         FullTextDocument fullTextDocument = FullTextDocument.builder().title(title).poster(comicUrls.get(0))
                 .resources(JSONArray.from(comicUrls))
+                .tags(new JSONArray())
                 .uuid(documentUUID)
                 .createdAt(now).updatedAt(now).build();
         meiliSearchService.addToFullText(fullTextDocument);

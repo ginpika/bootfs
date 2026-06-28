@@ -9,11 +9,13 @@ import cc.ginpika.bootfs.core.IdGenerator;
 import cc.ginpika.bootfs.core.io.ContextIO;
 import cc.ginpika.bootfs.domain.dto.FileObject;
 import cc.ginpika.bootfs.domain.dto.FileObjectWebVO;
+import cc.ginpika.bootfs.domain.dto.Tag;
 import cc.ginpika.bootfs.core.Context;
 import cc.ginpika.bootfs.service.ReverseProxyService;
 import cc.ginpika.bootfs.service.etcd.EtcdService;
 import cc.ginpika.bootfs.service.meilisearch.ImageHostDocument;
 import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
+import com.meilisearch.sdk.model.SearchResult;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.zip.ParallelScatterZipCreator;
 import org.apache.commons.compress.archivers.zip.UnixStat;
@@ -21,6 +23,7 @@ import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
 import org.apache.commons.compress.parallel.InputStreamSupplier;
 import org.apache.commons.io.input.NullInputStream;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -31,7 +34,9 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.*;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.*;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 
 // All api here supported web UI
@@ -181,6 +186,7 @@ public class WebUIApiController {
             meiliSearchService.addToImageHost(ImageHostDocument.builder()
                     .poster(context.buildProxyUrl(uuid))
                     .uuid(uuid)
+                    .tags(new JSONArray())
                     .createdAt(now)
                     .updatedAt(now)
                     .build());
@@ -210,5 +216,144 @@ public class WebUIApiController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok().body(url);
+    }
+
+    // ======================== 标签管理 API ========================
+
+    /**
+     * 设置文件标签（覆盖）
+     */
+    @PutMapping("/api/file/{uuid}/tags")
+    public ResponseEntity<?> setTags(@PathVariable("uuid") String uuid,
+                                     @RequestBody List<Tag> tags) {
+        FileObject fileObject = context.query(uuid);
+        if (fileObject == null) {
+            return ResponseEntity.notFound().build();
+        }
+        fileObject.setTags(tags);
+        contextIO.update(uuid, fileObject);
+        syncTagsToMeiliSearch(uuid, tags);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * 追加文件标签（合并，去重）
+     */
+    @PostMapping("/api/file/{uuid}/tags")
+    public ResponseEntity<?> addTags(@PathVariable("uuid") String uuid,
+                                     @RequestBody List<Tag> tags) {
+        FileObject fileObject = context.query(uuid);
+        if (fileObject == null) {
+            return ResponseEntity.notFound().build();
+        }
+        List<Tag> existing = fileObject.getTags() != null ? fileObject.getTags() : new ArrayList<>();
+        Set<String> existingKeys = existing.stream()
+                .map(Tag::toIndexFormat)
+                .collect(Collectors.toSet());
+        for (Tag tag : tags) {
+            if (!existingKeys.contains(tag.toIndexFormat())) {
+                existing.add(tag);
+                existingKeys.add(tag.toIndexFormat());
+            }
+        }
+        fileObject.setTags(existing);
+        contextIO.update(uuid, fileObject);
+        syncTagsToMeiliSearch(uuid, existing);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * 删除文件的指定标签
+     */
+    @DeleteMapping("/api/file/{uuid}/tags")
+    public ResponseEntity<?> removeTags(@PathVariable("uuid") String uuid,
+                                        @RequestBody List<String> tagNames) {
+        FileObject fileObject = context.query(uuid);
+        if (fileObject == null) {
+            return ResponseEntity.notFound().build();
+        }
+        if (fileObject.getTags() == null) {
+            return ResponseEntity.ok().build();
+        }
+        Set<String> toRemove = new HashSet<>(tagNames);
+        List<Tag> remaining = fileObject.getTags().stream()
+                .filter(tag -> !toRemove.contains(tag.toIndexFormat()))
+                .collect(Collectors.toList());
+        fileObject.setTags(remaining);
+        contextIO.update(uuid, fileObject);
+        syncTagsToMeiliSearch(uuid, remaining);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * 获取文件的所有标签
+     */
+    @GetMapping("/api/file/{uuid}/tags")
+    public ResponseEntity<List<Tag>> getTags(@PathVariable("uuid") String uuid) {
+        FileObject fileObject = context.query(uuid);
+        if (fileObject == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(fileObject.getTags() != null ? fileObject.getTags() : Collections.emptyList());
+    }
+
+    private void syncTagsToMeiliSearch(String uuid, List<Tag> tags) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                // 同步到 full-text 索引
+                meiliSearchService.updateDocumentTags("full-text", uuid, tags);
+            } catch (Exception e) {
+                log.warn("同步 tags 到 full-text 索引失败: {}", e.getMessage());
+            }
+            try {
+                // 同步到 image-host 索引
+                meiliSearchService.updateDocumentTags("image-host", uuid, tags);
+            } catch (Exception e) {
+                log.warn("同步 tags 到 image-host 索引失败: {}", e.getMessage());
+            }
+        }, threadPoolExecutor);
+    }
+
+    // ======================== 标签搜索 API ========================
+
+    /**
+     * 按标签搜索文件
+     * @param query 全文搜索关键词（可选）
+     * @param tags 标签过滤，逗号分隔，格式 namespace:name（可选）
+     * @param page 页码，默认 0
+     * @param size 每页数量，默认 20
+     * @param index 索引名：full-text 或 image-host，默认 full-text
+     */
+    @GetMapping("/api/tags/search")
+    public ResponseEntity<?> tagSearch(@RequestParam(value = "q", defaultValue = "") String query,
+                                       @RequestParam(value = "tags", defaultValue = "") String tags,
+                                       @RequestParam(value = "page", defaultValue = "0") int page,
+                                       @RequestParam(value = "size", defaultValue = "20") int size,
+                                       @RequestParam(value = "index", defaultValue = "full-text") String index) {
+        List<String> tagFilters = StringUtils.isNotBlank(tags)
+                ? Arrays.asList(tags.split(","))
+                : Collections.emptyList();
+        SearchResult result = meiliSearchService.searchByTags(query, tagFilters, page, size, index);
+        if (result == null) {
+            return ResponseEntity.ok(new JSONObject()
+                    .fluentPut("hits", new JSONArray())
+                    .fluentPut("total", 0));
+        }
+        JSONObject response = new JSONObject();
+        response.put("hits", new JSONArray(result.getHits()));
+        response.put("total", result.getEstimatedTotalHits());
+        response.put("page", page);
+        response.put("size", size);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 获取所有可用标签及其文档计数
+     * @param index 索引名，默认 full-text
+     */
+    @GetMapping("/api/tags/list")
+    public ResponseEntity<Map<String, Integer>> tagList(@RequestParam(value = "index", defaultValue = "full-text") String index) {
+        Map<String, Integer> tags = meiliSearchService.listAllTags(index);
+        return ResponseEntity.ok(tags);
     }
 }

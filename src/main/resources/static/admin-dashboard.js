@@ -731,7 +731,7 @@ function renderFileList(data) {
         `;
         listContainer.innerHTML = `
             <tr>
-                <td colspan="5" class="px-6 py-12 text-center theme-page-text-secondary">
+                <td colspan="6" class="px-6 py-12 text-center theme-page-text-secondary">
                     暂无文件
                 </td>
             </tr>
@@ -765,6 +765,22 @@ function renderFileList(data) {
                 previewFile(file);
             });
         }
+
+        // Tag events
+        const addTagBtn = row.querySelector('.tag-add-btn');
+        if (addTagBtn) {
+            addTagBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                showTagInput(row, uuid);
+            });
+        }
+        row.querySelectorAll('.tag-badge .tag-delete-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const tagIndexFormat = btn.getAttribute('data-tag');
+                removeTag(uuid, tagIndexFormat);
+            });
+        });
     });
 }
 
@@ -836,6 +852,14 @@ function createWaterfallCard(file) {
             
             <div class="p-3">
                 <p class="text-sm font-medium truncate" style="color: var(--color-text-primary);" title="${file.fileName}">${file.fileName}</p>
+                ${(file.tags && file.tags.length > 0) ? `
+                <div class="flex items-center gap-1 mt-1.5 flex-wrap">
+                    ${file.tags.map(tag => {
+                        const label = tag.namespace && tag.namespace !== 'manual' ? `${tag.namespace}:${tag.name}` : tag.name;
+                        return `<span class="waterfall-tag-badge" title="${label}">${label}</span>`;
+                    }).join('')}
+                </div>
+                ` : ''}
                 <div class="flex items-center justify-between mt-1">
                     <span class="text-xs" style="color: var(--color-text-tertiary);">${isAlbumFile ? '相册' : (isImageFile ? '图片' : '视频')}</span>
                     <div class="flex items-center space-x-2">
@@ -964,6 +988,7 @@ function createListRow(file) {
     const isSelected = selectedFiles.has(file.uuid);
     const isImageFile = isImage(file);
     const isVideoFile = isVideo(file);
+    const tags = file.tags || [];
     
     return `
         <tr class="list-row ${isSelected ? 'selected' : ''}" style="background-color: ${isSelected ? 'var(--color-accent-muted)' : 'var(--color-bg-secondary)'}; border-color: var(--color-border-primary);" data-uuid="${file.uuid}">
@@ -1005,6 +1030,25 @@ function createListRow(file) {
                         <div class="text-sm font-medium" style="color: var(--color-text-primary);">${file.fileName}</div>
                         <div class="text-xs" style="color: var(--color-text-muted);">${file.uuid}</div>
                     </div>
+                </div>
+            </td>
+            <td class="tag-col px-4 py-3 whitespace-nowrap">
+                <div class="flex items-center gap-1.5 flex-wrap" style="max-width: 240px;">
+                    ${tags.map(tag => {
+                        const label = tag.namespace && tag.namespace !== 'manual' ? `${tag.namespace}:${tag.name}` : tag.name;
+                        const indexFormat = tag.namespace + ':' + tag.name;
+                        return `
+                        <span class="tag-badge" title="${label}">
+                            <span class="tag-badge-text">${label}</span>
+                            <button class="tag-delete-btn" data-tag="${indexFormat}" title="删除标签">
+                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </button>
+                        </span>
+                        `;
+                    }).join('')}
+                    <button class="tag-add-btn" title="添加标签">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </button>
                 </div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap">
@@ -1833,6 +1877,93 @@ function showToast(message, type = 'info') {
             toast.classList.remove('translate-y-2', 'opacity-0');
         }, 300);
     }, 3000);
+}
+
+// ===== Tag management =====
+function showTagInput(row, uuid) {
+    // Remove any existing in-flight tag input
+    const existingInput = row.querySelector('.tag-input-inline');
+    if (existingInput) return;
+
+    const addBtn = row.querySelector('.tag-add-btn');
+    const wrapper = row.querySelector('.tag-col .flex');
+
+    // Hide add button, show inline input
+    addBtn.style.display = 'none';
+
+    const inputContainer = document.createElement('span');
+    inputContainer.className = 'tag-input-inline';
+    inputContainer.innerHTML = `
+        <input type="text" class="tag-input-field" placeholder="标签名" maxlength="30" autofocus>
+    `;
+    wrapper.insertBefore(inputContainer, addBtn);
+
+    const input = inputContainer.querySelector('input');
+    input.focus();
+
+    const cleanup = () => {
+        inputContainer.remove();
+        addBtn.style.display = '';
+    };
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const tagName = input.value.trim();
+            if (tagName) {
+                confirmAddTag(uuid, tagName);
+            }
+            cleanup();
+        } else if (e.key === 'Escape') {
+            cleanup();
+        }
+    });
+
+    input.addEventListener('blur', () => {
+        // slight delay to let Enter/Escape handle first
+        setTimeout(() => {
+            if (inputContainer.parentNode) {
+                cleanup();
+            }
+        }, 150);
+    });
+}
+
+async function confirmAddTag(uuid, tagName) {
+    try {
+        const response = await fetch(`/api/file/${uuid}/tags`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([{ name: tagName, namespace: 'manual', source: 'manual', confidence: 1.0 }])
+        });
+        if (response.ok) {
+            showToast('标签已添加', 'success');
+            loadFileList();
+        } else {
+            showToast('添加标签失败', 'error');
+        }
+    } catch (error) {
+        console.error('Add tag error:', error);
+        showToast('添加标签失败', 'error');
+    }
+}
+
+async function removeTag(uuid, tagIndexFormat) {
+    try {
+        const response = await fetch(`/api/file/${uuid}/tags`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([tagIndexFormat])
+        });
+        if (response.ok) {
+            showToast('标签已删除', 'success');
+            loadFileList();
+        } else {
+            showToast('删除标签失败', 'error');
+        }
+    } catch (error) {
+        console.error('Remove tag error:', error);
+        showToast('删除标签失败', 'error');
+    }
 }
 
 // Utility functions

@@ -822,7 +822,6 @@ function createWaterfallCard(file) {
                                 </svg>
                             </div>
                         </div>
-                        ${file.hlsAvailable ? '<span class="absolute top-2 right-2 px-2 py-1 text-white text-xs theme-rounded-md font-medium" style="background-color: var(--color-success);">HLS</span>' : ''}
                     </div>
                 ` : ''}
                 
@@ -839,7 +838,10 @@ function createWaterfallCard(file) {
                 <p class="text-sm font-medium truncate" style="color: var(--color-text-primary);" title="${file.fileName}">${file.fileName}</p>
                 <div class="flex items-center justify-between mt-1">
                     <span class="text-xs" style="color: var(--color-text-tertiary);">${isAlbumFile ? '相册' : (isImageFile ? '图片' : '视频')}</span>
-                    ${file.isPublicAccess ? '<span class="text-xs" style="color: var(--color-success);">公开</span>' : ''}
+                    <div class="flex items-center space-x-2">
+                        ${file.hlsAvailable ? '<span class="text-xs" style="color: var(--color-success);">HLS可用</span>' : ''}
+                        ${file.isPublicAccess ? '<span class="text-xs" style="color: var(--color-success);">公开</span>' : ''}
+                    </div>
                 </div>
             </div>
         </div>
@@ -926,11 +928,11 @@ function createGridCard(file) {
                 </label>
                 
                 <!-- Badges -->
-                <div class="absolute top-2 right-2 flex flex-col space-y-1">
+                <div class="absolute bottom-2 right-2 flex flex-col space-y-1">
                     ${file.copyOf ? '<span class="badge px-2 py-1 text-white text-xs theme-rounded-md font-medium" style="background-color: var(--color-accent-primary);">副本</span>' : ''}
-                    ${file.hlsAvailable ? '<span class="badge px-2 py-1 text-white text-xs theme-rounded-md font-medium" style="background-color: var(--color-success);">HLS</span>' : ''}
+                    ${file.hlsAvailable ? '<span class="badge px-2 py-1 text-white text-xs theme-rounded-md font-medium" style="background-color: var(--color-success);">HLS可用</span>' : ''}
                     ${file.albumAvailable ? '<span class="badge px-2 py-1 text-white text-xs theme-rounded-md font-medium" style="background-color: #06b6d4;">相册</span>' : ''}
-                    ${file.isPublicAccess ? '<span class="badge px-2 py-1 text-white text-xs theme-rounded-md font-medium" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);">画廊</span>' : ''}
+                    ${file.isPublicAccess ? '<span class="badge px-2 py-1 text-white text-xs theme-rounded-md font-medium" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);">公开</span>' : ''}
                 </div>
             </div>
             
@@ -1010,7 +1012,7 @@ function createListRow(file) {
                     ${file.copyOf ? '<span class="px-2 py-1 text-xs rounded-md" style="background-color: var(--color-accent-muted); color: var(--color-accent-primary);">副本</span>' : ''}
                     ${file.hlsAvailable ? '<span class="px-2 py-1 text-xs rounded-md" style="background-color: rgba(16, 185, 129, 0.1); color: var(--color-success);">HLS</span>' : ''}
                     ${file.albumAvailable ? '<span class="px-2 py-1 text-xs rounded-md" style="background-color: rgba(6, 182, 212, 0.1); color: #06b6d4;">相册</span>' : ''}
-                    ${file.isPublicAccess ? '<span class="px-2 py-1 text-xs rounded-md" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);">画廊</span>' : ''}
+                    ${file.isPublicAccess ? '<span class="px-2 py-1 text-xs rounded-md" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);">公开</span>' : ''}
                 </div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-text-secondary);">

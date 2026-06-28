@@ -452,6 +452,14 @@ input[type="checkbox"]:checked {
     stroke: var(--color-accent-primary);
 }
 
+#localFolderPreviewToggle.active {
+    color: var(--color-accent-primary);
+}
+
+#localFolderPreviewToggle.active svg {
+    stroke: var(--color-accent-primary);
+}
+
 /* Waterfall card tag badges */
 .waterfall-tag-badge {
     display: inline-block;

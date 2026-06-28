@@ -72,6 +72,7 @@ public class WebUIController {
         if (StringUtils.isNotBlank(ssoConfig.getInfoUrl())) {
             mv.getModel().put("ssoInfoUrl", ssoConfig.getInfoUrl());
         }
+        mv.getModel().put("ssoEnabled", ssoConfig.isEnabled());
         return mv;
     }
 

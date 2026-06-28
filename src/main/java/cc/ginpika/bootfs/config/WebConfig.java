@@ -48,7 +48,8 @@ public class WebConfig implements WebMvcConfigurer {
                         "/static/**",
                         "/*.css",
                         "/*.js",
-                        "/*.ico"
+                        "/*.ico",
+                        "/s3/**"
                 );
     }
 }

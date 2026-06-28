@@ -1124,6 +1124,16 @@ function closeImagePreview() {
     document.getElementById('imagePreviewModal').classList.add('hidden');
 }
 
+// Backdrop click: only close for images. Videos have high replay cost,
+// so require the explicit close button.
+function handlePreviewBackdropClick() {
+    const videoWrap = document.getElementById('imagePreviewVideoWrap');
+    if (videoWrap && !videoWrap.classList.contains('hidden')) {
+        return;
+    }
+    closeImagePreview();
+}
+
 // Audio preview
 function showAudioPreview(file) {
     const player = document.getElementById('audioPreviewPlayer');

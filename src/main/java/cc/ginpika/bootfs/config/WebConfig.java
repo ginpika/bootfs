@@ -26,7 +26,11 @@ public class WebConfig implements WebMvcConfigurer {
                         "/virtual-file",
                         "/file/*",
                         "/hls/*/segments",
-                        "/hls/*/finalize"
+                        "/hls/*/finalize",
+                        "/etcd",
+                        "/api/etcd/**",
+                        "/meilisearch",
+                        "/api/meilisearch/**"
                 )
                 .excludePathPatterns(
                         "/error",

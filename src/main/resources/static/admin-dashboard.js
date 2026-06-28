@@ -2614,7 +2614,10 @@ function initializeLocalFolderPanel() {
     if (closeBtn) closeBtn.addEventListener('click', closeLocalFolderPanel);
     if (changeBtn) changeBtn.addEventListener('click', changeLocalFolder);
     if (backBtn) backBtn.addEventListener('click', backLocalDir);
-    if (bookmarkBtn) bookmarkBtn.addEventListener('click', saveCurrentBookmark);
+    if (bookmarkBtn) {
+        bookmarkBtn.disabled = true;
+        bookmarkBtn.addEventListener('click', toggleCurrentBookmark);
+    }
     if (bookmarksBtn) {
         bookmarksBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
@@ -2715,19 +2718,63 @@ function closeLocalFolderPanel() {
     localStorage.setItem('tfs-local-panel-open', 'false');
 }
 
-// 保存当前目录为书签
-async function saveCurrentBookmark() {
+// 保存/移除当前目录书签
+async function toggleCurrentBookmark() {
     const current = dirStack[dirStack.length - 1];
     if (!current) {
         showToast('请先打开一个文件夹', 'error');
         return;
     }
-    const name = dirStack.map(h => h.name).join(' / ');
     try {
-        await saveBookmark(current, name);
-        showToast('已保存书签', 'success');
+        const existing = await findCurrentBookmark();
+        if (existing) {
+            await deleteBookmark(existing.id);
+            showToast('已移除书签', 'info');
+        } else {
+            const name = dirStack.map(h => h.name).join(' / ');
+            await saveBookmark(current, name);
+            showToast('已保存书签', 'success');
+        }
+        await updateBookmarkBtnState();
     } catch (e) {
-        showToast('保存书签失败：' + e.message, 'error');
+        showToast('书签操作失败：' + e.message, 'error');
+    }
+}
+
+// 查找当前目录是否已保存为书签
+async function findCurrentBookmark() {
+    const current = dirStack[dirStack.length - 1];
+    if (!current) return null;
+    const bookmarks = await loadBookmarks();
+    for (const bm of bookmarks) {
+        if (bm.handle && await current.isSameEntry(bm.handle)) {
+            return bm;
+        }
+    }
+    return null;
+}
+
+// 更新书签按钮状态
+async function updateBookmarkBtnState() {
+    const bookmarkBtn = document.getElementById('localFolderBookmark');
+    if (!bookmarkBtn) return;
+    const current = dirStack[dirStack.length - 1];
+    if (!current) {
+        bookmarkBtn.disabled = true;
+        bookmarkBtn.classList.remove('active');
+        delete bookmarkBtn.dataset.bookmarkId;
+        return;
+    }
+    bookmarkBtn.disabled = false;
+    const bm = await findCurrentBookmark();
+    if (bm) {
+        bookmarkBtn.classList.add('active');
+        bookmarkBtn.title = '移除书签';
+        bookmarkBtn.dataset.bookmarkId = bm.id;
+    } else {
+        bookmarkBtn.classList.remove('active');
+        bookmarkBtn.title = '保存书签';
+        delete bookmarkBtn.dataset.bookmarkId;
     }
 }
 
@@ -2739,6 +2786,22 @@ async function openFromHandle(handle) {
             perm = await handle.requestPermission({ mode: 'read' });
         }
         if (perm !== 'granted') return;
+
+        // 尝试从当前栈顶查找到目标 handle 的路径，保留父子目录链
+        const current = dirStack[dirStack.length - 1];
+        if (current) {
+            const path = await findPathToHandle(current, handle);
+            if (path) {
+                dirStack.push(...path);
+                storedDirHandle = handle;
+                await saveDirHandle(handle);
+                await renderLocalDir();
+                showLocalFolderPanel();
+                return;
+            }
+        }
+
+        // 无父子关系，重置栈
         storedDirHandle = handle;
         await saveDirHandle(handle);
         dirStack = [handle];
@@ -2747,6 +2810,24 @@ async function openFromHandle(handle) {
     } catch (e) {
         showToast('打开失败：' + e.message, 'error');
     }
+}
+
+// 从 startHandle 查找到 targetHandle 的子目录链（不含 startHandle，含 targetHandle）
+async function findPathToHandle(startHandle, targetHandle, maxDepth = 5) {
+    if (await startHandle.isSameEntry(targetHandle)) return [];
+    if (maxDepth <= 0) return null;
+
+    for await (const [, childHandle] of startHandle.entries()) {
+        if (childHandle.kind !== 'directory') continue;
+        if (await childHandle.isSameEntry(targetHandle)) {
+            return [childHandle];
+        }
+        const subPath = await findPathToHandle(childHandle, targetHandle, maxDepth - 1);
+        if (subPath) {
+            return [childHandle, ...subPath];
+        }
+    }
+    return null;
 }
 
 // 渲染书签 & 最近打开下拉菜单
@@ -2952,6 +3033,8 @@ async function renderLocalDir() {
             })();
         }
     });
+
+    updateBookmarkBtnState();
 }
 
 function enterLocalDir(handle) {

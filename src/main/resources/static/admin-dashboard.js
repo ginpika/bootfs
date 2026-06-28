@@ -1877,6 +1877,7 @@ function showFileDetail(uuid) {
     mediaSection.classList.add('hidden');
     document.getElementById('detailHlsSection').classList.add('hidden');
     document.getElementById('detailMetadataSection').classList.add('hidden');
+    document.getElementById('detailAiSection').classList.add('hidden');
 
     // 异步请求文件详情
     fetch(`/api/file/${uuid}/details`)
@@ -2054,6 +2055,93 @@ function renderFileDetail(data) {
     } else {
         hlsSection.classList.add('hidden');
     }
+
+    // AI 生成元数据 — 有 ai 标签时才读取
+    const aiSection = document.getElementById('detailAiSection');
+    const hasAiTag = data.tags && data.tags.some(t => {
+        // do not change t.name because it`s the tags content, except you know what you are doing
+        const src = (t.name || '').toLowerCase();
+        const ns = (t.namespace || '').toLowerCase();
+        return src === 'ai' || ns.startsWith('ai');
+    });
+    if (hasAiTag) {
+        fetch(`/api/file/${data.uuid}/ai-metadata`)
+            .then(res => res.json())
+            .then(ai => {
+                if (!ai || Object.keys(ai).length === 0) {
+                    aiSection.classList.add('hidden');
+                    return;
+                }
+                renderAiField('detailAiPrompt', 'detailAiPromptText', ai.positivePrompt);
+                renderAiField('detailAiNegPrompt', 'detailAiNegPromptText', ai.negativePrompt);
+                renderAiField('detailAiModel', null, ai.model);
+                renderAiField('detailAiSampler', null, ai.sampler);
+                bindCopyOnClick('detailAiPromptText');
+                bindCopyOnClick('detailAiNegPromptText');
+
+                const paramsGrid = document.getElementById('detailAiParams');
+                const params = [
+                    { label: '步数', value: ai.steps },
+                    { label: 'CFG', value: ai.cfgScale },
+                    { label: '种子', value: ai.seed, mono: true },
+                    { label: '尺寸', value: ai.size }
+                ];
+                paramsGrid.innerHTML = params
+                    .filter(p => p.value)
+                    .map(p => `<div class="flex justify-between"><span class="theme-page-text-muted">${p.label}</span><span class="theme-page-text-primary font-medium text-right ${p.mono ? 'font-mono' : ''}">${p.value}</span></div>`)
+                    .join('');
+                aiSection.classList.remove('hidden');
+            })
+            .catch(() => {
+                aiSection.classList.add('hidden');
+            });
+    } else {
+        aiSection.classList.add('hidden');
+    }
+}
+
+function renderAiField(containerId, textId, value) {
+    const container = document.getElementById(containerId);
+    if (!value) {
+        container.classList.add('hidden');
+        return;
+    }
+    container.classList.remove('hidden');
+    if (textId) {
+        document.getElementById(textId).textContent = value;
+    } else {
+        const valueEl = container.lastElementChild;
+        valueEl.textContent = value;
+        valueEl.title = value;
+    }
+}
+
+function bindCopyOnClick(elementId) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    el.style.cursor = 'pointer';
+    el.title = '点击复制';
+    el.onclick = () => {
+        const text = el.textContent;
+        if (!text) return;
+        navigator.clipboard.writeText(text)
+            .then(() => showToast('已复制到剪切板', 'success'))
+            .catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                try {
+                    document.execCommand('copy');
+                    showToast('已复制到剪切板', 'success');
+                } catch {
+                    showToast('复制失败', 'error');
+                }
+                document.body.removeChild(ta);
+            });
+    };
 }
 
 function createBadge(text, bgColor, textColor) {

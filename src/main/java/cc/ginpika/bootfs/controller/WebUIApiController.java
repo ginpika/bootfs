@@ -17,6 +17,8 @@ import cc.ginpika.bootfs.service.meilisearch.ImageHostDocument;
 import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
 import cc.ginpika.bootfs.service.ai.AiMetadataService;
 import com.meilisearch.sdk.model.SearchResult;
+
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.zip.ParallelScatterZipCreator;
 import org.apache.commons.compress.archivers.zip.UnixStat;
@@ -45,21 +47,15 @@ import java.util.stream.Collectors;
 @RestController
 @CrossOrigin
 @SuppressWarnings("all")
+@RequiredArgsConstructor
 public class WebUIApiController {
-    @Autowired
-    Context context;
-    @Autowired
-    ContextIO contextIO;
-    @Autowired
-    TfsConfig tfsConfig;
-    @Autowired
-    EtcdService etcdService;
-    @Autowired
-    MeiliSearchService meiliSearchService;
-    @Autowired
-    AiMetadataService aiMetadataService;
-    @Autowired
-    ReverseProxyService reverseProxyService;
+    private final Context context;
+    private final ContextIO contextIO;
+    private final TfsConfig tfsConfig;
+    private final EtcdService etcdService;
+    private final MeiliSearchService meiliSearchService;
+    private final AiMetadataService aiMetadataService; 
+    private final ReverseProxyService reverseProxyService;
 
     private static final Cache<String, String> cache = CacheBuilder.newBuilder().build();
 

@@ -36,13 +36,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Service
 public class Context {
     @Autowired
-    TfsConfig tfsConfig;
+    private TfsConfig tfsConfig;
     @Autowired
-    ContextIO contextIO;
+    private ContextIO contextIO;
+    @Autowired
+    private ObjectProvider<EtcdService> etcdServiceObjectProvider;
 
-    @Autowired
-    ObjectProvider<EtcdService> etcdServiceObjectProvider;
-    EtcdService etcdService;
+    public Context(TfsConfig tfsConfig, ContextIO contextIO, ObjectProvider<EtcdService> etcdServiceObjectProvider) {
+        this.tfsConfig = tfsConfig;
+        this.contextIO = contextIO;
+        this.etcdServiceObjectProvider = etcdServiceObjectProvider;
+    }
+
+
+    private EtcdService etcdService;
 
     public String uuid;
     static boolean loaded = false;

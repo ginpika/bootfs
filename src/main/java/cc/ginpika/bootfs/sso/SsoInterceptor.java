@@ -1,4 +1,4 @@
-package cc.ginpika.bootfs.interceptor;
+package cc.ginpika.bootfs.sso;
 
 import cc.ginpika.bootfs.dto.SsoSession;
 import cc.ginpika.bootfs.dto.SsoUser;
@@ -8,35 +8,40 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 @Slf4j
 @Component
 public class SsoInterceptor implements HandlerInterceptor {
-    
+
     @Autowired
     private SsoService ssoService;
-    
+
+    public SsoInterceptor(SsoService ssoService) {
+        this.ssoService = ssoService;
+    }
+
     @Override
-    public boolean preHandle(HttpServletRequest request, 
-                            HttpServletResponse response, 
-                            Object handler) throws Exception {
-        
+    public boolean preHandle(@NonNull HttpServletRequest request,
+                             @NonNull HttpServletResponse response,
+                             @NonNull Object handler) throws Exception {
+
         if (!ssoService.isEnabled()) {
             return true;
         }
-        
+
         String token = getTokenFromCookie(request);
-        
+
         if (token == null || token.isEmpty()) {
             redirectToLogin(request, response);
             return false;
         }
-        
+
         try {
             SsoSession session = ssoService.checkSession(token).block();
-            
+
             if (session != null && session.isAuthenticated()) {
                 SsoUser user = session.getUser();
                 request.setAttribute("ssoUser", user);
@@ -47,11 +52,11 @@ public class SsoInterceptor implements HandlerInterceptor {
         } catch (Exception e) {
             log.warn("SSO token 验证失败：{}", e.getMessage());
         }
-        
+
         redirectToLogin(request, response);
         return false;
     }
-    
+
     private String getTokenFromCookie(HttpServletRequest request) {
         Cookie[] cookies = request.getCookies();
         if (cookies != null) {
@@ -63,9 +68,9 @@ public class SsoInterceptor implements HandlerInterceptor {
         }
         return null;
     }
-    
-    private void redirectToLogin(HttpServletRequest request, 
-                                 HttpServletResponse response) throws Exception {
+
+    private void redirectToLogin(HttpServletRequest request,
+            HttpServletResponse response) throws Exception {
         String currentUrl = request.getRequestURL().toString();
         String queryString = request.getQueryString();
         if (queryString != null) {

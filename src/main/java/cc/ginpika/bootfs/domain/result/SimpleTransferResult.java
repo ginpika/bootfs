@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class SimpleTransferResult implements TransferResult {
+    @Builder.Default
     Boolean succeed = false;
     String message;
     FileObject fileNode;

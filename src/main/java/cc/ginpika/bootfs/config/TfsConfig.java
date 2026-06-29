@@ -12,8 +12,6 @@ import java.nio.file.Path;
 @Data
 public class TfsConfig {
     private String rootPath;
-    private String pathPrefix;
-    private String config;
     private String webEntrypoint;
     private String uniqueId;
     private Integer copies;

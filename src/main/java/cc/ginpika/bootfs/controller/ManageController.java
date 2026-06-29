@@ -36,15 +36,29 @@ import java.util.Map;
 @SuppressWarnings("all")
 public class ManageController {
     @Autowired
-    FileService fileService;
+    private FileService fileService;
     @Autowired
-    FileTransferService fileTransferService;
+    private FileTransferService fileTransferService;
     @Autowired
-    ReverseProxyService reverseProxyService;
+    private ReverseProxyService reverseProxyService;
     @Autowired
-    Context context;
+    private Context context;
     @Autowired
-    TfsConfig tfsConfig;
+    private TfsConfig tfsConfig;
+
+    public ManageController(FileService fileService, 
+        FileTransferService fileTransferService, 
+        ReverseProxyService reverseProxyService, 
+        Context context, 
+        TfsConfig tfsConfig) {
+        this.fileService = fileService;
+        this.fileTransferService = fileTransferService;
+        this.reverseProxyService = reverseProxyService;
+        this.context = context;
+        this.tfsConfig = tfsConfig;
+    }
+
+    
 
     // upload file
     @PutMapping("/f")

@@ -4,8 +4,8 @@ import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.core.Context;
 import cc.ginpika.bootfs.core.io.ContextIO;
 import cc.ginpika.bootfs.domain.dto.FileObject;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -18,13 +18,11 @@ import java.util.concurrent.Executors;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class ThumbnailService {
-    @Autowired
-    TfsConfig tfsConfig;
-    @Autowired
-    Context context;
-    @Autowired
-    ContextIO contextIO;
+    private final TfsConfig tfsConfig;
+    private final Context context;
+    private final ContextIO contextIO;
 
     public static final Set<String> IMAGE_EXTENSIONS = Set.of(".jpg", ".jpeg", ".png", ".gif");
 

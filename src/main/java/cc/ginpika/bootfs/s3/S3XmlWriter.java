@@ -1,6 +1,7 @@
 package cc.ginpika.bootfs.s3;
 
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -11,7 +12,7 @@ import java.util.TimeZone;
  * 手拼 S3 XML 响应。无 XML 库依赖,用 StringBuilder + 转义。
  */
 @Component
-@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
 public class S3XmlWriter {
 
     private static final String DECL = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";

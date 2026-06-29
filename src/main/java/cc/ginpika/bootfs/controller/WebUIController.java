@@ -1,11 +1,11 @@
 package cc.ginpika.bootfs.controller;
 
 import cc.ginpika.bootfs.config.MeiliSearchConfig;
-import cc.ginpika.bootfs.config.SsoConfig;
 import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.domain.dto.FileObject;
 import cc.ginpika.bootfs.core.Context;
 import cc.ginpika.bootfs.dto.SsoUser;
+import cc.ginpika.bootfs.sso.SsoConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,20 +18,18 @@ import org.springframework.web.servlet.ModelAndView;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.*;
+import lombok.RequiredArgsConstructor;
 
 @Slf4j
 @Controller
 @CrossOrigin
 @SuppressWarnings("all")
+@RequiredArgsConstructor
 public class WebUIController {
-    @Resource
-    Context context;
-    @Autowired
-    MeiliSearchConfig meiliSearchConfig;
-    @Autowired
-    TfsConfig tfsConfig;
-    @Autowired
-    SsoConfig ssoConfig;
+    private final Context context;
+    private final MeiliSearchConfig meiliSearchConfig;
+    private final TfsConfig tfsConfig;
+    private final SsoConfig ssoConfig;
 
     // Web UI - Old version (keep for compatibility)
     @GetMapping("/index-old")

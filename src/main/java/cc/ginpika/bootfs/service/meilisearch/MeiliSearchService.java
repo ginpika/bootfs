@@ -10,10 +10,10 @@ import com.meilisearch.sdk.SearchRequest;
 import com.meilisearch.sdk.model.SearchResult;
 import cc.ginpika.bootfs.config.MeiliSearchConfig;
 import cc.ginpika.bootfs.domain.dto.Tag;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
@@ -24,9 +24,9 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class MeiliSearchService {
-    @Autowired
-    MeiliSearchConfig meiliSearchConfig;
+    private final MeiliSearchConfig meiliSearchConfig;
 
     private Client client;
 
@@ -217,7 +217,6 @@ public class MeiliSearchService {
         }
     }
 
-    @SuppressWarnings("unchecked")
     public List<Map<String, Object>> getAllIndexesWithStats() {
         List<Map<String, Object>> result = new ArrayList<>();
         try {

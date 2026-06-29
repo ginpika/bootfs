@@ -13,7 +13,6 @@ import cc.ginpika.bootfs.service.meilisearch.FullTextDocument;
 import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
 import cc.ginpika.bootfs.service.thumb.ThumbnailService;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -27,6 +26,7 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -47,6 +47,16 @@ public class FileService {
     @Autowired
     private ThumbnailService thumbnailService;
 
+    public FileService(Context context, TfsConfig tfsConfig, EtcdService etcdService, FileTransferService fileTransferService, 
+        MeiliSearchService meiliSearchService, ThumbnailService thumbnailService) {
+        this.context = context;
+        this.tfsConfig = tfsConfig;
+        this.etcdService = etcdService;
+        this.fileTransferService = fileTransferService;
+        this.meiliSearchService = meiliSearchService;
+        this.thumbnailService = thumbnailService;
+    }
+
     // Thread context parameters passing for function with parent-child-relation
     // like comic zip archive
     private final ThreadLocal<String> threadLocalParent = new ThreadLocal<>();
@@ -58,9 +68,10 @@ public class FileService {
     public String upload(MultipartFile file) throws IOException {
         // if multipart-file name start with [Comic], it will be seen as a Comic zip archive
         // tfs will unzip it automatically, and will save every image page as children of zip archive
-        if (file.getOriginalFilename() != null && file.getOriginalFilename().startsWith("[Comic]")) {
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename != null && originalFilename.startsWith("[Comic]")) {
             this.comicUnzipPreProcess(file);
-        } else if (file.getOriginalFilename() != null && file.getOriginalFilename().startsWith("[Picture]")) {
+        } else if (originalFilename != null && originalFilename.startsWith("[Picture]")) {
             this.pictureUnzipPreProcess(file);
         }
         return normalFilePersistence(file);
@@ -71,23 +82,22 @@ public class FileService {
     }
 
     public void comicUnzipPreProcess(MultipartFile file) throws IOException {
-        String fileOriginalName = file.getOriginalFilename();
-        if (StringUtils.isBlank(fileOriginalName)) {
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || originalFilename.isBlank()) {
             throw new IOException("MultipartFile.getOriginalFilename should not be null");
         }
-        String ext = fileOriginalName.substring(fileOriginalName.lastIndexOf("."));
+        String ext = originalFilename.substring(originalFilename.lastIndexOf("."));
         // current version only support zip archive
         if (!ext.equals(".zip")) return;
         // create tmp file for zip archive
         Path tmp = Files.createTempFile("tmp" + System.currentTimeMillis(), ext);
-        OutputStream tmpOs = Files.newOutputStream(tmp);
-        InputStream zipIs = file.getInputStream();
-        zipIs.transferTo(tmpOs);
-        zipIs.close();tmpOs.close();
+        try (OutputStream tmpOs = Files.newOutputStream(tmp)) {
+            file.getInputStream().transferTo(tmpOs);
+        }
         // create tmp file for ArchiveEntry of archive
         List<Path> outputs = ComicArchiveProcessor.extraction(tmp);
         List<String> comicUrls = new ArrayList<>();
-        String title = file.getOriginalFilename().substring(0, file.getOriginalFilename().lastIndexOf(".")).substring(7);;
+        String title = originalFilename.substring(0, originalFilename.lastIndexOf(".")).substring(7);
         AtomicInteger pageCount = new AtomicInteger(1);
         if (outputs.isEmpty()) return;
         // passing parent-children-relation, write in thread-local for parent
@@ -103,7 +113,9 @@ public class FileService {
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-            String imageExt = path.getFileName().toString().substring(path.getFileName().toString().lastIndexOf('.'));
+            String imageExt = Optional.ofNullable(path.getFileName())
+                    .map(name -> name.toString().substring(name.toString().lastIndexOf('.')))
+                    .orElse(".jpg");
             String imageTitle = title + "_" + pageCount.getAndIncrement() + imageExt;
             long imageSize = target.toFile().length();
             FileObject imageFileObject = new FileObject(filePath, uuid, imageTitle, imageSize);
@@ -116,7 +128,8 @@ public class FileService {
         });
         LocalDateTime now = LocalDateTime.now();
         String documentUUID = this.threadLocalParent.get();
-        FullTextDocument fullTextDocument = FullTextDocument.builder().title(title).poster(comicUrls.get(0))
+        String poster = comicUrls.isEmpty() ? null : comicUrls.get(0);
+        FullTextDocument fullTextDocument = FullTextDocument.builder().title(title).poster(poster)
                 .resources(JSONArray.from(comicUrls))
                 .tags(new JSONArray())
                 .uuid(documentUUID)
@@ -131,13 +144,14 @@ public class FileService {
         if (threadLocalParent.get() != null) uuid = threadLocalParent.get();
         saveToLocal(uuid, file);
         String filePath = Path.of(tfsConfig.getPathPrefix(), uuid).toString();
-        FileObject fileObject = new FileObject(filePath, uuid, file.getOriginalFilename(), file.getSize());
+        String originalFilename = file.getOriginalFilename();
+        FileObject fileObject = new FileObject(filePath, uuid, originalFilename, file.getSize());
         if (threadLocalAlbumAvailable.get() != null) fileObject.setAlbumAvailable("1");
         context.record(fileObject, uuid);
         String localNodeUrl = context.buildUrl(uuid);
         etcdService.putFile(uuid, localNodeUrl, context.buildMetaJson(file));
         File target = new File(filePath);
-        replication(target, uuid, file.getOriginalFilename());
+        replication(target, uuid, originalFilename);
         thumbnailService.generateAsync(uuid);
         return localNodeUrl;
     }
@@ -153,14 +167,17 @@ public class FileService {
         if (!target.createNewFile()) {
             throw new IOException("文件创建异常");
         }
-        FileOutputStream fos = new FileOutputStream(target);
-        file.getInputStream().transferTo(fos);
-        fos.close();
-        file.getInputStream().close();
+        try (FileOutputStream fos = new FileOutputStream(target)) {
+            file.getInputStream().transferTo(fos);
+        }
     }
 
     public void replication(File file, String fileId, String originFilename) {
         List<String> nodes = etcdService.getAllNodes();
+        if (nodes == null || nodes.isEmpty()) {
+            log.warn("No nodes available for replication");
+            return;
+        }
         Random random = new Random();
         int sampleCount = tfsConfig.getCopies();
         for (int i=0;i<sampleCount-1;i++) {
@@ -179,6 +196,10 @@ public class FileService {
 
     public Object[] download(String uuid, HttpServletRequest request) throws IOException {
         FileObject target = context.query(uuid);
+        if (target == null) {
+            log.error("文件不存在: {}", uuid);
+            return null;
+        }
         log.info("{} - {}", request.getRemoteHost(), target.getFileName());
         File file = new File(target.getPath());
         if (!file.exists()) {

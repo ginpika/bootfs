@@ -1,8 +1,8 @@
 package cc.ginpika.bootfs.service;
 
-import cc.ginpika.bootfs.config.SsoConfig;
 import cc.ginpika.bootfs.dto.SsoLoginResponse;
 import cc.ginpika.bootfs.dto.SsoSession;
+import cc.ginpika.bootfs.sso.SsoConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -23,6 +23,7 @@ public class SsoService {
         this.ssoConfig = ssoConfig;
     }
     
+    @SuppressWarnings("null")
     public Mono<SsoSession> checkSession(String token) {
         return webClient.get()
                 .uri("/api/sso/session")
@@ -31,6 +32,7 @@ public class SsoService {
                 .bodyToMono(SsoSession.class);
     }
     
+    @SuppressWarnings("null")
     public Mono<SsoLoginResponse> login(String username, String password) {
         return webClient.post()
                 .uri("/api/sso/login")
@@ -40,6 +42,7 @@ public class SsoService {
                 .bodyToMono(SsoLoginResponse.class);
     }
     
+    @SuppressWarnings("null")
     public Mono<Void> logout(String token) {
         return webClient.post()
                 .uri("/api/sso/logout")

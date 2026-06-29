@@ -1,4 +1,4 @@
-package cc.ginpika.bootfs.config;
+package cc.ginpika.bootfs.sso;
 
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,7 +25,7 @@ public class SsoConfig {
     @Bean
     public WebClient ssoWebClient() {
         return WebClient.builder()
-                .baseUrl(serverUrl)
+                .baseUrl(serverUrl != null ? serverUrl : "http://localhost:3001")
                 .build();
     }
     

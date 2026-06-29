@@ -2,6 +2,7 @@ package cc.ginpika.bootfs.s3;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import javax.servlet.Filter;
 import javax.servlet.FilterChain;
@@ -16,7 +17,7 @@ import java.io.IOException;
  * 拦截 /s3/* 的 SigV4 鉴权 Filter。失败写 S3 Error XML。
  */
 @Component
-@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
 public class S3AuthFilter implements Filter {
 
     @Autowired

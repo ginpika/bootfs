@@ -2,6 +2,7 @@ package cc.ginpika.bootfs.s3;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import javax.servlet.http.HttpServletRequest;
 import java.text.SimpleDateFormat;
@@ -17,7 +18,7 @@ import java.util.TreeMap;
  * 不重算 body hash(适配 UNSIGNED-PAYLOAD,避免大文件 OOM)。
  */
 @Component
-@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
 public class S3SigV4Verifier {
 
     private static final long MAX_CLOCK_SKEW_MS = 15 * 60 * 1000L;

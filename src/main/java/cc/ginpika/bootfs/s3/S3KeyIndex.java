@@ -9,6 +9,7 @@ import io.etcd.jetcd.options.GetOption;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -23,7 +24,7 @@ import java.util.Set;
  */
 @Slf4j
 @Component
-@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
 public class S3KeyIndex {
 
     @Autowired

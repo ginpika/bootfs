@@ -1,55 +1,5 @@
 {"properties": [
   {
-    "name": "server.port",
-    "type": "java.lang.Integer",
-    "description": "服务器端口号，默认 8181"
-  },
-  {
-    "name": "spring.servlet.multipart.max-file-size",
-    "type": "java.lang.String",
-    "description": "单个文件最大上传大小，默认 4096MB"
-  },
-  {
-    "name": "spring.servlet.multipart.max-request-size",
-    "type": "java.lang.String",
-    "description": "单次请求最大上传大小，默认 4096MB"
-  },
-  {
-    "name": "server.tomcat.basedir",
-    "type": "java.lang.String",
-    "description": "Tomcat 工作目录，用于存储缓存和临时文件"
-  },
-  {
-    "name": "server.tomcat.connection-timeout",
-    "type": "java.lang.Long",
-    "description": "Tomcat 连接超时时间（毫秒），默认 1800000（30分钟）"
-  },
-  {
-    "name": "spring.devtools.restart.enabled",
-    "type": "java.lang.Boolean",
-    "description": "是否启用 Spring DevTools 热重载功能"
-  },
-  {
-    "name": "spring.devtools.restart.additional-paths",
-    "type": "java.lang.String",
-    "description": "DevTools 额外监控的目录路径"
-  },
-  {
-    "name": "spring.devtools.restart.exclude",
-    "type": "java.lang.String",
-    "description": "DevTools 排除监控的目录或文件"
-  },
-  {
-    "name": "spring.thymeleaf.cache",
-    "type": "java.lang.Boolean",
-    "description": "是否启用 Thymeleaf 模板缓存，dev 环境建议关闭"
-  },
-  {
-    "name": "spring.web.resources.cache.period",
-    "type": "java.lang.Integer",
-    "description": "静态资源缓存周期（秒），dev 环境建议设为 0 禁用缓存"
-  },
-  {
     "name": "tfs.copies",
     "type": "java.lang.Integer",
     "description": "文件副本数量，用于数据冗余存储"
@@ -63,16 +13,6 @@
     "name": "tfs.root-path",
     "type": "java.lang.String",
     "description": "TFS 根目录路径，存储所有文件数据"
-  },
-  {
-    "name": "tfs.path-prefix",
-    "type": "java.lang.String",
-    "description": "TFS 文件路径前缀"
-  },
-  {
-    "name": "tfs.config",
-    "type": "java.lang.String",
-    "description": "TFS 配置文件路径"
   },
   {
     "name": "tfs.ffmpeg-url",

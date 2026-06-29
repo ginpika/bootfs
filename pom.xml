@@ -10,9 +10,9 @@
 	</parent>
 	<groupId>cc.ginpika</groupId>
 	<artifactId>bootfs</artifactId>
-	<version>1.0.0</version>
+	<version>1.0.0-beta.1</version>
 	<name>bootfs</name>
-	<description>A lightweight, multimedia-centric file system for minimalists. Based on Spring Boot.</description>
+	<description>A lightweight, multimedia-centric file system for minimalists. Based on Spring Boot and FFmpeg.</description>
 	<properties>
 		<java.version>17</java.version>
 	</properties>

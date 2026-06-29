@@ -3,6 +3,7 @@ package cc.ginpika.bootfs.core.io;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import cc.ginpika.bootfs.domain.dto.NodeObject;
+import cc.ginpika.bootfs.domain.result.SimpleTransferResult;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.Consts;
@@ -40,6 +41,11 @@ public class HttpFileTransferClient {
             rq.setEntity(multipartEntity);
             ResponseHandler<String> handler = new BasicResponseHandler();
             JSONObject response = JSON.parseObject(client.execute(rq, handler));
+            log.info("Transfer response: {}", response);
+            SimpleTransferResult result = JSON.parseObject(response.toJSONString(), SimpleTransferResult.class);
+            if (!result.getSucceed()) {
+                throw new IOException(result.getMessage());
+            }
         }
     }
 }

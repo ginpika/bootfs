@@ -5,7 +5,6 @@ import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.domain.dto.FileObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -15,14 +14,16 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.locks.ReentrantLock;
 
+import javax.annotation.Resource;
+
 @Slf4j
 @Service
 public class ContextIO {
     private final ThreadPoolExecutor jsonIoThreadPool = new JsonIoThreadPool();
     public static ReentrantLock FILE_LOCK = new ReentrantLock();
 
-    @Autowired
-    TfsConfig tfsConfig;
+    @Resource
+    private TfsConfig tfsConfig;
 
     public void append(String uuid, FileObject object) {
         CompletableFuture.runAsync(() -> {

@@ -1,0 +1,157 @@
+{"properties": [
+  {
+    "name": "server.port",
+    "type": "java.lang.Integer",
+    "description": "服务器端口号，默认 8181"
+  },
+  {
+    "name": "spring.servlet.multipart.max-file-size",
+    "type": "java.lang.String",
+    "description": "单个文件最大上传大小，默认 4096MB"
+  },
+  {
+    "name": "spring.servlet.multipart.max-request-size",
+    "type": "java.lang.String",
+    "description": "单次请求最大上传大小，默认 4096MB"
+  },
+  {
+    "name": "server.tomcat.basedir",
+    "type": "java.lang.String",
+    "description": "Tomcat 工作目录，用于存储缓存和临时文件"
+  },
+  {
+    "name": "server.tomcat.connection-timeout",
+    "type": "java.lang.Long",
+    "description": "Tomcat 连接超时时间（毫秒），默认 1800000（30分钟）"
+  },
+  {
+    "name": "spring.devtools.restart.enabled",
+    "type": "java.lang.Boolean",
+    "description": "是否启用 Spring DevTools 热重载功能"
+  },
+  {
+    "name": "spring.devtools.restart.additional-paths",
+    "type": "java.lang.String",
+    "description": "DevTools 额外监控的目录路径"
+  },
+  {
+    "name": "spring.devtools.restart.exclude",
+    "type": "java.lang.String",
+    "description": "DevTools 排除监控的目录或文件"
+  },
+  {
+    "name": "spring.thymeleaf.cache",
+    "type": "java.lang.Boolean",
+    "description": "是否启用 Thymeleaf 模板缓存，dev 环境建议关闭"
+  },
+  {
+    "name": "spring.web.resources.cache.period",
+    "type": "java.lang.Integer",
+    "description": "静态资源缓存周期（秒），dev 环境建议设为 0 禁用缓存"
+  },
+  {
+    "name": "tfs.copies",
+    "type": "java.lang.Integer",
+    "description": "文件副本数量，用于数据冗余存储"
+  },
+  {
+    "name": "tfs.web-entrypoint",
+    "type": "java.lang.String",
+    "description": "TFS Web 服务入口地址"
+  },
+  {
+    "name": "tfs.root-path",
+    "type": "java.lang.String",
+    "description": "TFS 根目录路径，存储所有文件数据"
+  },
+  {
+    "name": "tfs.path-prefix",
+    "type": "java.lang.String",
+    "description": "TFS 文件路径前缀"
+  },
+  {
+    "name": "tfs.config",
+    "type": "java.lang.String",
+    "description": "TFS 配置文件路径"
+  },
+  {
+    "name": "tfs.ffmpeg-url",
+    "type": "java.lang.String",
+    "description": "FFmpeg 可执行文件路径，用于音视频转码"
+  },
+  {
+    "name": "tfs.thumbnail-width",
+    "type": "java.lang.Integer",
+    "description": "缩略图宽度（像素），默认 480"
+  },
+  {
+    "name": "tfs.thumbnail-quality",
+    "type": "java.lang.Integer",
+    "description": "缩略图质量（1-100），默认 80"
+  },
+  {
+    "name": "etcd.endpoints",
+    "type": "java.lang.String",
+    "description": "Etcd 集群端点地址，用于配置管理和服务发现"
+  },
+  {
+    "name": "meili-search.url",
+    "type": "java.lang.String",
+    "description": "Meilisearch 服务地址"
+  },
+  {
+    "name": "meili-search.master-key",
+    "type": "java.lang.String",
+    "description": "Meilisearch 主密钥，用于 API 认证"
+  },
+  {
+    "name": "meili-search.web-ui",
+    "type": "java.lang.String",
+    "description": "Meilisearch Web UI 访问地址"
+  },
+  {
+    "name": "sso.enabled",
+    "type": "java.lang.Boolean",
+    "description": "是否启用 SSO 单点登录"
+  },
+  {
+    "name": "sso.server-url",
+    "type": "java.lang.String",
+    "description": "SSO 服务器地址"
+  },
+  {
+    "name": "sso.info-url",
+    "type": "java.lang.String",
+    "description": "SSO 用户信息查询接口地址"
+  },
+  {
+    "name": "sso.cookie-name",
+    "type": "java.lang.String",
+    "description": "SSO 会话 Cookie 名称"
+  },
+  {
+    "name": "s3.enabled",
+    "type": "java.lang.Boolean",
+    "description": "是否启用 S3 兼容对象存储"
+  },
+  {
+    "name": "s3.access-key",
+    "type": "java.lang.String",
+    "description": "S3 访问密钥（Access Key ID）"
+  },
+  {
+    "name": "s3.secret-key",
+    "type": "java.lang.String",
+    "description": "S3 密钥（Secret Access Key）"
+  },
+  {
+    "name": "s3.region",
+    "type": "java.lang.String",
+    "description": "S3 存储区域，默认 us-east-1"
+  },
+  {
+    "name": "s3.bucket",
+    "type": "java.lang.String",
+    "description": "S3 存储桶名称"
+  }
+]}

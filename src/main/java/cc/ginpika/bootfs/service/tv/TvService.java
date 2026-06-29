@@ -5,8 +5,8 @@ import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.core.Context;
 import cc.ginpika.bootfs.domain.dto.FileObject;
 import lombok.Data;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
@@ -22,13 +22,10 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class TvService {
-
-    @Autowired
-    private Context context;
-
-    @Autowired
-    private TfsConfig tfsConfig;
+    private final Context context;
+    private final TfsConfig tfsConfig;
 
     private static final int PLAYLIST_WINDOW_SIZE = 5;
 
@@ -260,6 +257,7 @@ public class TvService {
         return sb.toString();
     }
 
+    @SuppressWarnings("null")
     public Resource getTsSegment(String uuid, String fileName) {
         Path tsPath = Path.of(tfsConfig.getPathPrefix(), "hls", uuid, fileName);
         if (!Files.exists(tsPath)) {
@@ -293,6 +291,7 @@ public class TvService {
         return status;
     }
 
+    @SuppressWarnings("unused")
     private double calculateTotalDuration() {
         return allTsList.stream()
                 .mapToDouble(TsSegment::getDuration)

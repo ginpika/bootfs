@@ -19,6 +19,10 @@ public class AuthController {
     
     @Autowired
     private SsoService ssoService;
+
+    public AuthController(SsoService ssoService) {
+        this.ssoService = ssoService;
+    }
     
     @GetMapping("/api/logout")
     public void logout(HttpServletRequest request, HttpServletResponse response) {

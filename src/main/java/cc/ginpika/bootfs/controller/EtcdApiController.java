@@ -2,7 +2,6 @@ package cc.ginpika.bootfs.controller;
 
 import cc.ginpika.bootfs.service.etcd.EtcdService;
 import io.etcd.jetcd.ByteSequence;
-import io.etcd.jetcd.KeyValue;
 import io.etcd.jetcd.options.GetOption;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,7 +17,11 @@ import java.util.stream.Collectors;
 public class EtcdApiController {
 
     @Autowired
-    EtcdService etcdService;
+    private EtcdService etcdService;
+
+    public EtcdApiController(EtcdService etcdService) {
+        this.etcdService = etcdService;
+    }
 
     @GetMapping("/keys")
     public Map<String, Object> listKeys(@RequestParam(value = "prefix", defaultValue = "") String prefix,
@@ -51,7 +54,7 @@ public class EtcdApiController {
                 } else {
                     kvs = etcdService.client.getKVClient()
                             .get(ByteSequence.from(fetchPrefix.getBytes()),
-                                    GetOption.builder().withPrefix(ByteSequence.from(fetchPrefix.getBytes()))
+                                    GetOption.builder().isPrefix(true)
                                             .withSortField(GetOption.SortTarget.KEY)
                                             .withSortOrder(GetOption.SortOrder.ASCEND)
                                             .build())

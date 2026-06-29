@@ -6,13 +6,14 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 /**
  * S3 兼容层配置。s3.enabled=false 时整层不加载。
  */
 @Configuration
 @ConfigurationProperties(prefix = "s3")
-@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
 @Data
 public class S3Config {
 

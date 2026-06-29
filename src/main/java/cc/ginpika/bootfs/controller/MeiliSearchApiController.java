@@ -12,9 +12,12 @@ import java.util.*;
 @CrossOrigin
 @RequestMapping("/api/meilisearch")
 public class MeiliSearchApiController {
-
     @Autowired
-    MeiliSearchService meiliSearchService;
+    private MeiliSearchService meiliSearchService;
+
+    public MeiliSearchApiController(MeiliSearchService meiliSearchService) {
+        this.meiliSearchService = meiliSearchService;
+    }
 
     @GetMapping("/indexes")
     public Map<String, Object> listIndexes() {

@@ -34,7 +34,13 @@ public class EtcdService {
     @Autowired
     private TfsConfig tfsConfig;
     @Autowired
-    Context context;
+    private Context context;
+
+    public EtcdService(EtcdConfig etcdConfig, TfsConfig tfsConfig, Context context) {
+        this.etcdConfig = etcdConfig;
+        this.tfsConfig = tfsConfig;
+        this.context = context;
+    }
 
     private final List<String> nodes = new ArrayList<>();
 
@@ -76,7 +82,7 @@ public class EtcdService {
     public List<String> getWithPrefix(String prefix) {
         return client.getKVClient()
                 .get(ByteSequence.from(prefix.getBytes()), GetOption.builder()
-                        .withPrefix(ByteSequence.from(prefix.getBytes())).build())
+                        .isPrefix(true).build())
                 .join()
                 .getKvs().stream().map(KeyValue::getValue).map(ByteSequence::toString).collect(Collectors.toList());
     }
@@ -85,7 +91,7 @@ public class EtcdService {
         log.info("deleteWithPrefix: {}", prefix);
         client.getKVClient()
                 .delete(ByteSequence.from(prefix.getBytes()), DeleteOption.builder()
-                        .withPrefix(ByteSequence.from(prefix.getBytes())).build())
+                        .isPrefix(true).build())
                 .join();
     }
 

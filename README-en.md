@@ -1,41 +1,50 @@
 # BootFS
 
-A lightweight file management system focused on image, audio, and video storage, built with Spring Boot.
+[中文](./README.md)
 
-It’s an image hosting service, and much more.
+A lightweight file management system focused on multimedia files, built with Spring Boot & FFmpeg.
+
+## Why do you need BootFS?
+
+The answer may be one of the following, and I happen to satisfy all of them personally.
+
+- You're tired of ugly UIs in traditional distributed file systems and want a modern, interactive file storage service that also supports S3 protocol.
+- You're a cyber hoarder, passionate about collecting various internet resources like images, videos, audio, models, etc., and enjoy appreciating these treasures alone in front of your computer.
+- You just finished watching The Melancholy of Haruhi Suzumiya and suddenly want to build a site to endlessly loop the Endless Eight.
+- You're an AIGC believer, hanging around various AI creation platforms. As you constantly improve your prompt engineering skills for "winning the lottery", you gaze at your massive collection of outputs and fall into deep thought.
+- You want to try a more modern image hosting service, like one based on BootFS, or a video hosting service.
+- For some reason, you don't want to use cloud storage from big public cloud providers and prefer a self-hosted solution.
+- You need to find a more comprehensive digital asset management software.
 
 ## Features
 
-- All-in-one Lightweight Architecture: Small yet powerful, designed specifically for personal users.
-- Peer-to-Peer Distributed Structure: Designed with peer node architecture for scalability.
-- Elegant UI/UX: Resource management interface meticulously crafted with TailwindCSS.
-- Excellent Media Preview: High-performance audio and video previewing in both list and grid modes.
-- Manga ZIP Processing: Automatic handling and optimization of ZIP-packaged manga.
-- Built-in HLS Management: A personal broadcasting platform based on HLS (HTTP Live Streaming) slicing.
-- Creative Details: Some magical and interesting little design touches...
+- Excellent audio/video preview in both list and grid modes, supporting preview of multiple formats with detailed file descriptions.
+- Classic dual-panel layout for easier selection and upload of image files from local paths.
+- Tag-based classification management for organizing your resources.
+- Image metadata support for ComfyUI format, including prompt, cfg, sample, steps, etc.
+- Meticulously crafted UI/UX with Tailwind CSS, featuring excellent preview capabilities.
+- Built-in HLS streaming personal broadcasting platform with fragmented HLS file uploads for sharing movies with friends online.
+- Built-in stunning waterfall random gallery.
+- WebP encoding/decoding and HLS transcoding capabilities via FFmpeg.
+- Small yet refined lightweight architecture based on etcd + Meilisearch with built-in metadata management, ~~peer-to-peer distributed structure (maybe in the near future)~~.
 
-Built with: Spring Boot + etcd + Meilisearch
+Built with: spring-boot + etcd + meilisearch
 
 ## Deployment
 
-**Prerequisite (Optional): [Hostid](https://github.com/ginpika/hostid)**
+HostID is a lightweight account foundation based on email, serving as a personal mailbox while managing small-scale sites like personal blogs and small forums.
 
-Implements Single Sign-On (SSO) authentication based on Hostid.
+SSO authentication based on HostID is enabled by default. To disable it, please refer to application.properties & Dockerfile and configure .env.
+
+**Prerequisite (recommend): [Hostid](https://github.com/ginpika/hostid)**
 
 ```Shell
-# Create a directory
+# Find a place
 mkdir bootfs
-# Download compose.yaml
+# Get compose.yaml
 wget -O compose.yaml https://raw.githubusercontent.com/ginpika/bootfs/refs/heads/main/docker-compose.ghcr.yml
-# Set up .env
+# Write .env based on application.properties & Dockerfile
 cp .env.example .env
 # Launch with one click
 docker compose up -d
 ```
-
-## Roadmap
-
-1. Finer-grained authorization/permission control. 
-2. Improved peer-to-peer expansion capabilities. 
-3. Optimization for software-based HLS transcoding.
-4. Image .webp convert

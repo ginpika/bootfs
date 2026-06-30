@@ -30,6 +30,7 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @Service
@@ -81,6 +82,23 @@ public class FileService {
 
     }
 
+    // 上传图包入口：自动识别 .zip 并走解包逻辑，不需要文件名以 [Comic] 开头
+    public String uploadComic(MultipartFile file) throws IOException {
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename != null && !originalFilename.isBlank()) {
+            String ext = originalFilename.substring(originalFilename.lastIndexOf(".")).toLowerCase();
+            if (ext.equals(".zip")) {
+                try {
+                    this.comicUnzipPreProcess(file);
+                } catch (IOException e) {
+                    log.error("图包上传解包失败", e);
+                    throw e;
+                }
+            }
+        }
+        return normalFilePersistence(file);
+    }
+
     public void comicUnzipPreProcess(MultipartFile file) throws IOException {
         String originalFilename = file.getOriginalFilename();
         if (originalFilename == null || originalFilename.isBlank()) {
@@ -99,6 +117,7 @@ public class FileService {
         List<String> comicUrls = new ArrayList<>();
         String title = originalFilename.substring(0, originalFilename.lastIndexOf(".")).substring(7);
         AtomicInteger pageCount = new AtomicInteger(1);
+        AtomicReference<String> firstPageUuid = new AtomicReference<>();
         if (outputs.isEmpty()) return;
         // passing parent-children-relation, write in thread-local for parent
         this.threadLocalAlbumAvailable.set("1");
@@ -124,11 +143,13 @@ public class FileService {
             String localNodeUrl = context.buildUrl(uuid);
             etcdService.putFile(uuid, localNodeUrl, context.buildMetaJson(file, imageTitle));
             replication(target.toFile(), uuid, imageTitle);
+            thumbnailService.generateAsync(uuid);
+            if (firstPageUuid.get() == null) firstPageUuid.set(uuid);
             comicUrls.add(context.buildProxyUrl(uuid));
         });
         LocalDateTime now = LocalDateTime.now();
         String documentUUID = this.threadLocalParent.get();
-        String poster = comicUrls.isEmpty() ? null : comicUrls.get(0);
+        String poster = firstPageUuid.get() == null ? null : context.buildThumbUrl(firstPageUuid.get());
         FullTextDocument fullTextDocument = FullTextDocument.builder().title(title).poster(poster)
                 .resources(JSONArray.from(comicUrls))
                 .tags(new JSONArray())

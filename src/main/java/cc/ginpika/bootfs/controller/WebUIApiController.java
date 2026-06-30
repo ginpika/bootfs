@@ -293,6 +293,32 @@ public class WebUIApiController {
     // ======================== 标签管理 API ========================
 
     /**
+     * 重命名文件（仅更新 fileName 元数据，磁盘文件按 uuid 命名不受影响）
+     */
+    @PutMapping("/api/file/{uuid}/rename")
+    public ResponseEntity<?> rename(@PathVariable("uuid") String uuid,
+                                    @RequestBody Map<String, String> body) {
+        String newFileName = body.get("fileName");
+        if (newFileName == null || newFileName.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body("文件名不能为空");
+        }
+        newFileName = newFileName.trim();
+        if (newFileName.contains("/") || newFileName.contains("\\") || newFileName.contains("\0")) {
+            return ResponseEntity.badRequest().body("文件名包含非法字符");
+        }
+        if (newFileName.length() > 255) {
+            return ResponseEntity.badRequest().body("文件名过长");
+        }
+        FileObject fileObject = context.query(uuid);
+        if (fileObject == null) {
+            return ResponseEntity.notFound().build();
+        }
+        fileObject.setFileName(newFileName);
+        contextIO.update(uuid, fileObject);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
      * 设置文件标签（覆盖）
      */
     @PutMapping("/api/file/{uuid}/tags")

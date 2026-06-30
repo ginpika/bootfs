@@ -37,7 +37,9 @@ public class WebConfig implements WebMvcConfigurer {
                         "/etcd",
                         "/api/etcd/**",
                         "/meilisearch",
-                        "/api/meilisearch/**"
+                        "/api/meilisearch/**",
+                        "/dashboard",
+                        "/api/dashboard/**"
                 )
                 .excludePathPatterns(
                         "/error",

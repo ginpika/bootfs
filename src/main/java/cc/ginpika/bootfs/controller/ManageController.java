@@ -74,6 +74,20 @@ public class ManageController {
         return ResponseEntity.ok().body(url);
     }
 
+    // upload comic/zip archive
+    @PutMapping("/comic")
+    public ResponseEntity<?> uploadComic(@RequestPart("file") MultipartFile file) {
+        String url = "";
+        try {
+            log.info("Uploading comic archive: {}", file.getOriginalFilename());
+            url = fileService.uploadComic(file);
+        } catch (Exception e) {
+            log.error("图包上传失败", e);
+            return ResponseEntity.internalServerError().build();
+        }
+        return ResponseEntity.ok().body(url);
+    }
+
     // download file & cluster proxy based on this api
     @GetMapping("/f/{uuid}")
     public ResponseEntity<Resource> download(@PathVariable String uuid,

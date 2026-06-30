@@ -131,6 +131,17 @@ public class WebUIController {
         return mv;
     }
 
+    // System dashboard
+    @GetMapping("/dashboard")
+    public ModelAndView dashboard(HttpServletRequest request) {
+        ModelAndView mv = new ModelAndView();
+        mv.setViewName("dashboard");
+        if (StringUtils.isNotBlank(ssoConfig.getInfoUrl())) {
+            mv.getModel().put("ssoInfoUrl", ssoConfig.getInfoUrl());
+        }
+        return mv;
+    }
+
     // Etcd metadata management
     @GetMapping("/etcd")
     public ModelAndView etcdManage(HttpServletRequest request) {

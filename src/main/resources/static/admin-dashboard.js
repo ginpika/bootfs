@@ -297,6 +297,7 @@ function initializeEventListeners() {
     
     // Upload
     document.getElementById('uploadFileBtn').addEventListener('change', handleFileUpload);
+    document.getElementById('comicUploadBtn').addEventListener('change', handleComicUpload);
     
     // Pagination
     document.getElementById('prevPage').addEventListener('click', () => changePage(-1));
@@ -328,6 +329,18 @@ function initializeEventListeners() {
     
     // Delete confirmation
     document.getElementById('confirmDeleteBtn').addEventListener('click', confirmDelete);
+
+    // Rename confirmation
+    document.getElementById('confirmRenameBtn').addEventListener('click', confirmRename);
+    const renameInput = document.getElementById('renameInput');
+    renameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            confirmRename();
+        } else if (e.key === 'Escape') {
+            closeRenameModal();
+        }
+    });
     
     // Cancel selection
     document.getElementById('cancelSelection').addEventListener('click', clearSelection);
@@ -773,6 +786,11 @@ function renderFileList(data) {
             showFileDetail(uuid);
         });
 
+        row.querySelector('.list-rename-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            showRenameModal(uuid, file.fileName);
+        });
+
         const previewBtn = row.querySelector('.list-preview-btn');
         if (previewBtn && (isImage(file) || isVideo(file) || isAudio(file))) {
             previewBtn.addEventListener('click', (e) => {
@@ -1091,6 +1109,7 @@ function createListRow(file) {
                 <div class="flex space-x-2">
                     <button class="list-preview-btn" style="color: var(--color-accent-primary); ${(isImageFile || isVideoFile || isAudioFile) ? '' : 'visibility: hidden;'}">${isImageFile ? '预览' : '播放'}</button>
                     <button class="list-detail-btn" style="color: var(--color-accent-secondary);">详情</button>
+                    <button class="list-rename-btn" style="color: var(--color-text-secondary);">重命名</button>
                     <a href="/f/${file.uuid}" download style="color: var(--color-success);">下载</a>
                     <button class="list-delete-btn" style="color: var(--color-danger);">删除</button>
                 </div>
@@ -1739,6 +1758,86 @@ function handleFileUpload(e) {
     uploadAllFiles();
 }
 
+function handleComicUpload(e) {
+    const files = e.target.files;
+    if (files.length === 0) return;
+
+    const modal = document.getElementById('uploadProgressModal');
+    const progressBar = document.getElementById('uploadProgressBar');
+    const uploadFileName = document.getElementById('uploadFileName');
+    const uploadFileCount = document.getElementById('uploadFileCount');
+    const uploadPercent = document.getElementById('uploadPercent');
+    const uploadTransferred = document.getElementById('uploadTransferred');
+    const uploadSpeed = document.getElementById('uploadSpeed');
+    const uploadTotalSize = document.getElementById('uploadTotalSize');
+
+    modal.classList.remove('hidden');
+
+    let totalBytes = 0;
+    Array.from(files).forEach(file => { totalBytes += file.size; });
+    uploadTotalSize.textContent = formatFileSize(totalBytes);
+    uploadFileCount.textContent = `1 / ${files.length}`;
+
+    const file = files[0];
+    uploadFileName.textContent = file.name;
+    uploadFileName.title = file.name;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const xhr = new XMLHttpRequest();
+    const startTime = Date.now();
+    let lastLoaded = 0;
+    let lastTime = startTime;
+
+    xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+            const currentTime = Date.now();
+            const timeDiff = (currentTime - lastTime) / 1000;
+            const loadedDiff = event.loaded - lastLoaded;
+            let speed = 0;
+            if (timeDiff > 0) speed = loadedDiff / timeDiff;
+            const overallPercent = Math.round((event.loaded / totalBytes) * 100);
+            progressBar.style.width = `${overallPercent}%`;
+            uploadPercent.textContent = `${overallPercent}%`;
+            uploadTransferred.textContent = formatFileSize(event.loaded);
+            if (speed > 0) uploadSpeed.textContent = formatSpeed(speed);
+            lastLoaded = event.loaded;
+            lastTime = currentTime;
+        }
+    });
+
+    xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+            progressBar.style.width = '100%';
+            uploadPercent.textContent = '100%';
+            uploadTransferred.textContent = formatFileSize(totalBytes);
+            uploadSpeed.textContent = '完成';
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                progressBar.style.width = '0%';
+                uploadPercent.textContent = '0%';
+                uploadTransferred.textContent = '0 B';
+                uploadSpeed.textContent = '-- MB/s';
+                showToast('上传成功！', 'success');
+                loadFileList();
+                document.getElementById('comicUploadBtn').value = '';
+            }, 800);
+        } else {
+            modal.classList.add('hidden');
+            showToast('上传失败: ' + (xhr.status), 'error');
+        }
+    });
+
+    xhr.addEventListener('error', () => {
+        modal.classList.add('hidden');
+        showToast('上传失败: 网络错误', 'error');
+    });
+
+    xhr.open('PUT', '/comic');
+    xhr.send(formData);
+}
+
 function formatSpeed(bytesPerSecond) {
     if (bytesPerSecond === 0) return '0 B/s';
     const k = 1024;
@@ -2366,6 +2465,56 @@ async function removeTag(uuid, tagIndexFormat) {
     } catch (error) {
         console.error('Remove tag error:', error);
         showToast('删除标签失败', 'error');
+    }
+}
+
+// ======================== 重命名 ========================
+let renameTargetUuid = null;
+
+function showRenameModal(uuid, oldName) {
+    renameTargetUuid = uuid;
+    const input = document.getElementById('renameInput');
+    input.value = oldName;
+    document.getElementById('renameModal').classList.remove('hidden');
+    input.focus();
+    const dot = oldName.lastIndexOf('.');
+    if (dot > 0) {
+        input.setSelectionRange(0, dot);
+    } else {
+        input.select();
+    }
+}
+
+function closeRenameModal() {
+    document.getElementById('renameModal').classList.add('hidden');
+    renameTargetUuid = null;
+}
+
+async function confirmRename() {
+    if (!renameTargetUuid) return;
+    const newFileName = document.getElementById('renameInput').value.trim();
+    if (!newFileName) {
+        showToast('文件名不能为空', 'warning');
+        return;
+    }
+    const uuid = renameTargetUuid;
+    try {
+        const response = await fetch(`/api/file/${uuid}/rename`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileName: newFileName })
+        });
+        if (response.ok) {
+            showToast('重命名成功', 'success');
+            closeRenameModal();
+            loadFileList();
+        } else {
+            const msg = await response.text();
+            showToast('重命名失败: ' + msg, 'error');
+        }
+    } catch (error) {
+        console.error('Rename error:', error);
+        showToast('重命名失败', 'error');
     }
 }
 

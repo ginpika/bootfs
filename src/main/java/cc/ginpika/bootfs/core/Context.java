@@ -78,6 +78,10 @@ public class Context {
         return tfsConfig.getWebEntrypoint() + "/p/" +  uuid;
     }
 
+    public String buildThumbUrl(String uuid) {
+        return tfsConfig.getWebEntrypoint() + "/thumb/" + uuid;
+    }
+
     public String buildMetaJson(MultipartFile file) {
         return buildMetaJson(file, Objects.requireNonNull(file.getOriginalFilename()));
     }

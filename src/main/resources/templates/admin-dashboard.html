@@ -152,12 +152,24 @@
 
                         <!-- Right: Actions -->
                         <div class="flex items-center space-x-3">
-                            <!-- Open Local Folder (list view only, fades with view mode) -->
-                            <button id="openLocalFolderBtn" class="theme-icon-btn p-2 rounded-lg" title="打开本地文件夹" style="background-color: var(--color-bg-tertiary);">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
-                                </svg>
-                            </button>
+                            <!-- List mode buttons group -->
+                            <div id="listModeActions" class="flex items-center space-x-3">
+                                <button id="openLocalFolderBtn" class="theme-icon-btn p-2 rounded-lg" title="打开本地文件夹" style="background-color: var(--color-bg-tertiary);">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <!-- Grid mode buttons group -->
+                            <div id="gridModeActions" class="flex items-center space-x-3 view-hidden">
+                                <button id="nsfwToggleBtn" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors" title="NSFW 模糊开关" style="background-color: var(--color-bg-tertiary); color: var(--color-text-primary);">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path>
+                                    </svg>
+                                    <span>NSFW</span>
+                                </button>
+                            </div>
 
                             <!-- View Toggle -->
                             <div class="hidden sm:flex items-center rounded-lg p-1" style="background-color: var(--color-bg-tertiary);">

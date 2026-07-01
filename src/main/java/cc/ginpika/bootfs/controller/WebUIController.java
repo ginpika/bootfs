@@ -118,8 +118,6 @@ public class WebUIController {
     public ModelAndView imagePreview() {
         ModelAndView mv = new ModelAndView();
         mv.setViewName("album");
-        mv.getModel().put("token", meiliSearchConfig.getMasterKey());
-        mv.getModel().put("meilisearchUrl", meiliSearchConfig.getWebUi());
         return mv;
     }
 

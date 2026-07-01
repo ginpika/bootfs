@@ -8,6 +8,7 @@ import cc.ginpika.bootfs.service.FileService;
 import cc.ginpika.bootfs.service.FileTransferService;
 import cc.ginpika.bootfs.domain.result.TransferResult;
 import cc.ginpika.bootfs.service.ReverseProxyService;
+import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +43,8 @@ public class ManageController {
     @Autowired
     private ReverseProxyService reverseProxyService;
     @Autowired
+    private MeiliSearchService meiliSearchService;
+    @Autowired
     private Context context;
     @Autowired
     private TfsConfig tfsConfig;
@@ -49,11 +52,13 @@ public class ManageController {
     public ManageController(FileService fileService, 
         FileTransferService fileTransferService, 
         ReverseProxyService reverseProxyService, 
+        MeiliSearchService meiliSearchService,
         Context context, 
         TfsConfig tfsConfig) {
         this.fileService = fileService;
         this.fileTransferService = fileTransferService;
         this.reverseProxyService = reverseProxyService;
+        this.meiliSearchService = meiliSearchService;
         this.context = context;
         this.tfsConfig = tfsConfig;
     }
@@ -551,6 +556,16 @@ public class ManageController {
             log.error("删除HLS切片失败", e);
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    // 获取相册（comic）的 poster 和 resources，封装 MeiliSearch 查询避免前端 mixed content
+    @GetMapping("/api/album/{uuid}")
+    public ResponseEntity<?> getAlbumDocument(@PathVariable String uuid) {
+        Map<String, Object> result = meiliSearchService.getDocument("full-text", uuid);
+        if (Boolean.TRUE.equals(result.get("succeed"))) {
+            return ResponseEntity.ok(result.get("data"));
+        }
+        return ResponseEntity.status(404).body(Map.of("error", "album not found"));
     }
 
     @GetMapping("/file/{uuid}")

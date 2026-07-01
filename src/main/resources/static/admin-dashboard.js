@@ -74,6 +74,9 @@ const WATERFALL_COLUMNS = 6;
 let columnHeights = new Array(WATERFALL_COLUMNS).fill(0);
 let gridTotal = 0;
 
+// NSFW blur toggle state (true = blurred/hidden by default)
+let nsfwBlurActive = true;
+
 // Initialize dashboard
 document.addEventListener('DOMContentLoaded', function() {
     initTheme();
@@ -98,14 +101,28 @@ function restoreViewState() {
         if (gridViewBtn) gridViewBtn.classList.add('active');
         if (listViewBtn) listViewBtn.classList.remove('active');
         if (paginationRow) paginationRow.classList.add('hidden');
-        const openLocalFolderBtn = document.getElementById('openLocalFolderBtn');
-        if (openLocalFolderBtn) openLocalFolderBtn.classList.add('view-hidden');
+        const listModeActions = document.getElementById('listModeActions');
+        if (listModeActions) listModeActions.classList.add('view-hidden');
+        const gridModeActions = document.getElementById('gridModeActions');
+        if (gridModeActions) gridModeActions.classList.remove('view-hidden');
     } else {
         if (gridView) gridView.classList.add('hidden');
         if (listView) listView.classList.remove('hidden');
         if (listViewBtn) listViewBtn.classList.add('active');
         if (gridViewBtn) gridViewBtn.classList.remove('active');
         if (paginationRow) paginationRow.classList.remove('hidden');
+        const listModeActions = document.getElementById('listModeActions');
+        if (listModeActions) listModeActions.classList.remove('view-hidden');
+        const gridModeActions = document.getElementById('gridModeActions');
+        if (gridModeActions) gridModeActions.classList.add('view-hidden');
+    }
+
+    // Restore NSFW blur state from localStorage
+    const savedNsfw = localStorage.getItem('tfs-nsfw-blur');
+    if (savedNsfw === 'false') {
+        nsfwBlurActive = false;
+        const nsfwToggleBtn = document.getElementById('nsfwToggleBtn');
+        if (nsfwToggleBtn) nsfwToggleBtn.classList.add('active');
     }
 
     if (showAllFiles) {
@@ -126,6 +143,21 @@ function initializeEventListeners() {
     // View toggle
     document.getElementById('gridViewBtn').addEventListener('click', () => switchView('grid'));
     document.getElementById('listViewBtn').addEventListener('click', () => switchView('list'));
+    
+    // NSFW toggle
+    const nsfwToggleBtn = document.getElementById('nsfwToggleBtn');
+    if (nsfwToggleBtn) {
+        nsfwToggleBtn.addEventListener('click', () => {
+            nsfwBlurActive = !nsfwBlurActive;
+            if (!nsfwBlurActive) {
+                nsfwToggleBtn.classList.add('active');
+            } else {
+                nsfwToggleBtn.classList.remove('active');
+            }
+            localStorage.setItem('tfs-nsfw-blur', nsfwBlurActive ? 'true' : 'false');
+            applyNsfwBlurToAll();
+        });
+    }
     
     // Theme menu toggle
     const themeMenuBtn = document.getElementById('themeMenuBtn');
@@ -687,6 +719,8 @@ async function appendToWaterfallAsync(files) {
                 
                 targetColumn.appendChild(card);
                 
+                applyNsfwBlurToCard(card);
+
                 const albumCover = card.querySelector('.album-cover');
                 if (albumCover && isAlbum(file)) {
                     fetchAlbumPoster(file.uuid).then(posterUrl => {
@@ -698,6 +732,8 @@ async function appendToWaterfallAsync(files) {
                                      loading="lazy"
                                      onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center\\' style=\\'background-color: var(--color-bg-tertiary);\\'><svg class=\\'w-16 h-16\\' style=\\'color: var(--color-text-muted);\\' fill=\\'none\\' stroke=\\'currentColor\\' viewBox=\\'0 0 24 24\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' stroke-width=\\'2\\' d=\\'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z\\'></path></svg></div>';">
                             `;
+                            // Re-apply NSFW blur after poster loads
+                            applyNsfwBlurToCard(card);
                         }
                     });
                 }
@@ -1474,10 +1510,12 @@ function switchView(view) {
         if (paginationRow) {
             paginationRow.classList.add('hidden');
         }
-        const openLocalFolderBtn = document.getElementById('openLocalFolderBtn');
+        const listModeActions = document.getElementById('listModeActions');
+        if (listModeActions) listModeActions.classList.add('view-hidden');
+        const gridModeActions = document.getElementById('gridModeActions');
+        if (gridModeActions) gridModeActions.classList.remove('view-hidden');
         const localFolderPanel = document.getElementById('localFolderPanel');
         const mainView = document.getElementById('mainView');
-        if (openLocalFolderBtn) openLocalFolderBtn.classList.add('view-hidden');
         // 跳过关闭面板时的动画，避免左侧列表宽度变化的过渡效果
         if (localFolderPanel) localFolderPanel.classList.add('no-transition');
         if (mainView) mainView.classList.add('no-transition');
@@ -1495,8 +1533,10 @@ function switchView(view) {
         if (paginationRow) {
             paginationRow.classList.remove('hidden');
         }
-        const openLocalFolderBtn = document.getElementById('openLocalFolderBtn');
-        if (openLocalFolderBtn) openLocalFolderBtn.classList.remove('view-hidden');
+        const listModeActions = document.getElementById('listModeActions');
+        if (listModeActions) listModeActions.classList.remove('view-hidden');
+        const gridModeActions = document.getElementById('gridModeActions');
+        if (gridModeActions) gridModeActions.classList.add('view-hidden');
         restoreLocalPanel();
         loadFileList();
     }
@@ -2544,11 +2584,7 @@ function isAudio(file) {
 
 async function fetchAlbumPoster(uuid) {
     try {
-        const response = await fetch(`${MEILISEARCH_URL}/indexes/full-text/documents/${uuid}`, {
-            headers: {
-                'Authorization': `Bearer ${MEILISEARCH_TOKEN}`
-            }
-        });
+        const response = await fetch(`/api/album/${uuid}`);
         if (response.ok) {
             const data = await response.json();
             return data.poster || null;
@@ -2557,6 +2593,41 @@ async function fetchAlbumPoster(uuid) {
         console.error('Failed to fetch album poster:', e);
     }
     return null;
+}
+
+// Apply or remove NSFW blur on all waterfall cards
+function applyNsfwBlurToAll() {
+    const cards = document.querySelectorAll('.waterfall-card');
+    cards.forEach(card => {
+        const uuid = card.getAttribute('data-uuid');
+        if (!uuid) return;
+        // Find the file data from previewMediaFiles or query the DOM for tags
+        if (nsfwBlurActive && cardHasNsfwTag(card)) {
+            card.classList.add('nsfw-blur');
+        } else {
+            card.classList.remove('nsfw-blur');
+        }
+    });
+}
+
+// Check if a waterfall card element has NSFW tags by reading its tag badges
+function cardHasNsfwTag(card) {
+    const badges = card.querySelectorAll('.waterfall-tag-badge');
+    for (const badge of badges) {
+        const text = (badge.textContent || '').toLowerCase().trim();
+        if (text === 'nsfw' || text.startsWith('nsfw:') || text.endsWith(':nsfw')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Apply NSFW blur to a single card element (call after card is inserted)
+function applyNsfwBlurToCard(card) {
+    if (!nsfwBlurActive) return;
+    if (cardHasNsfwTag(card)) {
+        card.classList.add('nsfw-blur');
+    }
 }
 
 function formatFileSize(bytes) {

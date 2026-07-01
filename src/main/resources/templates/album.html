@@ -110,11 +110,8 @@
 
             /*<![CDATA[*/
             $.ajax({
-                url: [[${meilisearchUrl}]] + "/indexes/full-text/documents/" + lastPart,
+                url: "/api/album/" + lastPart,
                 type: "GET",
-                headers: {
-                    "Authorization": "Bearer " + /*[[${token}]]*/,
-                },
                 success: function(res) {
                     if (res) {
                         console.log(res);

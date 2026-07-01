@@ -133,17 +133,53 @@
 
 /* Local folder panel: right sidebar dual-pane */
 #openLocalFolderBtn {
-    transition: opacity 0.25s ease, background-color 0.2s ease, color 0.2s ease;
-}
-
-#openLocalFolderBtn.view-hidden {
-    opacity: 0;
-    pointer-events: none;
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 #openLocalFolderBtn.active {
     background-color: var(--color-accent-primary) !important;
     color: white;
+}
+
+/* View-mode button groups: zero-width when hidden, fade with opacity */
+#listModeActions,
+#gridModeActions {
+    width: 0;
+    overflow: hidden;
+    transition: opacity 0.25s ease;
+}
+
+#listModeActions:not(.view-hidden),
+#gridModeActions:not(.view-hidden) {
+    width: auto;
+    overflow: visible;
+}
+
+#listModeActions {
+    position: relative;
+    left: 12px;
+}
+
+#listModeActions.view-hidden,
+#gridModeActions.view-hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* NSFW toggle button */
+#nsfwToggleBtn {
+    transition: opacity 0.25s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+#nsfwToggleBtn.active {
+    background-color: var(--color-danger) !important;
+    color: white;
+}
+
+/* NSFW blur effect: only on the media area (first child div of card) */
+.waterfall-card.nsfw-blur > div:first-child {
+    filter: blur(25px);
+    transition: filter 0.3s ease;
 }
 
 #localFolderPanel {

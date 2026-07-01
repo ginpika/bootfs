@@ -129,6 +129,7 @@ public class RequestStatsService {
         return requests;
     }
 
+    @SuppressWarnings("unused")
     private static class HourBucket {
         final long hourStart;
         final AtomicLong count = new AtomicLong();

@@ -1,7 +1,7 @@
 package cc.ginpika.bootfs.s3;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -19,12 +19,13 @@ import java.nio.charset.StandardCharsets;
 @Slf4j
 @RestController
 @ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
+@RequiredArgsConstructor
 public class S3Controller {
 
-    @Autowired private S3Config s3Config;
-    @Autowired private S3StorageService storageService;
-    @Autowired private S3KeyIndex keyIndex;
-    @Autowired private S3XmlWriter xmlWriter;
+    private final S3Config s3Config;
+    private final S3StorageService storageService;
+    private final S3KeyIndex keyIndex;
+    private final S3XmlWriter xmlWriter;
 
     @GetMapping("/s3")
     public String listBuckets() {

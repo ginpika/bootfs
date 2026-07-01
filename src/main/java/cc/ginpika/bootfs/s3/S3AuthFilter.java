@@ -1,7 +1,9 @@
 package cc.ginpika.bootfs.s3;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import lombok.RequiredArgsConstructor;
+
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import javax.servlet.Filter;
@@ -18,13 +20,10 @@ import java.io.IOException;
  */
 @Component
 @ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
+@RequiredArgsConstructor
 public class S3AuthFilter implements Filter {
-
-    @Autowired
-    private S3SigV4Verifier verifier;
-
-    @Autowired
-    private S3XmlWriter xmlWriter;
+    private final S3SigV4Verifier verifier;
+    private final S3XmlWriter xmlWriter;
 
     @Override
     public void doFilter(ServletRequest rq, ServletResponse rs, FilterChain chain)

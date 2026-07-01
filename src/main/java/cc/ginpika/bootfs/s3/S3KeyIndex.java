@@ -6,8 +6,8 @@ import io.etcd.jetcd.ByteSequence;
 import io.etcd.jetcd.KeyValue;
 import io.etcd.jetcd.KV;
 import io.etcd.jetcd.options.GetOption;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
@@ -25,10 +25,9 @@ import java.util.Set;
 @Slf4j
 @Component
 @ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
+@RequiredArgsConstructor
 public class S3KeyIndex {
-
-    @Autowired
-    private EtcdService etcdService;
+    private final EtcdService etcdService;
 
     private String indexKey(String bucket, String key) {
         return "/s3/" + bucket + "/" + key;

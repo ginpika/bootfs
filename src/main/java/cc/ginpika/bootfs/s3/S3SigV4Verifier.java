@@ -1,8 +1,8 @@
 package cc.ginpika.bootfs.s3;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import lombok.RequiredArgsConstructor;
 
 import javax.servlet.http.HttpServletRequest;
 import java.text.SimpleDateFormat;
@@ -19,13 +19,13 @@ import java.util.TreeMap;
  */
 @Component
 @ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
+@RequiredArgsConstructor
 public class S3SigV4Verifier {
 
     private static final long MAX_CLOCK_SKEW_MS = 15 * 60 * 1000L;
     private static final String ALGO = "AWS4-HMAC-SHA256";
 
-    @Autowired
-    private S3Config s3Config;
+    private final S3Config s3Config;
 
     /**
      * @return null 表示通过,否则返回对应错误码。

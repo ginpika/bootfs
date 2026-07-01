@@ -8,8 +8,9 @@ import cc.ginpika.bootfs.service.FileService;
 import cc.ginpika.bootfs.service.ReverseProxyService;
 import cc.ginpika.bootfs.service.etcd.EtcdService;
 import com.alibaba.fastjson2.JSONObject;
+
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
@@ -37,15 +38,16 @@ import java.util.TimeZone;
 @Slf4j
 @Component
 @ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
+@RequiredArgsConstructor
 public class S3StorageService {
 
-    @Autowired private TfsConfig tfsConfig;
-    @Autowired private Context context;
-    @Autowired private EtcdService etcdService;
-    @Autowired private FileService fileService;
-    @Autowired private ReverseProxyService reverseProxyService;
-    @Autowired private S3KeyIndex keyIndex;
-    @Autowired private S3XmlWriter xmlWriter;
+    private final TfsConfig tfsConfig;
+    private final Context context;
+    private final EtcdService etcdService;
+    private final FileService fileService;
+    private final ReverseProxyService reverseProxyService;
+    private final S3KeyIndex keyIndex;
+    private final S3XmlWriter xmlWriter;
 
     public S3ObjectMeta putObject(String bucket, String key, HttpServletRequest req) throws IOException {
         String uuid = IdGenerator.getUniqueId();

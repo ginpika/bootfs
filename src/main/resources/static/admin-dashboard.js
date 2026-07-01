@@ -739,7 +739,6 @@ async function appendToWaterfallAsync(files) {
                 }
                 
                 const img = card.querySelector('img');
-                const video = card.querySelector('video');
                 
                 const updateHeight = () => {
                     const cardHeight = card.offsetHeight;
@@ -753,13 +752,6 @@ async function appendToWaterfallAsync(files) {
                     } else {
                         img.onload = updateHeight;
                         img.onerror = updateHeight;
-                    }
-                } else if (video) {
-                    if (video.readyState >= 1) {
-                        updateHeight();
-                    } else {
-                        video.onloadedmetadata = updateHeight;
-                        video.onerror = updateHeight;
                     }
                 } else {
                     updateHeight();
@@ -884,21 +876,21 @@ function createWaterfallCard(file) {
                         </div>
                     `}
                 ` : isVideoFile ? `
-                    <div class="relative w-full aspect-video" style="background-color: var(--color-bg-tertiary);">
-                        <video src="/p/${file.uuid}" 
-                               class="w-full h-full object-cover"
-                               muted
-                               preload="metadata"
-                               onloadeddata="this.currentTime=0.1;"
-                               onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-                        </video>
-                        <div class="hidden w-full h-full items-center justify-center" style="background-color: var(--color-bg-tertiary);">
+                    <div class="relative w-full aspect-video video-card-container" data-video-uuid="${file.uuid}" style="background-color: var(--color-bg-tertiary);">
+                        ${file.thumbAvailable === '1' ? `
+                            <img src="/thumb/${file.uuid}" 
+                                 alt="${file.fileName}" 
+                                 class="w-full h-full object-cover video-thumbnail"
+                                 loading="lazy"
+                                 onerror="this.style.display='none';this.parentElement.querySelector('.video-placeholder').style.display='flex';">
+                        ` : ''}
+                        <div class="video-placeholder w-full h-full items-center justify-center ${file.thumbAvailable === '1' ? 'hidden' : 'flex'}" style="background-color: var(--color-bg-tertiary);">
                             <svg class="w-16 h-16 theme-page-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                             </svg>
                         </div>
-                        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div class="absolute inset-0 flex items-center justify-center pointer-events-none video-play-icon">
                             <div class="w-12 h-12 theme-rounded-full flex items-center justify-center shadow-lg" style="background-color: var(--color-bg-secondary);">
                                 <svg class="w-5 h-5" style="color: var(--color-text-primary);" fill="currentColor" viewBox="0 0 24 24">
                                     <path d="M8 5v14l11-7z"></path>
@@ -3930,3 +3922,55 @@ function updateTsProgressWithStats(percent, transferred, speed, status) {
     document.getElementById('tsUploadSpeed').textContent = speed > 0 ? formatSpeed(speed) : '-- MB/s';
     document.getElementById('tsUploadStatus').textContent = status;
 }
+
+// 点击视频卡片时动态加载视频
+document.addEventListener('click', async (e) => {
+    const videoContainer = e.target.closest('.video-card-container');
+    if (!videoContainer || videoContainer.dataset.videoLoaded === 'true') return;
+    
+    // 阻止事件冒泡，避免触发卡片预览
+    e.stopPropagation();
+    
+    const uuid = videoContainer.dataset.videoUuid;
+    if (!uuid) return;
+    
+    // 标记为已加载，防止重复
+    videoContainer.dataset.videoLoaded = 'true';
+    
+    // 隐藏缩略图和播放图标
+    const thumbnail = videoContainer.querySelector('.video-thumbnail');
+    const placeholder = videoContainer.querySelector('.video-placeholder');
+    const playIcon = videoContainer.querySelector('.video-play-icon');
+    
+    if (thumbnail) thumbnail.style.display = 'none';
+    if (placeholder) placeholder.style.display = 'none';
+    if (playIcon) playIcon.style.display = 'none';
+    
+    // 创建并插入视频元素
+    const video = document.createElement('video');
+    video.src = `/p/${uuid}`;
+    video.className = 'w-full h-full object-cover';
+    video.muted = true;
+    video.preload = 'metadata';
+    video.onerror = () => {
+        // 视频加载失败，显示占位符
+        video.style.display = 'none';
+        if (placeholder) placeholder.style.display = 'flex';
+    };
+    
+    videoContainer.appendChild(video);
+    
+    // 视频加载完成后自动播放
+    video.onloadeddata = () => {
+        video.play().catch(() => {});
+    };
+    
+    // 鼠标悬停时播放，移出时暂停
+    videoContainer.addEventListener('mouseenter', () => {
+        if (video.src) video.play().catch(() => {});
+    });
+    videoContainer.addEventListener('mouseleave', () => {
+        video.pause();
+        video.currentTime = 0;
+    });
+});

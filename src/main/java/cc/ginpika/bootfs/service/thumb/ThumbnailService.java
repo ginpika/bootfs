@@ -25,6 +25,7 @@ public class ThumbnailService {
     private final ContextIO contextIO;
 
     public static final Set<String> IMAGE_EXTENSIONS = Set.of(".jpg", ".jpeg", ".png", ".gif");
+    public static final Set<String> VIDEO_EXTENSIONS = Set.of(".mp4", ".webm", ".avi", ".mov", ".mkv", ".flv", ".wmv", ".m4v", ".ts");
 
     private final ExecutorService executor = Executors.newFixedThreadPool(2, r -> {
         Thread t = new Thread(r, "thumbnail-generator");
@@ -55,7 +56,7 @@ public class ThumbnailService {
         int dotIdx = fileName.lastIndexOf(".");
         if (dotIdx < 0) return;
         String ext = fileName.substring(dotIdx).toLowerCase();
-        if (!IMAGE_EXTENSIONS.contains(ext)) return;
+        if (!IMAGE_EXTENSIONS.contains(ext) && !VIDEO_EXTENSIONS.contains(ext)) return;
 
         Path sourceFile = Path.of(fileObject.getPath());
         if (!Files.exists(sourceFile)) {
@@ -75,16 +76,34 @@ public class ThumbnailService {
         int width = tfsConfig.getThumbnailWidth();
         int quality = tfsConfig.getThumbnailQuality();
 
-        ProcessBuilder pb = new ProcessBuilder(
-                ffmpeg,
-                "-hide_banner",
-                "-loglevel", "error",
-                "-i", sourceFile.toString(),
-                "-vf", String.format("scale='min(%d,iw)':-2", width),
-                "-quality", String.valueOf(quality),
-                "-y",
-                thumbFile.toString()
-        );
+        ProcessBuilder pb;
+        if (VIDEO_EXTENSIONS.contains(ext)) {
+            // 视频：提取第一帧 (-ss 放前面加速解码)
+            pb = new ProcessBuilder(
+                    ffmpeg,
+                    "-hide_banner",
+                    "-loglevel", "error",
+                    "-ss", "0.5",  // 从0.5秒开始，避免黑帧
+                    "-i", sourceFile.toString(),
+                    "-vframes", "1",
+                    "-vf", String.format("scale='min(%d,iw)':-2", width),
+                    "-q:v", "2",
+                    "-y",
+                    thumbFile.toString()
+            );
+        } else {
+            // 图片：直接缩放
+            pb = new ProcessBuilder(
+                    ffmpeg,
+                    "-hide_banner",
+                    "-loglevel", "error",
+                    "-i", sourceFile.toString(),
+                    "-vf", String.format("scale='min(%d,iw)':-2", width),
+                    "-quality", String.valueOf(quality),
+                    "-y",
+                    thumbFile.toString()
+            );
+        }
         pb.redirectErrorStream(true);
         Process process = pb.start();
         byte[] output = process.getInputStream().readAllBytes();

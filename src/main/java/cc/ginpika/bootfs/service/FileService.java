@@ -145,7 +145,7 @@ public class FileService {
             replication(target.toFile(), uuid, imageTitle);
             thumbnailService.generateAsync(uuid);
             if (firstPageUuid.get() == null) firstPageUuid.set(uuid);
-            comicUrls.add(context.buildProxyUrl(uuid));
+            comicUrls.add(context.buildThumbUrl(uuid));
         });
         LocalDateTime now = LocalDateTime.now();
         String documentUUID = this.threadLocalParent.get();

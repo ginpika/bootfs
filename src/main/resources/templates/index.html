@@ -66,12 +66,13 @@
                     <!-- 用户信息 -->
                     <div class="btn-group">
                         <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-person-circle me-1"></i>
-                            <span th:text="${ssoUser != null ? ssoUser.username : 'Unknown'}">User</span>
+                            <img th:if="${ssoUser?.avatarUrl != null}" th:src="${ssoUser.avatarUrl}" alt="avatar" class="rounded-circle me-1" style="width: 20px; height: 20px; object-fit: cover;" />
+                            <i th:unless="${ssoUser?.avatarUrl != null}" class="bi bi-person-circle me-1"></i>
+                            <span th:text="${ssoUser?.nickname ?: ssoUser?.username ?: 'Unknown'}">User</span>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-start">
-                            <li><a class="dropdown-item" href="#"><small th:text="${ssoUser != null ? ssoUser.email : ''}">email</small></a></li>
-                            <li><a class="dropdown-item" href="#"><small th:text="${ssoUser != null ? ssoUser.role : ''}">role</small></a></li>
+                            <li><a class="dropdown-item" href="#"><small th:text="${ssoUser?.email ?: ''}">email</small></a></li>
+                            <li><a class="dropdown-item" href="#"><small th:text="${ssoUser?.role ?: ''}">role</small></a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
                                 <a class="dropdown-item" th:href="${ssoInfoUrl}" href="#" target="_blank">

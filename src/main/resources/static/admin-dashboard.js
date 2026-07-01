@@ -894,7 +894,7 @@ function createWaterfallCard(file) {
                 </div>
                 ` : ''}
                 <div class="flex items-center justify-between mt-1">
-                    <span class="text-xs" style="color: var(--color-text-tertiary);">${isAlbumFile ? '相册' : (isImageFile ? '图片' : '视频')}</span>
+                    <span class="text-xs" style="color: var(--color-text-tertiary);">${isAlbumFile ? '图集' : (isImageFile ? '图片' : '视频')}</span>
                     <div class="flex items-center space-x-2">
                         ${file.hlsAvailable ? '<span class="text-xs" style="color: var(--color-success);">HLS可用</span>' : ''}
                         ${file.isPublicAccess ? '<span class="text-xs" style="color: var(--color-success);">公开</span>' : ''}
@@ -2077,7 +2077,7 @@ function renderFileDetail(data) {
         badges.appendChild(createBadge('HLS', 'rgba(16, 185, 129, 0.1)', 'var(--color-success)'));
     }
     if (data.albumAvailable) {
-        badges.appendChild(createBadge('相册', 'rgba(6, 182, 212, 0.1)', '#06b6d4'));
+        badges.appendChild(createBadge('图集', 'rgba(6, 182, 212, 0.1)', '#06b6d4'));
     }
     if (data.isPublicAccess) {
         badges.appendChild(createBadge('公开', 'var(--color-bg-tertiary)', 'var(--color-text-secondary)'));

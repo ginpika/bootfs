@@ -9,6 +9,7 @@ import cc.ginpika.bootfs.service.FileTransferService;
 import cc.ginpika.bootfs.domain.result.TransferResult;
 import cc.ginpika.bootfs.service.ReverseProxyService;
 import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
+import cc.ginpika.bootfs.service.thumb.ThumbnailService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,19 +49,23 @@ public class ManageController {
     private Context context;
     @Autowired
     private TfsConfig tfsConfig;
+    @Autowired
+    private ThumbnailService thumbnailService;
 
     public ManageController(FileService fileService, 
         FileTransferService fileTransferService, 
         ReverseProxyService reverseProxyService, 
         MeiliSearchService meiliSearchService,
         Context context, 
-        TfsConfig tfsConfig) {
+        TfsConfig tfsConfig,
+        ThumbnailService thumbnailService) {
         this.fileService = fileService;
         this.fileTransferService = fileTransferService;
         this.reverseProxyService = reverseProxyService;
         this.meiliSearchService = meiliSearchService;
         this.context = context;
         this.tfsConfig = tfsConfig;
+        this.thumbnailService = thumbnailService;
     }
 
     
@@ -141,22 +146,53 @@ public class ManageController {
         reverseProxyService.reverseProxyFile(uuid, response, request);
     }
 
-    // serve webp thumbnail
+    // serve webp thumbnail - 不存在时返回原图/占位图并后台生成
     @GetMapping("/thumb/{uuid}")
-    public ResponseEntity<Resource> thumbnail(@PathVariable String uuid) {
+    public ResponseEntity<?> thumbnail(@PathVariable String uuid) {
         FileObject fileObject = context.query(uuid);
         if (fileObject == null) {
             return ResponseEntity.notFound().build();
         }
-        Path thumbFile = Path.of(tfsConfig.getPathPrefix(), "thumb", uuid + ".webp");
-        if (!Files.exists(thumbFile)) {
-            return ResponseEntity.notFound().build();
+        Path thumbFile = thumbnailService.thumbPath(uuid);
+        if (Files.exists(thumbFile)) {
+            Resource resource = new FileSystemResource(thumbFile);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_TYPE, "image/webp")
+                    .header(HttpHeaders.CACHE_CONTROL, "public, max-age=2592000, immutable")
+                    .body(resource);
         }
-        Resource resource = new FileSystemResource(thumbFile);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, "image/webp")
-                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=2592000, immutable")
-                .body(resource);
+        
+        String fileName = fileObject.getFileName();
+        // 后台异步生成缩略图
+        thumbnailService.generateAsync(uuid);
+        
+        if (thumbnailService.isImage(fileName)) {
+            // 图片：返回原图作为临时缩略图
+            Path sourceFile = Path.of(fileObject.getPath());
+            if (Files.exists(sourceFile)) {
+                // 根据扩展名确定 Content-Type
+                String ext = fileName.substring(fileName.lastIndexOf(".") + 1).toLowerCase();
+                String contentType = switch (ext) {
+                    case "png" -> "image/png";
+                    case "gif" -> "image/gif";
+                    case "webp" -> "image/webp";
+                    default -> "image/jpeg";
+                };
+                Resource resource = new FileSystemResource(sourceFile);
+                return ResponseEntity.ok()
+                        .header(HttpHeaders.CONTENT_TYPE, contentType)
+                        .header(HttpHeaders.CACHE_CONTROL, "public, max-age=60")
+                        .body(resource);
+            }
+        } else if (thumbnailService.isVideo(fileName)) {
+            // 视频：返回默认占位 SVG
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_TYPE, "image/svg+xml")
+                    .header(HttpHeaders.CACHE_CONTROL, "public, max-age=60")
+                    .body(thumbnailService.getVideoPlaceholderSvg());
+        }
+        
+        return ResponseEntity.notFound().build();
     }
 
     // get the replica from other nodes

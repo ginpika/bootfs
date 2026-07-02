@@ -37,6 +37,31 @@ public class ThumbnailService {
         return Path.of(tfsConfig.getPathPrefix(), "thumb", uuid + ".webp");
     }
 
+    /** 判断是否为支持的图片类型 */
+    public boolean isImage(String fileName) {
+        if (fileName == null) return false;
+        int dotIdx = fileName.lastIndexOf(".");
+        if (dotIdx < 0) return false;
+        return IMAGE_EXTENSIONS.contains(fileName.substring(dotIdx).toLowerCase());
+    }
+
+    /** 判断是否为支持的视频类型 */
+    public boolean isVideo(String fileName) {
+        if (fileName == null) return false;
+        int dotIdx = fileName.lastIndexOf(".");
+        if (dotIdx < 0) return false;
+        return VIDEO_EXTENSIONS.contains(fileName.substring(dotIdx).toLowerCase());
+    }
+
+    /** 获取视频默认占位 SVG */
+    public String getVideoPlaceholderSvg() {
+        return "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"480\" height=\"270\" viewBox=\"0 0 480 270\">"
+                + "<rect width=\"480\" height=\"270\" fill=\"#1e293b\"/>"
+                + "<circle cx=\"240\" cy=\"135\" r=\"36\" fill=\"none\" stroke=\"#64748b\" stroke-width=\"3\"/>"
+                + "<polygon points=\"228,117 228,153 261,135\" fill=\"#64748b\"/>"
+                + "</svg>";
+    }
+
     public void generateAsync(String uuid) {
         CompletableFuture.runAsync(() -> {
             try {

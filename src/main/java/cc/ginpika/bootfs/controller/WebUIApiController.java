@@ -167,6 +167,7 @@ public class WebUIApiController {
         String remoteIp = httpServletRequest.getHeader("X-forwarded-for");
         if (remoteIp == null) remoteIp = httpServletRequest.getRemoteAddr();
         log.info("remove: {} from {}", uuid, remoteIp);
+        deleteAtlasChildren(uuid);
         context.remove(uuid);
         etcdService.delFileAndReplicas(uuid);
         return Boolean.TRUE;
@@ -183,14 +184,60 @@ public class WebUIApiController {
         array.forEach(r -> {
             CompletableFuture.runAsync(() -> {
                 try {
-                    context.remove((String) r);
-                    etcdService.delFileAndReplicas((String) r);
+                    String uuid = (String) r;
+                    deleteAtlasChildren(uuid);
+                    context.remove(uuid);
+                    etcdService.delFileAndReplicas(uuid);
                 } catch (Exception e) {
                     log.error("uuid 不合法，删除失败: {}", r.toString(), e);
                 }
             }, threadPoolExecutor);
         });
         return Boolean.TRUE;
+    }
+
+    /**
+     * 删除图集时，通过 MeiliSearch 索引找到该图集的子资源并一并删除
+     */
+    private void deleteAtlasChildren(String uuid) {
+        // 通过 MeiliSearch 的 full-text 索引查找该图集文档
+        Map<String, Object> docResult = meiliSearchService.getDocument("full-text", uuid);
+        if (!Boolean.TRUE.equals(docResult.get("succeed")) || docResult.get("data") == null) {
+            return;
+        }
+        JSONObject docData = (JSONObject) docResult.get("data");
+        JSONArray resources = docData.getJSONArray("resources");
+        if (resources == null || resources.isEmpty()) {
+            return;
+        }
+        log.info("从 MeiliSearch 找到图集 {} 的文档, resources 数量: {}", uuid, resources.size());
+
+        // 从 resources 的 url 列表中提取子图片 uuid（url 末尾即为 uuid）
+        List<String> childrenUuids = new ArrayList<>();
+        for (int i = 0; i < resources.size(); i++) {
+            String url = resources.getString(i);
+            if (url != null && url.contains("/")) {
+                String childUuid = url.substring(url.lastIndexOf("/") + 1);
+                childrenUuids.add(childUuid);
+            }
+        }
+
+        log.info("图集 {} 共有 {} 个子图片需要删除: {}", uuid, childrenUuids.size(), childrenUuids);
+        for (String childUuid : childrenUuids) {
+            try {
+                context.remove(childUuid);
+                etcdService.delFileAndReplicas(childUuid);
+                log.info("已删除图集子图片: {}", childUuid);
+            } catch (Exception e) {
+                log.error("删除图集子图片失败: {}", childUuid, e);
+            }
+        }
+
+        // 从 MeiliSearch 的 full-text 索引中删除该图集文档
+        meiliSearchService.deleteDocumentFromIndex("full-text", uuid);
+
+        // 同时清理 image-host 索引中可能存在的文档
+        meiliSearchService.deleteDocumentFromIndex("image-host", uuid);
     }
 
     @PostMapping("/downloadFileBatch")

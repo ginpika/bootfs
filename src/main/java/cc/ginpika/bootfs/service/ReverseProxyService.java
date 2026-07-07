@@ -70,10 +70,10 @@ public class ReverseProxyService {
             return;
         }
         JSONObject metaJson = JSONObject.parseObject(meta);
-        if (metaJson.getLong("size") > 2048000) {
-            log.info("{} size > 2048000, no reverse proxy", uuid);
-            return;
-        }
+        // if (metaJson.getLong("size") > 2048000) {
+        //     log.info("{} size > 2048000, no reverse proxy", uuid);
+        //     return;
+        // }
         // 图片
         if (approvedImgExt.contains(metaJson.getString("ext"))) {
             proxyImage(response, request, metaJson, url);

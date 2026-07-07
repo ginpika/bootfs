@@ -5,12 +5,11 @@ import cc.ginpika.bootfs.service.etcd.EtcdService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.catalina.connector.ClientAbortException;
 import org.apache.http.Header;
+import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
-import org.apache.http.message.BasicHeader;
-import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -39,15 +38,39 @@ public class ReverseProxyService {
         this.add(".mp3");
     }};
 
+    // 转发到上游时仅允许的请求头白名单：其余（Host、Cookie、Accept-Encoding、Content-Length 等）一律不转发
+    private static final Set<String> ALLOWED_REQUEST_HEADERS = new HashSet<>(Arrays.asList(
+            "range", "if-range", "if-modified-since", "if-none-match"
+    ));
+
+    // 回传给客户端时跳过的响应头（hop-by-hop，以及 HttpClient 已处理过的 Content-Encoding/Content-Length）
+    private static final Set<String> SKIP_RESPONSE_HEADERS = new HashSet<>(Arrays.asList(
+            "connection", "keep-alive", "te", "trailer", "transfer-encoding", "upgrade",
+            "proxy-authenticate", "proxy-authorization", "content-length", "content-encoding"
+    ));
+
+    // HttpClientBuilder 默认开启 ContentCompressionInterceptor，会自己加 Accept-Encoding: gzip,deflate 并自动解压
+    private void applyProxyHeaders(HttpGet rq, HttpServletRequest request, String acceptType, boolean isRange) {
+        Enumeration<String> names = request.getHeaderNames();
+        while (names.hasMoreElements()) {
+            String name = names.nextElement();
+            if (ALLOWED_REQUEST_HEADERS.contains(name.toLowerCase())) {
+                rq.addHeader(name, request.getHeader(name));
+            }
+        }
+        rq.addHeader(isRange ? "Is-Range-Request" : "Is-Proxy", "1");
+        rq.addHeader("Accept-Type", acceptType);
+    }
+
     public void reverseProxyFile(String uuid, HttpServletResponse response, HttpServletRequest request) {
         String url = getTrueNodeUrl(uuid);
         String meta = getMetaJson(uuid);
         if (meta == null) {
-            log.info("");
+            log.info("uuid metaInfo 不存在", uuid);
             return;
         }
         JSONObject metaJson = JSONObject.parseObject(meta);
-        if (metaJson.size() > 2048000) {
+        if (metaJson.getLong("size") > 2048000) {
             log.info("{} size > 2048000, no reverse proxy", uuid);
             return;
         }
@@ -69,34 +92,21 @@ public class ReverseProxyService {
         String acceptType = "image/" + metaJson.getString("ext").substring(1);
         try (CloseableHttpClient client = HttpClientBuilder.create().build()) {
             HttpGet rq = new HttpGet(url);
-            Enumeration<String> requestHeaders = request.getHeaderNames();
-            List<Header> headerList = new ArrayList<>();
-            while (requestHeaders.hasMoreElements()) {
-                String header = requestHeaders.nextElement();
-                String val = request.getHeader(header);
-                headerList.add(new BasicHeader(header, val));
-            }
-            headerList.add(new BasicHeader("Is-Proxy", "1"));
-            headerList.add(new BasicHeader("Accept-Type", acceptType));
-            rq.setHeaders(headerList.toArray(new Header[0]));
+            applyProxyHeaders(rq, request, acceptType, false);
 
-            response.setContentType(acceptType);
             CloseableHttpResponse rqRes = client.execute(rq);
-            Arrays.stream(rqRes.getAllHeaders()).filter(header -> header.getName().equals(HttpHeaders.CONTENT_LENGTH)).findFirst().ifPresent(r -> {
-//                response.setContentLengthLong(metaJson.getLong("size"));
-                long metaJsonSize = metaJson.getLong("size");
-                response.setContentLengthLong(Long.parseLong(r.getValue()));
-                if (Long.parseLong(r.getValue()) != metaJsonSize) {
-                    log.info("WARN 发现文件长度不匹配");
+            response.setStatus(rqRes.getStatusLine().getStatusCode());
+            response.setContentType(acceptType);
+
+            HttpEntity entity = rqRes.getEntity();
+            if (entity != null) {
+                try (InputStream is = entity.getContent();
+                     OutputStream os = response.getOutputStream()) {
+                    is.transferTo(os);
                 }
-            });
-            InputStream is = rqRes.getEntity().getContent();
-            OutputStream os = response.getOutputStream();
-            is.transferTo(os);
-            is.close();
-            os.close();
+            }
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("ReverseProxy image failure: {}", url, e);
             throw new RuntimeException(e);
         }
     }
@@ -106,28 +116,26 @@ public class ReverseProxyService {
                 + metaJson.getString("ext").substring(1);
         try (CloseableHttpClient client = HttpClientBuilder.create().build()) {
             HttpGet rq = new HttpGet(url);
-            Enumeration<String> requestHeaders = request.getHeaderNames();
-            List<Header> headerList = new ArrayList<>();
-            while (requestHeaders.hasMoreElements()) {
-                String header = requestHeaders.nextElement();
-                String val = request.getHeader(header);
-                headerList.add(new BasicHeader(header, val));
-            }
-            headerList.add(new BasicHeader("Is-Range-Request", "1"));
-            headerList.add(new BasicHeader("Accept-Type", acceptType));
-            rq.setHeaders(headerList.toArray(new Header[0]));
+            applyProxyHeaders(rq, request, acceptType, true);
+
             CloseableHttpResponse rqRes = client.execute(rq);
-            Arrays.stream(rqRes.getAllHeaders()).forEach(header -> {
-                response.setHeader(header.getName(), header.getValue());
-            });
             response.setStatus(rqRes.getStatusLine().getStatusCode());
             response.setContentType(acceptType);
-            InputStream is = rqRes.getEntity().getContent();
-            OutputStream os = response.getOutputStream();
-            is.transferTo(os);
-            is.close();
-        } catch (ClientAbortException ignore) {} catch (IOException e) {
-            log.error("ReverseProxy failure", e);
+
+            Arrays.stream(rqRes.getAllHeaders())
+                    .filter(h -> !SKIP_RESPONSE_HEADERS.contains(h.getName().toLowerCase()))
+                    .forEach(h -> response.setHeader(h.getName(), h.getValue()));
+
+            HttpEntity entity = rqRes.getEntity();
+            if (entity != null) {
+                try (InputStream is = entity.getContent();
+                     OutputStream os = response.getOutputStream()) {
+                    is.transferTo(os);
+                }
+            }
+        } catch (ClientAbortException ignore) {
+        } catch (IOException e) {
+            log.error("ReverseProxy failure: {}", url, e);
         }
     }
     private String getTrueNodeUrl(String uuid) {

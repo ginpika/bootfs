@@ -104,10 +104,12 @@ public class ManageController {
                                              HttpServletRequest request) throws IOException {
         Object[] ret = fileService.download(uuid, request);
         if (ret == null) {
+            log.info("uuid {} 不存在, 返回 not found", uuid);
             return ResponseEntity.notFound().build();
         }
         // support range-request for media resource
         if (StringUtils.isNotBlank(request.getHeader("Is-Range-Request"))) {
+            log.info("uuid {} 是一个 Range-Request");
             String contentType = request.getHeader("Accept-Type");
             if (StringUtils.isBlank(contentType)) {
                 contentType = "video/mp4";
@@ -117,6 +119,7 @@ public class ManageController {
                     .header(HttpHeaders.CONTENT_LENGTH, (String) ret[2])
                     .body((Resource)ret[0]);
         } else if (StringUtils.isNotBlank(request.getHeader("Is-Proxy"))) {
+            log.info("接收到一个 Proxy Request {}", uuid);
             String contentType = request.getHeader("Accept-Type");
             if (StringUtils.isBlank(contentType)) {
                 contentType = "video/mp4";

@@ -59,9 +59,20 @@ public class FileTransferService {
                     .uuid(fileObject.getUuid())
                     .title(fileObject.getFileName())
                     .poster(context.buildThumbUrl(fileObject.getUuid()))
+                    .thumbUrl(context.buildThumbUrl(fileObject.getUuid()))
                     .tags(new JSONArray())
                     .createdAt(now)
                     .updatedAt(now)
+                    .fileName(fileObject.getFileName())
+                    .size(fileObject.getSize())
+                    .copyOf(fileObject.getCopyOf())
+                    .hlsAvailable(fileObject.getHlsAvailable())
+                    .thumbAvailable(fileObject.getThumbAvailable())
+                    .parent(fileObject.getParent())
+                    .albumAvailable(fileObject.getAlbumAvailable())
+                    .nsfw(fileObject.getNsfw())
+                    .isPublicAccess(fileObject.getIsPublicAccess())
+                    .fileCreatedAt(fileObject.getCreatedAt())
                     .build();
             meiliSearchService.addToFullText(doc);
         } catch (Exception e) {

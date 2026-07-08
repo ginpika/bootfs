@@ -24,6 +24,8 @@ public class FileObject {
     private String thumbAvailable;
     // support download or direct read
     private transient String url;
+    // thumbnail URL for rendering (cluster-aware, points to uploading node's /thumb/{uuid})
+    private transient String thumbUrl;
     // means this object is a child-object
     private String parent;
     // means this zip archive is a comic or album, it`s ready for album route

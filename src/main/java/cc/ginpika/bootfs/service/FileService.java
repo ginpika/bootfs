@@ -151,10 +151,16 @@ public class FileService {
         String documentUUID = this.threadLocalParent.get();
         String poster = firstPageUuid.get() == null ? null : context.buildThumbUrl(firstPageUuid.get());
         FullTextDocument fullTextDocument = FullTextDocument.builder().title(title).poster(poster)
+                .thumbUrl(poster)
                 .resources(JSONArray.from(comicUrls))
                 .tags(new JSONArray())
                 .uuid(documentUUID)
-                .createdAt(now).updatedAt(now).build();
+                .createdAt(now).updatedAt(now)
+                .fileName(originalFilename)
+                .size(file.getSize())
+                .albumAvailable("1")
+                .fileCreatedAt(System.currentTimeMillis())
+                .build();
         meiliSearchService.addToFullText(fullTextDocument);
         tmp.toFile().delete();
         outputs.forEach(path -> path.toFile().delete());
@@ -186,9 +192,20 @@ public class FileService {
                     .uuid(fileObject.getUuid())
                     .title(fileObject.getFileName())
                     .poster(context.buildThumbUrl(fileObject.getUuid()))
+                    .thumbUrl(context.buildThumbUrl(fileObject.getUuid()))
                     .tags(new JSONArray())
                     .createdAt(now)
                     .updatedAt(now)
+                    .fileName(fileObject.getFileName())
+                    .size(fileObject.getSize())
+                    .copyOf(fileObject.getCopyOf())
+                    .hlsAvailable(fileObject.getHlsAvailable())
+                    .thumbAvailable(fileObject.getThumbAvailable())
+                    .parent(fileObject.getParent())
+                    .albumAvailable(fileObject.getAlbumAvailable())
+                    .nsfw(fileObject.getNsfw())
+                    .isPublicAccess(fileObject.getIsPublicAccess())
+                    .fileCreatedAt(fileObject.getCreatedAt())
                     .build();
             meiliSearchService.addToFullText(doc);
         } catch (Exception e) {

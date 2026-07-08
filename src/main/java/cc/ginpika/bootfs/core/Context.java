@@ -338,6 +338,7 @@ public class Context {
             if (skip++ < offset) continue;
             if (skip <= offset + limit) {
                 tFile.setUrl(buildUrl(tFile.getUuid()));
+                tFile.setThumbUrl(buildThumbUrl(tFile.getUuid()));
                 files.add(tFile);
             } else {
                 break;

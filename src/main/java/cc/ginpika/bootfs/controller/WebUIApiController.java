@@ -92,33 +92,15 @@ public class WebUIApiController {
             return context.queryByOffset(pageNumber, pageSize, localSearch);
         }
 
-        // 显式指定 tag 过滤 → 强制走 MeiliSearch
-        if (StringUtils.isNotBlank(tags)) {
-            FileObjectWebVO result = meiliSearchQuery(pageNumber, pageSize, search, tags);
-            return result != null ? result : emptyPage(pageNumber, pageSize);
-        }
-
-        // 有搜索词 → 优先 MeiliSearch 全文检索（同时覆盖 tags 和文档内容），空结果回退内存
-        if (StringUtils.isNotBlank(search)) {
-            FileObjectWebVO meiliResult = meiliSearchQuery(pageNumber, pageSize, search, null);
-            if (meiliResult != null && meiliResult.getTotal() > 0) {
-                return meiliResult;
-            }
-        }
-
-        // 默认查询也优先走 MeiliSearch，支持分布式下各节点仅展示本地数据
-        FileObjectWebVO meiliResult = meiliSearchQuery(pageNumber, pageSize, null, null);
-        if (meiliResult != null && meiliResult.getTotal() > 0) {
-            return meiliResult;
-        }
-
-        return context.queryByOffset(pageNumber, pageSize, search);
+        // 其他情况统一走 MeiliSearch，直接从文档还原 FileObject，支撑集群列表查询
+        FileObjectWebVO result = meiliSearchQuery(pageNumber, pageSize, search, tags);
+        return result != null ? result : emptyPage(pageNumber, pageSize);
     }
 
     /**
-     * 走 MeiliSearch，并行搜索 image-host 和 full-text 两个索引，合并结果后从存储中翻页
+     * 走 MeiliSearch，并行搜索 image-host 和 full-text 两个索引，合并结果后直接从文档还原 FileObject 并翻页
      * @param tagFilter 逗号分隔的标签，为 null 时不做标签过滤（纯全文搜索）
-     * @return 搜索结果，UUID 集合为空时返回 null
+     * @return 搜索结果，文档集合为空时返回 null
      */
     private FileObjectWebVO meiliSearchQuery(int pageNumber, int pageSize, String query, String tagFilter) {
         List<String> tagList = tagFilter != null
@@ -128,43 +110,95 @@ public class WebUIApiController {
                         .collect(Collectors.toList())
                 : null;
 
-        Set<String> uuidSet = new LinkedHashSet<>();
+        // 按 uuid 去重，保留插入顺序；full-text 索引的数据更完整，后写入覆盖 image-host 的结果
+        LinkedHashMap<String, FileObject> fileMap = new LinkedHashMap<>();
 
         SearchResult r1 = meiliSearchService.searchByTags(query, tagList, 0, 1000, "image-host");
         if (r1 != null && r1.getHits() != null) {
-            r1.getHits().forEach(hit -> uuidSet.add((String) hit.get("uuid")));
+            for (Map<String, Object> hit : r1.getHits()) {
+                FileObject fo = reconstructFileObject(hit);
+                if (fo != null) {
+                    fileMap.putIfAbsent(fo.getUuid(), fo);
+                }
+            }
         }
 
         SearchResult r2 = meiliSearchService.searchByTags(query, tagList, 0, 1000, "full-text");
         if (r2 != null && r2.getHits() != null) {
-            r2.getHits().forEach(hit -> uuidSet.add((String) hit.get("uuid")));
+            for (Map<String, Object> hit : r2.getHits()) {
+                FileObject fo = reconstructFileObject(hit);
+                if (fo != null) {
+                    fileMap.put(fo.getUuid(), fo);
+                }
+            }
         }
 
-        if (uuidSet.isEmpty()) return null;
+        if (fileMap.isEmpty()) return null;
 
-        List<String> allUuids = new ArrayList<>(uuidSet);
-        int total = allUuids.size();
+        List<FileObject> allFiles = new ArrayList<>(fileMap.values());
+        int total = allFiles.size();
 
         int from = pageNumber * pageSize;
-        int to = Math.min(from + pageSize, allUuids.size());
-        if (from >= allUuids.size()) {
+        int to = Math.min(from + pageSize, allFiles.size());
+        if (from >= allFiles.size()) {
             return FileObjectWebVO.builder()
                     .pageNumber(pageNumber).pageSize(pageSize).total(total)
                     .rows(Collections.emptyList()).build();
         }
 
-        List<FileObject> files = new ArrayList<>();
-        for (String uuid : allUuids.subList(from, to)) {
-            FileObject tf = context.query(uuid);
-            if (tf != null) {
-                tf.setUrl(context.buildUrl(tf.getUuid()));
-                files.add(tf);
-            }
+        List<FileObject> files = new ArrayList<>(allFiles.subList(from, to));
+        for (FileObject fo : files) {
+            fo.setUrl(context.buildUrl(fo.getUuid()));
         }
 
         return FileObjectWebVO.builder()
                 .pageNumber(pageNumber).pageSize(pageSize).total(total)
                 .rows(files).build();
+    }
+
+    /**
+     * 从 MeiliSearch 搜索命中文档还原 FileObject（不包含 path 等 node-local 字段）
+     */
+    @SuppressWarnings("unchecked")
+    private FileObject reconstructFileObject(Map<String, Object> hit) {
+        String uuid = (String) hit.get("uuid");
+        if (uuid == null) return null;
+
+        FileObject fo = new FileObject();
+        fo.setUuid(uuid);
+        // title 和 fileName 冗余存储，优先取 fileName，回退到 title
+        String fileName = (String) hit.get("fileName");
+        if (fileName == null) fileName = (String) hit.get("title");
+        fo.setFileName(fileName);
+        fo.setSize(hit.get("size") != null ? ((Number) hit.get("size")).longValue() : null);
+        fo.setCopyOf((String) hit.get("copyOf"));
+        fo.setHlsAvailable((String) hit.get("hlsAvailable"));
+        fo.setThumbAvailable((String) hit.get("thumbAvailable"));
+        fo.setParent((String) hit.get("parent"));
+        fo.setAlbumAvailable((String) hit.get("albumAvailable"));
+        fo.setNsfw((String) hit.get("nsfw"));
+        fo.setIsPublicAccess((String) hit.get("isPublicAccess"));
+        fo.setCreatedAt(hit.get("fileCreatedAt") != null ? ((Number) hit.get("fileCreatedAt")).longValue() : null);
+
+        // 缩略图 URL：优先取 thumbUrl 字段，旧文档回退到 poster（full-text 索引的 poster 即 thumbUrl）
+        String thumbUrl = (String) hit.get("thumbUrl");
+        if (thumbUrl == null) thumbUrl = (String) hit.get("poster");
+        fo.setThumbUrl(thumbUrl);
+
+        // 从 tags 数组还原 List<Tag>
+        Object tagsObj = hit.get("tags");
+        if (tagsObj instanceof List) {
+            List<Tag> tags = new ArrayList<>();
+            for (Object tagObj : (List<?>) tagsObj) {
+                String tagStr = String.valueOf(tagObj);
+                if (!tagStr.isEmpty()) {
+                    tags.add(Tag.fromIndexFormat(tagStr));
+                }
+            }
+            fo.setTags(tags);
+        }
+
+        return fo;
     }
 
     private FileObjectWebVO emptyPage(int pageNumber, int pageSize) {
@@ -320,10 +354,21 @@ public class WebUIApiController {
             LocalDateTime now = LocalDateTime.now();
             meiliSearchService.addToImageHost(ImageHostDocument.builder()
                     .poster(context.buildProxyUrl(uuid))
+                    .thumbUrl(context.buildThumbUrl(uuid))
                     .uuid(uuid)
                     .tags(new JSONArray())
                     .createdAt(now)
                     .updatedAt(now)
+                    .fileName(fileObject.getFileName())
+                    .size(fileObject.getSize())
+                    .copyOf(fileObject.getCopyOf())
+                    .hlsAvailable(fileObject.getHlsAvailable())
+                    .thumbAvailable(fileObject.getThumbAvailable())
+                    .parent(fileObject.getParent())
+                    .albumAvailable(fileObject.getAlbumAvailable())
+                    .nsfw(fileObject.getNsfw())
+                    .isPublicAccess(fileObject.getIsPublicAccess())
+                    .fileCreatedAt(fileObject.getCreatedAt())
                     .build());
             return ResponseEntity.ok().build();
         } catch (Exception e) {

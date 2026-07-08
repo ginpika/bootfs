@@ -139,7 +139,6 @@ public class ThumbnailService {
         } else {
             fileObject.setThumbAvailable("1");
             contextIO.update(uuid, fileObject);
-            log.info("缩略图已生成: {} -> {}", uuid, thumbFile);
         }
     }
 }

@@ -48,8 +48,9 @@ public class FileService {
     @Autowired
     private ThumbnailService thumbnailService;
 
-    public FileService(Context context, TfsConfig tfsConfig, EtcdService etcdService, FileTransferService fileTransferService, 
-        MeiliSearchService meiliSearchService, ThumbnailService thumbnailService) {
+    public FileService(Context context, TfsConfig tfsConfig, EtcdService etcdService,
+            FileTransferService fileTransferService,
+            MeiliSearchService meiliSearchService, ThumbnailService thumbnailService) {
         this.context = context;
         this.tfsConfig = tfsConfig;
         this.etcdService = etcdService;
@@ -67,8 +68,10 @@ public class FileService {
     private final TransferThreadPool transferThreadPool = new TransferThreadPool();
 
     public String upload(MultipartFile file) throws IOException {
-        // if multipart-file name start with [Comic], it will be seen as a Comic zip archive
-        // tfs will unzip it automatically, and will save every image page as children of zip archive
+        // if multipart-file name start with [Comic], it will be seen as a Comic zip
+        // archive
+        // tfs will unzip it automatically, and will save every image page as children
+        // of zip archive
         String originalFilename = file.getOriginalFilename();
         if (originalFilename != null && originalFilename.startsWith("[Comic]")) {
             this.comicUnzipPreProcess(file);
@@ -106,7 +109,8 @@ public class FileService {
         }
         String ext = originalFilename.substring(originalFilename.lastIndexOf("."));
         // current version only support zip archive
-        if (!ext.equals(".zip")) return;
+        if (!ext.equals(".zip"))
+            return;
         // create tmp file for zip archive
         Path tmp = Files.createTempFile("tmp" + System.currentTimeMillis(), ext);
         try (OutputStream tmpOs = Files.newOutputStream(tmp)) {
@@ -118,7 +122,8 @@ public class FileService {
         String title = originalFilename.substring(0, originalFilename.lastIndexOf(".")).substring(7);
         AtomicInteger pageCount = new AtomicInteger(1);
         AtomicReference<String> firstPageUuid = new AtomicReference<>();
-        if (outputs.isEmpty()) return;
+        if (outputs.isEmpty())
+            return;
         // passing parent-children-relation, write in thread-local for parent
         this.threadLocalAlbumAvailable.set("1");
         this.threadLocalParent.set(IdGenerator.getUniqueId());
@@ -144,13 +149,16 @@ public class FileService {
             etcdService.putFile(uuid, localNodeUrl, context.buildMetaJson(file, imageTitle));
             replication(target.toFile(), uuid, imageTitle);
             thumbnailService.generateAsync(uuid);
-            if (firstPageUuid.get() == null) firstPageUuid.set(uuid);
+            if (firstPageUuid.get() == null)
+                firstPageUuid.set(uuid);
             comicUrls.add(context.buildThumbUrl(uuid));
         });
         LocalDateTime now = LocalDateTime.now();
         String documentUUID = this.threadLocalParent.get();
         String poster = firstPageUuid.get() == null ? null : context.buildThumbUrl(firstPageUuid.get());
-        FullTextDocument fullTextDocument = FullTextDocument.builder().title(title).poster(poster)
+        FullTextDocument fullTextDocument = FullTextDocument.builder()
+                .title(title)
+                .poster(poster)
                 .thumbUrl(poster)
                 .resources(JSONArray.from(comicUrls))
                 .tags(new JSONArray())
@@ -168,12 +176,14 @@ public class FileService {
 
     private String normalFilePersistence(MultipartFile file) throws IOException {
         String uuid = IdGenerator.getUniqueId();
-        if (threadLocalParent.get() != null) uuid = threadLocalParent.get();
+        if (threadLocalParent.get() != null)
+            uuid = threadLocalParent.get();
         saveToLocal(uuid, file);
         String filePath = Path.of(tfsConfig.getPathPrefix(), uuid).toString();
         String originalFilename = file.getOriginalFilename();
         FileObject fileObject = new FileObject(filePath, uuid, originalFilename, file.getSize());
-        if (threadLocalAlbumAvailable.get() != null) fileObject.setAlbumAvailable("1");
+        if (threadLocalAlbumAvailable.get() != null)
+            fileObject.setAlbumAvailable("1");
         context.record(fileObject, uuid);
         String localNodeUrl = context.buildUrl(uuid);
         etcdService.putFile(uuid, localNodeUrl, context.buildMetaJson(file));
@@ -218,7 +228,8 @@ public class FileService {
         File dataDir = new File(tfsConfig.getPathPrefix());
         if (!dataDir.exists()) {
             boolean result = dataDir.mkdirs();
-            if (result) log.info("创建 dataDir 目录: {}", dataDir.getAbsoluteFile());
+            if (result)
+                log.info("创建 dataDir 目录: {}", dataDir.getAbsoluteFile());
         }
         File target = new File(filePath);
         if (!target.createNewFile()) {
@@ -237,7 +248,7 @@ public class FileService {
         }
         Random random = new Random();
         int sampleCount = tfsConfig.getCopies();
-        for (int i=0;i<sampleCount-1;i++) {
+        for (int i = 0; i < sampleCount - 1; i++) {
             int idx = random.nextInt(nodes.size());
             String targetNode = nodes.get(idx);
             // rpc 调用

@@ -67,7 +67,7 @@ public class ContextIO {
                 ContextIO.FILE_LOCK.lock();
                 JsonFileLineUpdater.updateLine(file, uuid, fileObjectToJsonObject(fileObject));
                 long endTime = System.currentTimeMillis();
-                log.info("更新 {} 耗时 {} ms", uuid, endTime - startTime);
+                // log.info("更新 {} 耗时 {} ms", uuid, endTime - startTime);
             } catch (Exception e) {
                 log.error("ContextIO update error", e);
             } finally {

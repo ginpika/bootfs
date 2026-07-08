@@ -47,6 +47,7 @@ services:
       - TFS_WEB_ENTRYPOINT=${TFS_WEB_ENTRYPOINT}
       - MEILISEARCH_MASTER_KEY=${MEILISEARCH_MASTER_KEY}
       - MEILISEARCH_WEB_UI=${MEILISEARCH_WEB_UI}
+      - MEILISEARCH_URL=${MEILISEARCH_URL}
     depends_on:
       - etcd
       - meilisearch

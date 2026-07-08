@@ -87,8 +87,8 @@ public class WebUIApiController {
                                            @RequestParam(value = "search", defaultValue = "") String search,
                                            @RequestParam(value = "tags", defaultValue = "") String tags) {
         // local 关键字 → 强制走本地内存查询，不走 MeiliSearch
-        if (StringUtils.containsIgnoreCase(search, "local")) {
-            String localSearch = search.replaceAll("(?i)local", "").trim();
+        if (StringUtils.containsIgnoreCase(search, "meta:local")) {
+            String localSearch = search.replaceAll("(?i)meta:local", "").trim();
             return context.queryByOffset(pageNumber, pageSize, localSearch);
         }
 
@@ -112,16 +112,6 @@ public class WebUIApiController {
 
         // 按 uuid 去重，保留插入顺序；full-text 索引的数据更完整，后写入覆盖 image-host 的结果
         LinkedHashMap<String, FileObject> fileMap = new LinkedHashMap<>();
-
-        SearchResult r1 = meiliSearchService.searchByTags(query, tagList, 0, 1000, "image-host");
-        if (r1 != null && r1.getHits() != null) {
-            for (Map<String, Object> hit : r1.getHits()) {
-                FileObject fo = reconstructFileObject(hit);
-                if (fo != null) {
-                    fileMap.putIfAbsent(fo.getUuid(), fo);
-                }
-            }
-        }
 
         SearchResult r2 = meiliSearchService.searchByTags(query, tagList, 0, 1000, "full-text");
         if (r2 != null && r2.getHits() != null) {
@@ -510,12 +500,6 @@ public class WebUIApiController {
                 meiliSearchService.updateDocumentTags("full-text", uuid, tags);
             } catch (Exception e) {
                 log.warn("同步 tags 到 full-text 索引失败: {}", e.getMessage());
-            }
-            try {
-                // 同步到 image-host 索引
-                meiliSearchService.updateDocumentTags("image-host", uuid, tags);
-            } catch (Exception e) {
-                log.warn("同步 tags 到 image-host 索引失败: {}", e.getMessage());
             }
         }, threadPoolExecutor);
     }

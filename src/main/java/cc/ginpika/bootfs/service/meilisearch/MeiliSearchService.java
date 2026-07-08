@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -64,7 +65,43 @@ public class MeiliSearchService {
     }
 
     public void addToFullText(FullTextDocument fullTextDocument) {
-        addToFullText(JSONObject.toJSONString(fullTextDocument));
+        try {
+            Index index = client.index(FULL_TEXT_INDEX);
+            String uuid = fullTextDocument.getUuid();
+            // 查询旧文档，存在则以旧文档为基础合并（跳过 null 值字段），避免覆盖 resources 等已有字段
+            JSONObject merged = new JSONObject();
+            try {
+                String existing = index.getRawDocument(uuid);
+                log.info("exists idx: {}", existing);
+                if (StringUtils.isNotBlank(existing)) {
+                    merged = JSON.parseObject(existing);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                log.info("查询旧文档失败（可能不存在），将直接写入, uuid={}", uuid);
+            }
+            // log.info("uuid {} resources:{}", merged.getString(uuid), merged.getJSONArray("resources"));
+            // 将新文档转为 JSONObject，仅用非 null 字段覆盖旧文档
+            JSONObject newDoc = JSON.parseObject(JSON.toJSONString(fullTextDocument));
+            for (Map.Entry<String, Object> entry : newDoc.entrySet()) {
+                log.info(entry.getKey());
+                if (entry.getValue() != null) {
+                    merged.put(entry.getKey(), entry.getValue());
+                }
+            }
+            // 如果是图集，thumbUrl 取图集的第一张图
+            if (merged.getIntValue("albumAvailable") == 1) {
+                merged.put("thumbUrl", merged.getJSONArray("resources").getString(0));
+                merged.put("poster", merged.get("thumbUrl"));
+            }
+            String jsonString = merged.toJSONString();
+            index.addDocuments(jsonString);
+            // TODO 优化
+            // 因为 MeiliSearch 是异步的，需要等待一段时间确保索引更新，防止并发时幻读问题
+            TimeUnit.SECONDS.sleep(1);
+        } catch (Exception e) {
+            log.error("添加文档到索引 {} 失败, uuid={}", FULL_TEXT_INDEX, fullTextDocument.getUuid(), e);
+        }
     }
 
     public void addToImageHost(ImageHostDocument imageHostDocument) {

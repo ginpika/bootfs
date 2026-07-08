@@ -1,5 +1,6 @@
 package cc.ginpika.bootfs.controller;
 
+import com.alibaba.fastjson2.JSONArray;
 import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.core.Context;
 import cc.ginpika.bootfs.core.IdGenerator;
@@ -8,6 +9,7 @@ import cc.ginpika.bootfs.service.FileService;
 import cc.ginpika.bootfs.service.FileTransferService;
 import cc.ginpika.bootfs.domain.result.TransferResult;
 import cc.ginpika.bootfs.service.ReverseProxyService;
+import cc.ginpika.bootfs.service.meilisearch.FullTextDocument;
 import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
 import cc.ginpika.bootfs.service.thumb.ThumbnailService;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +30,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -225,6 +228,9 @@ public class ManageController {
                     .build();
             
             context.record(fileObject, uuid);
+            
+            // 索引到本地 MeiliSearch full_text，支持分布式下各节点仅展示本地数据
+            indexVirtualFileToMeiliSearch(fileObject);
             
             Path hlsDir = Path.of(tfsConfig.getPathPrefix(), "hls", uuid);
             Files.createDirectories(hlsDir);
@@ -621,6 +627,23 @@ public class ManageController {
         } catch (Exception e) {
             log.error("获取文件信息失败", e);
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    private void indexVirtualFileToMeiliSearch(FileObject fileObject) {
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            FullTextDocument doc = FullTextDocument.builder()
+                    .uuid(fileObject.getUuid())
+                    .title(fileObject.getFileName())
+                    .poster(context.buildThumbUrl(fileObject.getUuid()))
+                    .tags(new JSONArray())
+                    .createdAt(now)
+                    .updatedAt(now)
+                    .build();
+            meiliSearchService.addToFullText(doc);
+        } catch (Exception e) {
+            log.warn("索引虚拟文件到 MeiliSearch full_text 失败, uuid={}: {}", fileObject.getUuid(), e.getMessage());
         }
     }
 }

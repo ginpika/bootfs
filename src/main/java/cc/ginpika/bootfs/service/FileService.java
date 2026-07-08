@@ -174,7 +174,26 @@ public class FileService {
         File target = new File(filePath);
         replication(target, uuid, originalFilename);
         thumbnailService.generateAsync(uuid);
+        // 索引到本地 MeiliSearch full_text，支持分布式下各节点仅展示本地数据
+        indexToMeiliSearch(fileObject);
         return localNodeUrl;
+    }
+
+    private void indexToMeiliSearch(FileObject fileObject) {
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            FullTextDocument doc = FullTextDocument.builder()
+                    .uuid(fileObject.getUuid())
+                    .title(fileObject.getFileName())
+                    .poster(context.buildThumbUrl(fileObject.getUuid()))
+                    .tags(new JSONArray())
+                    .createdAt(now)
+                    .updatedAt(now)
+                    .build();
+            meiliSearchService.addToFullText(doc);
+        } catch (Exception e) {
+            log.warn("索引文件到 MeiliSearch full_text 失败, uuid={}: {}", fileObject.getUuid(), e.getMessage());
+        }
     }
 
     public void saveToLocal(String uuid, MultipartFile file) throws IOException {

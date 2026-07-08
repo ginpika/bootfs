@@ -86,6 +86,12 @@ public class WebUIApiController {
                                            @RequestParam(value = "pageSize", defaultValue = "10") int pageSize,
                                            @RequestParam(value = "search", defaultValue = "") String search,
                                            @RequestParam(value = "tags", defaultValue = "") String tags) {
+        // local 关键字 → 强制走本地内存查询，不走 MeiliSearch
+        if (StringUtils.containsIgnoreCase(search, "local")) {
+            String localSearch = search.replaceAll("(?i)local", "").trim();
+            return context.queryByOffset(pageNumber, pageSize, localSearch);
+        }
+
         // 显式指定 tag 过滤 → 强制走 MeiliSearch
         if (StringUtils.isNotBlank(tags)) {
             FileObjectWebVO result = meiliSearchQuery(pageNumber, pageSize, search, tags);
@@ -98,6 +104,12 @@ public class WebUIApiController {
             if (meiliResult != null && meiliResult.getTotal() > 0) {
                 return meiliResult;
             }
+        }
+
+        // 默认查询也优先走 MeiliSearch，支持分布式下各节点仅展示本地数据
+        FileObjectWebVO meiliResult = meiliSearchQuery(pageNumber, pageSize, null, null);
+        if (meiliResult != null && meiliResult.getTotal() > 0) {
+            return meiliResult;
         }
 
         return context.queryByOffset(pageNumber, pageSize, search);
@@ -168,6 +180,8 @@ public class WebUIApiController {
         if (remoteIp == null) remoteIp = httpServletRequest.getRemoteAddr();
         log.info("remove: {} from {}", uuid, remoteIp);
         deleteAtlasChildren(uuid);
+        meiliSearchService.deleteDocumentFromIndex("full-text", uuid);
+        meiliSearchService.deleteDocumentFromIndex("image-host", uuid);
         context.remove(uuid);
         etcdService.delFileAndReplicas(uuid);
         return Boolean.TRUE;
@@ -186,6 +200,8 @@ public class WebUIApiController {
                 try {
                     String uuid = (String) r;
                     deleteAtlasChildren(uuid);
+                    meiliSearchService.deleteDocumentFromIndex("full-text", uuid);
+                    meiliSearchService.deleteDocumentFromIndex("image-host", uuid);
                     context.remove(uuid);
                     etcdService.delFileAndReplicas(uuid);
                 } catch (Exception e) {

@@ -1,5 +1,6 @@
 package cc.ginpika.bootfs.service;
 
+import com.alibaba.fastjson2.JSONArray;
 import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.core.Context;
 import cc.ginpika.bootfs.core.io.ContextIO;
@@ -9,6 +10,8 @@ import cc.ginpika.bootfs.domain.result.SimpleTransferResult;
 import cc.ginpika.bootfs.domain.result.TransferResult;
 import cc.ginpika.bootfs.service.etcd.EtcdService;
 import cc.ginpika.bootfs.core.io.HttpFileTransferClient;
+import cc.ginpika.bootfs.service.meilisearch.FullTextDocument;
+import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -16,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.annotation.Resource;
 import java.io.*;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 
 @Slf4j
 @Service
@@ -26,6 +30,8 @@ public class FileTransferService {
     TfsConfig tfsConfig;
     @Resource
     EtcdService etcdService;
+    @Resource
+    MeiliSearchService meiliSearchService;
 
     public TransferResult accept(MultipartFile file, String originalFilename, String originalFileUuid) {
         try {
@@ -37,11 +43,30 @@ public class FileTransferService {
             context.record(fileObject, uuid);
             etcdService.putFileReplica(originalFileUuid, uuid, context.buildUrl(uuid),
                     context.buildMetaJson4Replica(file, originalFilename, originalFileUuid));
+            // 索引到本地 MeiliSearch full_text，支持分布式下各节点仅展示本地数据
+            indexToMeiliSearch(fileObject);
         } catch (Exception e) {
             log.error("FileTransferService error", e);
             SimpleTransferResult.builder().succeed(false).build();
         }
         return SimpleTransferResult.builder().succeed(true).build();
+    }
+
+    private void indexToMeiliSearch(FileObject fileObject) {
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            FullTextDocument doc = FullTextDocument.builder()
+                    .uuid(fileObject.getUuid())
+                    .title(fileObject.getFileName())
+                    .poster(context.buildThumbUrl(fileObject.getUuid()))
+                    .tags(new JSONArray())
+                    .createdAt(now)
+                    .updatedAt(now)
+                    .build();
+            meiliSearchService.addToFullText(doc);
+        } catch (Exception e) {
+            log.warn("索引副本文件到 MeiliSearch full_text 失败, uuid={}: {}", fileObject.getUuid(), e.getMessage());
+        }
     }
 
     @SuppressWarnings("all")

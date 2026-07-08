@@ -862,8 +862,8 @@ function createWaterfallCard(file) {
                         </div>
                     </div>
                 ` : isImageFile ? `
-                    ${file.thumbAvailable === '1' ? `
-                        <img src="/thumb/${file.uuid}"
+                    ${hasThumb(file) ? `
+                        <img src="${getThumbUrl(file)}"
                              alt="${file.fileName}"
                              class="w-full h-auto object-cover"
                              loading="lazy"
@@ -877,14 +877,14 @@ function createWaterfallCard(file) {
                     `}
                 ` : isVideoFile ? `
                     <div class="relative w-full aspect-video video-card-container" data-video-uuid="${file.uuid}" style="background-color: var(--color-bg-tertiary);">
-                        ${file.thumbAvailable === '1' ? `
-                            <img src="/thumb/${file.uuid}" 
+                        ${hasThumb(file) ? `
+                            <img src="${getThumbUrl(file)}" 
                                  alt="${file.fileName}" 
                                  class="w-full h-full object-cover video-thumbnail"
                                  loading="lazy"
                                  onerror="this.style.display='none';this.parentElement.querySelector('.video-placeholder').style.display='flex';">
                         ` : ''}
-                        <div class="video-placeholder w-full h-full items-center justify-center ${file.thumbAvailable === '1' ? 'hidden' : 'flex'}" style="background-color: var(--color-bg-tertiary);">
+                        <div class="video-placeholder w-full h-full items-center justify-center ${hasThumb(file) ? 'hidden' : 'flex'}" style="background-color: var(--color-bg-tertiary);">
                             <svg class="w-16 h-16 theme-page-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -942,8 +942,8 @@ function createGridCard(file) {
             <!-- Thumbnail -->
             <div class="card-preview-area relative aspect-square overflow-hidden" style="background-color: var(--color-bg-tertiary);">
                 ${isImageFile ? `
-                    ${file.thumbAvailable === '1' ? `
-                        <img src="/thumb/${file.uuid}"
+                    ${hasThumb(file) ? `
+                        <img src="${getThumbUrl(file)}"
                              alt="${file.fileName}"
                              class="w-full h-full object-cover zoom-image"
                              onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
@@ -1059,9 +1059,9 @@ function createListRow(file) {
                 <div class="flex items-center">
                     <div class="flex-shrink-0 h-10 w-10">
                         ${isImageFile ? `
-                            ${file.thumbAvailable === '1' ? `
+                            ${hasThumb(file) ? `
                                 <img class="h-10 w-10 theme-rounded-lg object-cover"
-                                     src="/thumb/${file.uuid}"
+                                     src="${getThumbUrl(file)}"
                                      alt=""
                                      onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 24 22%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
                             ` : `
@@ -2565,6 +2565,17 @@ function isVideo(file) {
 
 function isAlbum(file) {
     return file && file.albumAvailable === '1';
+}
+
+// 返回缩略图 URL：优先使用 thumbUrl（集群下指向上传节点），否则回退到本地 /thumb/{uuid}
+function getThumbUrl(file) {
+    if (file && file.thumbUrl) return file.thumbUrl;
+    return '/thumb/' + file.uuid;
+}
+
+// 判断是否有缩略图可用：thumbUrl 存在或本地 thumbAvailable === '1'
+function hasThumb(file) {
+    return !!(file && (file.thumbUrl || file.thumbAvailable === '1'));
 }
 
 function isAudio(file) {

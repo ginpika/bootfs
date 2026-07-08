@@ -6,6 +6,8 @@ import cc.ginpika.bootfs.domain.dto.FileObject;
 import cc.ginpika.bootfs.metrics.AppStartupTracker;
 import cc.ginpika.bootfs.metrics.RequestStatsService;
 import cc.ginpika.bootfs.service.etcd.EtcdService;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.ObjectProvider;
@@ -15,7 +17,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.File;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.*;
 
 @Slf4j
 @RestController
@@ -28,6 +36,12 @@ public class DashboardApiController {
     private final ObjectProvider<EtcdService> etcdServiceProvider;
     private final RequestStatsService requestStatsService;
     private final AppStartupTracker appStartupTracker;
+
+    private static final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(3))
+            .build();
+
+    private static final ExecutorService clusterFetchExecutor = Executors.newFixedThreadPool(8);
 
     public DashboardApiController(Context context, TfsConfig tfsConfig,
                                   ObjectProvider<EtcdService> etcdServiceProvider,
@@ -54,17 +68,221 @@ public class DashboardApiController {
         return result;
     }
 
+    /**
+     * 本节点统计端点，供集群内其他节点调用
+     */
+    @GetMapping("/node-stats")
+    public Map<String, Object> nodeStats() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("nodeId", context.uuid);
+            data.put("disk", buildDiskStats());
+            data.put("resources", buildResourceStats());
+            data.put("fileTypes", buildFileTypeStats());
+            result.put("succeed", true);
+            result.put("data", data);
+        } catch (Exception e) {
+            log.error("获取本节点统计失败", e);
+            result.put("succeed", false);
+            result.put("message", e.getMessage());
+        }
+        return result;
+    }
+
     private Map<String, Object> buildStats() {
         Map<String, Object> data = new LinkedHashMap<>();
 
-        data.put("disk", buildDiskStats());
-        data.put("resources", buildResourceStats());
-        data.put("fileTypes", buildFileTypeStats());
+        // 获取集群所有节点 URL
+        List<NodeInfo> clusterNodes = getClusterNodes();
+
+        // 磁盘: 本地 + 集群所有节点
+        Map<String, Object> localDisk = buildDiskStats();
+        localDisk.put("nodeId", context.uuid);
+        data.put("disk", localDisk);
+
+        List<Map<String, Object>> allDisks = new ArrayList<>();
+        allDisks.add(localDisk);
+        // 并行拉取其他节点的统计数据
+        Map<String, Map<String, Object>> remoteStats = fetchAllRemoteNodeStats(clusterNodes);
+        for (Map.Entry<String, Map<String, Object>> entry : remoteStats.entrySet()) {
+            Map<String, Object> remoteData = entry.getValue();
+            if (remoteData != null && remoteData.containsKey("disk")) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> remoteDisk = (Map<String, Object>) remoteData.get("disk");
+                // 将 nodeId 注入磁盘信息中，供前端展示
+                remoteDisk.put("nodeId", remoteData.getOrDefault("nodeId", entry.getKey()));
+                allDisks.add(remoteDisk);
+            }
+        }
+        data.put("disks", allDisks);
+
+        // 资源: 聚合本节点 + 远程节点
+        Map<String, Object> resources = buildResourceStats();
+        for (Map.Entry<String, Map<String, Object>> entry : remoteStats.entrySet()) {
+            Map<String, Object> remoteData = entry.getValue();
+            if (remoteData != null && remoteData.containsKey("resources")) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> rr = (Map<String, Object>) remoteData.get("resources");
+                resources.put("total", ((Number) resources.get("total")).intValue() + ((Number) rr.get("total")).intValue());
+                resources.put("mainCount", ((Number) resources.get("mainCount")).intValue() + ((Number) rr.get("mainCount")).intValue());
+                resources.put("replicaCount", ((Number) resources.get("replicaCount")).intValue() + ((Number) rr.get("replicaCount")).intValue());
+                resources.put("totalSizeBytes", ((Number) resources.get("totalSizeBytes")).longValue() + ((Number) rr.get("totalSizeBytes")).longValue());
+            }
+        }
+        // 如果集群模式且远程节点可用，把本节点的主资源数修正为 etcd 中的计数
+        if (!remoteStats.isEmpty()) {
+            int etcdMainCount = getEtcdMainResourceCount();
+            if (etcdMainCount > 0) {
+                resources.put("mainCount", etcdMainCount);
+            }
+        }
+        data.put("resources", resources);
+
+        // 文件类型: 聚合
+        List<Map<String, Object>> fileTypes = buildFileTypeStats();
+        for (Map.Entry<String, Map<String, Object>> entry : remoteStats.entrySet()) {
+            Map<String, Object> remoteData = entry.getValue();
+            if (remoteData != null && remoteData.containsKey("fileTypes")) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> rf = (List<Map<String, Object>>) remoteData.get("fileTypes");
+                mergeFileTypes(fileTypes, rf);
+            }
+        }
+        data.put("fileTypes", fileTypes);
+
+        // 集群信息
         data.put("cluster", buildClusterStats());
+
+        // 流量和请求统计（仅本地）
         data.putAll(requestStatsService.buildStats());
         data.put("appStartTime", appStartupTracker.getReadyTime());
         return data;
     }
+
+    // ---- 集群节点信息 ----
+
+    private static class NodeInfo {
+        final String nodeId;
+        final String url;
+
+        NodeInfo(String nodeId, String url) {
+            this.nodeId = nodeId;
+            this.url = url;
+        }
+    }
+
+    private List<NodeInfo> getClusterNodes() {
+        List<NodeInfo> nodes = new ArrayList<>();
+        try {
+            EtcdService etcdService = etcdServiceProvider.getIfAvailable();
+            if (etcdService != null) {
+                Map<String, String> nodesWithKeys = etcdService.getNodesWithKeys();
+                if (nodesWithKeys != null) {
+                    for (Map.Entry<String, String> entry : nodesWithKeys.entrySet()) {
+                        String uuid = entry.getKey();
+                        String url = entry.getValue();
+                        if (!context.uuid.equals(uuid)) {
+                            nodes.add(new NodeInfo(uuid, url));
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("获取集群节点列表失败: {}", e.getMessage());
+        }
+        return nodes;
+    }
+
+    // ---- 远程节点数据拉取 ----
+
+    private Map<String, Map<String, Object>> fetchAllRemoteNodeStats(List<NodeInfo> nodes) {
+        if (nodes.isEmpty()) return Collections.emptyMap();
+
+        Map<String, Map<String, Object>> results = new ConcurrentHashMap<>();
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+
+        for (NodeInfo node : nodes) {
+            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                try {
+                    Map<String, Object> stats = fetchNodeStats(node.url);
+                    if (stats != null) {
+                        results.put(node.nodeId, stats);
+                    }
+                } catch (Exception e) {
+                    log.warn("拉取节点 {} ({}) 统计数据失败: {}", node.nodeId, node.url, e.getMessage());
+                }
+            }, clusterFetchExecutor);
+            futures.add(future);
+        }
+
+        try {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .get(5, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            log.warn("等待远程节点统计数据超时或失败: {}", e.getMessage());
+        }
+        return results;
+    }
+
+    private Map<String, Object> fetchNodeStats(String nodeUrl) {
+        try {
+            String apiUrl = nodeUrl.endsWith("/") ? nodeUrl + "api/dashboard/node-stats"
+                    : nodeUrl + "/api/dashboard/node-stats";
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(apiUrl))
+                    .timeout(Duration.ofSeconds(4))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                JSONObject json = JSON.parseObject(response.body());
+                if (json.getBooleanValue("succeed")) {
+                    return json.getJSONObject("data");
+                }
+            }
+        } catch (Exception e) {
+            log.warn("请求节点 {} 失败: {}", nodeUrl, e.getMessage());
+        }
+        return null;
+    }
+
+    // ---- 文件类型聚合 ----
+
+    private void mergeFileTypes(List<Map<String, Object>> target, List<Map<String, Object>> source) {
+        for (Map<String, Object> src : source) {
+            String category = (String) src.get("category");
+            int srcCount = ((Number) src.get("count")).intValue();
+            boolean found = false;
+            for (Map<String, Object> tgt : target) {
+                if (category.equals(tgt.get("category"))) {
+                    tgt.put("count", ((Number) tgt.get("count")).intValue() + srcCount);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                Map<String, Object> newItem = new LinkedHashMap<>();
+                newItem.put("category", category);
+                newItem.put("count", srcCount);
+                target.add(newItem);
+            }
+        }
+    }
+
+    // ---- etcd 主资源数 ----
+
+    private int getEtcdMainResourceCount() {
+        try {
+            EtcdService etcdService = etcdServiceProvider.getIfAvailable();
+            if (etcdService != null) {
+                return etcdService.getMainResourceCount();
+            }
+        } catch (Exception ignored) {}
+        return 0;
+    }
+
+    // ---- 本节点统计构建 ----
 
     private Map<String, Object> buildDiskStats() {
         Map<String, Object> disk = new LinkedHashMap<>();

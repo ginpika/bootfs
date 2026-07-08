@@ -36,10 +36,10 @@ function hideError() {
     document.getElementById('errorBanner').classList.add('hidden');
 }
 
-function renderDisk(disk) {
+function renderDisk(disk, disks) {
+    // 当前节点汇总
     document.getElementById('diskUsed').textContent = formatBytes(disk.usedBytes);
     document.getElementById('diskTotal').textContent = formatBytes(disk.totalBytes);
-    document.getElementById('diskFree').textContent = formatBytes(disk.usableBytes);
     document.getElementById('diskPercent').textContent = disk.usagePercent + '%';
     var bar = document.getElementById('diskBar');
     bar.style.width = Math.min(100, disk.usagePercent) + '%';
@@ -50,9 +50,33 @@ function renderDisk(disk) {
     } else {
         bar.style.backgroundColor = 'var(--color-accent-primary)';
     }
-    var pathEl = document.getElementById('diskPath');
-    pathEl.textContent = disk.path || '--';
-    pathEl.title = disk.path || '--';
+
+    // 各节点磁盘详情
+    var list = document.getElementById('diskNodeList');
+    if (!disks || disks.length === 0) {
+        list.innerHTML = '<p class="text-xs" style="color: var(--color-text-muted);">暂无节点数据</p>';
+        return;
+    }
+    list.innerHTML = disks.map(function (d) {
+        var nodeId = d.nodeId || '--';
+        var shortId = nodeId.length > 12 ? nodeId.substring(0, 12) + '...' : nodeId;
+        var pct = d.usagePercent || 0;
+        var barColor = pct >= 90 ? 'var(--color-danger)' : (pct >= 75 ? 'var(--color-warning)' : 'var(--color-accent-primary)');
+        var path = d.path || '--';
+        return '<div>' +
+            '<div class="flex items-center justify-between mb-0.5">' +
+                '<span class="text-xs font-mono truncate mr-2" style="color: var(--color-text-primary); max-width: 100px;" title="' + escapeHtml(nodeId) + '">' + escapeHtml(shortId) + '</span>' +
+                '<span class="text-xs font-medium" style="color: var(--color-text-secondary);">' + pct + '%</span>' +
+            '</div>' +
+            '<div class="w-full h-1.5 rounded-full overflow-hidden mb-0.5" style="background-color: var(--color-bg-tertiary);">' +
+                '<div class="h-full rounded-full transition-all duration-500" style="width: ' + Math.min(100, pct) + '%; background-color: ' + barColor + ';"></div>' +
+            '</div>' +
+            '<div class="flex justify-between text-xs" style="color: var(--color-text-muted);">' +
+                '<span>' + formatBytes(d.usedBytes) + ' / ' + formatBytes(d.totalBytes) + '</span>' +
+                '<span class="font-mono truncate ml-2" style="max-width: 80px;" title="' + escapeHtml(path) + '">' + escapeHtml(path.split('/').pop() || path) + '</span>' +
+            '</div>' +
+        '</div>';
+    }).join('');
 }
 
 function renderResources(res) {
@@ -185,7 +209,7 @@ function loadStats() {
                 return;
             }
             var data = res.data;
-            renderDisk(data.disk);
+            renderDisk(data.disk, data.disks);
             renderResources(data.resources);
             renderCluster(data.cluster);
             renderFileTypes(data.fileTypes);

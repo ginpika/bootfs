@@ -114,12 +114,13 @@
                 <!-- Row 1: 4 compact stat cards -->
                 <div class="grid grid-cols-12 gap-3 mb-3">
                     <!-- Disk Usage Card -->
-                    <div class="theme-card theme-rounded-xl theme-shadow p-4 col-span-12 sm:col-span-6 xl:col-span-3">
+                    <div class="theme-card theme-rounded-xl theme-shadow p-4 col-span-12 sm:col-span-6 xl:col-span-3" style="max-height: 380px; overflow-y: auto;">
                         <div class="flex items-center justify-between mb-3">
                             <h2 class="text-sm font-semibold font-display" style="color: var(--color-text-primary);">磁盘使用</h2>
                             <svg class="w-4 h-4" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7M4 7c0-2 1-3 3-3h10c2 0 3 1 3 3M4 7h16M9 11h6"></path></svg>
                         </div>
-                        <div class="mb-3">
+                        <!-- 当前节点磁盘汇总 -->
+                        <div class="mb-3 pb-3 border-b" style="border-color: var(--color-border-primary);">
                             <div class="flex items-baseline gap-2 mb-2">
                                 <span id="diskUsed" class="text-xl font-bold font-display" style="color: var(--color-accent-primary);">--</span>
                                 <span class="text-xs" style="color: var(--color-text-muted);">/ <span id="diskTotal">--</span></span>
@@ -129,14 +130,11 @@
                                 <div id="diskBar" class="h-full rounded-full transition-all duration-500" style="width: 0%; background-color: var(--color-accent-primary);"></div>
                             </div>
                         </div>
-                        <div class="grid grid-cols-2 gap-2 text-xs">
-                            <div>
-                                <p style="color: var(--color-text-muted);">可用空间</p>
-                                <p id="diskFree" class="font-medium" style="color: var(--color-text-primary);">--</p>
-                            </div>
-                            <div>
-                                <p style="color: var(--color-text-muted);">数据目录</p>
-                                <p id="diskPath" class="font-mono truncate" style="color: var(--color-text-primary);" title="--">--</p>
+                        <!-- 各节点磁盘详情 -->
+                        <div>
+                            <p class="text-xs mb-2 font-medium" style="color: var(--color-text-muted);">各节点磁盘</p>
+                            <div id="diskNodeList" class="space-y-2">
+                                <p class="text-xs" style="color: var(--color-text-muted);">加载中...</p>
                             </div>
                         </div>
                     </div>

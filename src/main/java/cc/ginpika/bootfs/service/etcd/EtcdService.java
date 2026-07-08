@@ -21,7 +21,9 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -141,6 +143,29 @@ public class EtcdService {
 
     public List<String> getAllNodes() {
         return this.nodes;
+    }
+
+    /**
+     * 获取集群所有节点的 UUID -> URL 映射
+     */
+    public Map<String, String> getNodesWithKeys() {
+        Map<String, String> result = new LinkedHashMap<>();
+        if (client == null) return result;
+        try {
+            client.getKVClient()
+                    .get(ByteSequence.from("/cluster/node/".getBytes()), GetOption.builder()
+                            .isPrefix(true).build())
+                    .join()
+                    .getKvs().forEach(kv -> {
+                        String key = kv.getKey().toString();
+                        String uuid = key.substring("/cluster/node/".length());
+                        String url = kv.getValue().toString();
+                        result.put(uuid, url);
+                    });
+        } catch (Exception e) {
+            log.warn("获取集群节点映射失败: {}", e.getMessage());
+        }
+        return result;
     }
 
     public void putFile(String fileId, String localNodeUrl,  String metaJson) {

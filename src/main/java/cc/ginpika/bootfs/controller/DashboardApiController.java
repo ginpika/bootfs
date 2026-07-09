@@ -95,30 +95,35 @@ public class DashboardApiController {
 
         // 获取集群所有节点 URL
         List<NodeInfo> clusterNodes = getClusterNodes();
-
-        // 磁盘: 本地 + 集群所有节点
-        Map<String, Object> localDisk = buildDiskStats();
-        localDisk.put("nodeId", context.uuid);
-        data.put("disk", localDisk);
-
-        List<Map<String, Object>> allDisks = new ArrayList<>();
-        allDisks.add(localDisk);
         // 并行拉取其他节点的统计数据
         Map<String, Map<String, Object>> remoteStats = fetchAllRemoteNodeStats(clusterNodes);
+
+        // 本节点统计（构建一次，复用于节点列表与聚合，避免重复计算）
+        Map<String, Object> localDisk = buildDiskStats();
+        localDisk.put("nodeId", context.uuid);
+        Map<String, Object> localResources = buildResourceStats();
+        List<Map<String, Object>> localFileTypes = buildFileTypeStats();
+
+        // 节点列表（逐节点详情：当前节点 + 全部远程节点）
+        data.put("nodes", buildNodesList(localDisk, localResources, localFileTypes, remoteStats));
+
+        // 聚合磁盘
+        data.put("disk", localDisk);
+        List<Map<String, Object>> allDisks = new ArrayList<>();
+        allDisks.add(localDisk);
         for (Map.Entry<String, Map<String, Object>> entry : remoteStats.entrySet()) {
             Map<String, Object> remoteData = entry.getValue();
             if (remoteData != null && remoteData.containsKey("disk")) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> remoteDisk = (Map<String, Object>) remoteData.get("disk");
-                // 将 nodeId 注入磁盘信息中，供前端展示
                 remoteDisk.put("nodeId", remoteData.getOrDefault("nodeId", entry.getKey()));
                 allDisks.add(remoteDisk);
             }
         }
         data.put("disks", allDisks);
 
-        // 资源: 聚合本节点 + 远程节点
-        Map<String, Object> resources = buildResourceStats();
+        // 资源: 聚合本节点 + 远程节点（用副本聚合，避免污染节点列表中的本节点数据）
+        Map<String, Object> resources = new LinkedHashMap<>(localResources);
         for (Map.Entry<String, Map<String, Object>> entry : remoteStats.entrySet()) {
             Map<String, Object> remoteData = entry.getValue();
             if (remoteData != null && remoteData.containsKey("resources")) {
@@ -139,8 +144,11 @@ public class DashboardApiController {
         }
         data.put("resources", resources);
 
-        // 文件类型: 聚合
-        List<Map<String, Object>> fileTypes = buildFileTypeStats();
+        // 文件类型: 聚合（深拷贝，避免 mergeFileTypes 污染节点列表中的本节点数据）
+        List<Map<String, Object>> fileTypes = new ArrayList<>();
+        for (Map<String, Object> ft : localFileTypes) {
+            fileTypes.add(new LinkedHashMap<>(ft));
+        }
         for (Map.Entry<String, Map<String, Object>> entry : remoteStats.entrySet()) {
             Map<String, Object> remoteData = entry.getValue();
             if (remoteData != null && remoteData.containsKey("fileTypes")) {
@@ -158,6 +166,64 @@ public class DashboardApiController {
         data.putAll(requestStatsService.buildStats());
         data.put("appStartTime", appStartupTracker.getReadyTime());
         return data;
+    }
+
+    /**
+     * 构建逐节点详情列表：当前节点 + 全部远程节点（含离线节点）。
+     * 当前节点用本地统计；远程节点从已拉取的 remoteStats 取数据，取不到则标记为离线。
+     */
+    private List<Map<String, Object>> buildNodesList(Map<String, Object> localDisk,
+                                                     Map<String, Object> localResources,
+                                                     List<Map<String, Object>> localFileTypes,
+                                                     Map<String, Map<String, Object>> remoteStats) {
+        List<Map<String, Object>> nodes = new ArrayList<>();
+
+        // 当前节点
+        Map<String, Object> current = new LinkedHashMap<>();
+        current.put("nodeId", context.uuid);
+        current.put("isCurrent", true);
+        current.put("online", true);
+        current.put("url", tfsConfig.getWebEntrypoint());
+        current.put("disk", localDisk);
+        current.put("resources", localResources);
+        current.put("fileTypes", localFileTypes);
+        nodes.add(current);
+
+        // 远程节点（来自 etcd 全量节点列表，含离线节点）
+        Map<String, String> allNodes = Collections.emptyMap();
+        try {
+            EtcdService etcdService = etcdServiceProvider.getIfAvailable();
+            if (etcdService != null) {
+                Map<String, String> nwk = etcdService.getNodesWithKeys();
+                if (nwk != null) allNodes = nwk;
+            }
+        } catch (Exception e) {
+            log.warn("获取集群节点列表失败: {}", e.getMessage());
+        }
+
+        for (Map.Entry<String, String> entry : allNodes.entrySet()) {
+            String uuid = entry.getKey();
+            String url = entry.getValue();
+            if (context.uuid.equals(uuid)) continue;
+
+            Map<String, Object> node = new LinkedHashMap<>();
+            node.put("nodeId", uuid);
+            node.put("isCurrent", false);
+            node.put("url", url);
+
+            Map<String, Object> remoteData = remoteStats.get(uuid);
+            if (remoteData != null) {
+                node.put("online", true);
+                node.put("disk", remoteData.get("disk"));
+                node.put("resources", remoteData.get("resources"));
+                node.put("fileTypes", remoteData.get("fileTypes"));
+            } else {
+                node.put("online", false);
+            }
+            nodes.add(node);
+        }
+
+        return nodes;
     }
 
     // ---- 集群节点信息 ----

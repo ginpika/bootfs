@@ -1,30 +1,73 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>系统仪表盘 - TFS</title>
     <style>
-        :root, :root.theme-light { --color-bg-primary:#f9fafb; --color-accent-primary:#0ea5e9; --color-text-secondary:#374151; }
-        :root.theme-dark { --color-bg-primary:#0a0a0a; --color-accent-primary:#00d98a; --color-text-secondary:#a8a8a8; }
-        :root.theme-sakura { --color-bg-primary:#fef2f2; --color-accent-primary:#ec4899; --color-text-secondary:#9d174d; }
-        :root.theme-starry-night { --color-bg-primary:#0f0f23; --color-accent-primary:#e94560; --color-text-secondary:#c4c4c4; }
-        :root.theme-forest { --color-bg-primary:#f0fdf4; --color-accent-primary:#16a34a; --color-text-secondary:#166534; }
-        :root.theme-ocean { --color-bg-primary:#0c1929; --color-accent-primary:#29b6f6; --color-text-secondary:#bbdefb; }
-        :root.theme-sunset { --color-bg-primary:#fffbeb; --color-accent-primary:#f59e0b; --color-text-secondary:#92400e; }
-        :root.theme-lavender { --color-bg-primary:#faf5ff; --color-accent-primary:#a855f7; --color-text-secondary:#6b21a8; }
+        :root,
+        :root.theme-light {
+            --color-bg-primary: #f9fafb;
+            --color-accent-primary: #0ea5e9;
+            --color-text-secondary: #374151;
+        }
+
+        :root.theme-dark {
+            --color-bg-primary: #0a0a0a;
+            --color-accent-primary: #00d98a;
+            --color-text-secondary: #a8a8a8;
+        }
+
+        :root.theme-sakura {
+            --color-bg-primary: #fef2f2;
+            --color-accent-primary: #ec4899;
+            --color-text-secondary: #9d174d;
+        }
+
+        :root.theme-starry-night {
+            --color-bg-primary: #0f0f23;
+            --color-accent-primary: #e94560;
+            --color-text-secondary: #c4c4c4;
+        }
+
+        :root.theme-forest {
+            --color-bg-primary: #f0fdf4;
+            --color-accent-primary: #16a34a;
+            --color-text-secondary: #166534;
+        }
+
+        :root.theme-ocean {
+            --color-bg-primary: #0c1929;
+            --color-accent-primary: #29b6f6;
+            --color-text-secondary: #bbdefb;
+        }
+
+        :root.theme-sunset {
+            --color-bg-primary: #fffbeb;
+            --color-accent-primary: #f59e0b;
+            --color-text-secondary: #92400e;
+        }
+
+        :root.theme-lavender {
+            --color-bg-primary: #faf5ff;
+            --color-accent-primary: #a855f7;
+            --color-text-secondary: #6b21a8;
+        }
     </style>
     <script>
         (function () {
             try {
                 var t = localStorage.getItem('tfs-theme') || 'light';
                 document.documentElement.classList.add('theme-' + t);
-            } catch (e) {}
+            } catch (e) { }
         })();
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap"
+        rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/admin-styles.css">
     <link rel="stylesheet" href="/themes.css">
@@ -53,50 +96,101 @@
         }
     </script>
 </head>
+
 <body class="overflow-hidden font-body" style="background-color: var(--color-bg-primary);">
     <div class="flex h-screen overflow-hidden">
         <div class="flex-1 flex flex-col overflow-hidden">
             <!-- Header -->
-            <header class="shadow-sm border-b flex-shrink-0 z-40" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+            <header class="shadow-sm border-b flex-shrink-0 z-40"
+                style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
                 <div class="px-4 sm:px-6 lg:px-8">
                     <div class="flex items-center justify-between h-16">
                         <div class="flex items-center gap-4">
                             <a href="/" class="flex items-center gap-2" style="color: var(--color-text-primary);">
-                                <svg class="w-6 h-6" style="color: var(--color-accent-primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                                <svg class="w-6 h-6" style="color: var(--color-accent-primary);" fill="none"
+                                    stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
                                 </svg>
                             </a>
-                            <h1 class="text-lg font-semibold font-display" style="color: var(--color-text-primary);">系统仪表盘</h1>
-                            <div class="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full" style="background-color: var(--color-bg-tertiary);">
-                                <span class="w-2 h-2 rounded-full animate-pulse" style="background-color: var(--color-success);"></span>
-                                <span id="uptimeText" class="text-xs font-medium" style="color: var(--color-text-secondary);">运行中 · --</span>
+                            <h1 class="text-lg font-semibold font-display" style="color: var(--color-text-primary);">
+                                系统仪表盘</h1>
+                            <div class="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full"
+                                style="background-color: var(--color-bg-tertiary);">
+                                <span class="w-2 h-2 rounded-full animate-pulse"
+                                    style="background-color: var(--color-success);"></span>
+                                <span id="uptimeText" class="text-xs font-medium"
+                                    style="color: var(--color-text-secondary);">运行中 · --</span>
                             </div>
                         </div>
                         <div class="flex items-center space-x-3">
-                            <button onclick="loadStats()" class="p-2 rounded-lg" style="background-color: var(--color-bg-tertiary);" title="刷新">
-                                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--color-text-primary);">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            <button onclick="loadStats()" class="p-2 rounded-lg"
+                                style="background-color: var(--color-bg-tertiary);" title="刷新">
+                                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" style="color: var(--color-text-primary);">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                                    </path>
                                 </svg>
                             </button>
                             <div class="relative">
-                                <button id="themeMenuBtn" class="p-2 rounded-lg" style="background-color: var(--color-bg-tertiary);" title="主题">
-                                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--color-text-primary);">
-                                        <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.8 0 1.5-.4 1.9-1.1.4-.6.4-1.3.1-1.9-.3-.6-.9-1-1.6-1.1-.5-.1-.9-.3-1-.6-.1-.1-.2-.3-.2-.5 0-.6.4-1.1 1-1.3 2-.6 4.5-2.1 5.8-4.2C19.3 8.8 20 6.7 20 5c0-1.7-1.3-3-3-3h-5zM6.5 13c-.8 0-1.5-.7-1.5-1.5S5.7 10 6.5 10s1.5.7 1.5 1.5S7.3 13 6.5 13zm3-4c-.8 0-1.5-.7-1.5-1.5S8.7 6 9.5 6s1.5.7 1.5 1.5S10.3 9 9.5 9zm5 0c-.8 0-1.5-.7-1.5-1.5S13.7 6 14.5 6s1.5.7 1.5 1.5S15.3 9 14.5 9z"/>
+                                <button id="themeMenuBtn" class="p-2 rounded-lg"
+                                    style="background-color: var(--color-bg-tertiary);" title="主题">
+                                    <svg style="color: var(--color-text-primary);" xmlns="http://www.w3.org/2000/svg"
+                                        fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
+                                        class="size-6">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.4 2.245 4.5 4.5 0 0 0 8.4-2.245c0-.399-.078-.78-.22-1.128Zm0 0a15.998 15.998 0 0 0 3.388-1.62m-5.043-.025a15.994 15.994 0 0 1 1.622-3.395m3.42 3.42a15.995 15.995 0 0 0 4.764-4.648l3.876-5.814a1.151 1.151 0 0 0-1.597-1.597L14.146 6.32a15.996 15.996 0 0 0-4.649 4.763m3.42 3.42a6.776 6.776 0 0 0-3.42-3.42" />
                                     </svg>
                                 </button>
-                                <div id="themeDropdown" class="hidden absolute right-0 mt-2 w-56 rounded-xl shadow-lg border py-2 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+                                <div id="themeDropdown"
+                                    class="hidden absolute right-0 mt-2 w-56 rounded-xl shadow-lg border py-2 z-50"
+                                    style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
                                     <div class="px-3 py-2 border-b" style="border-color: var(--color-border-primary);">
-                                        <p class="text-sm font-medium" style="color: var(--color-text-primary);">选择主题</p>
+                                        <p class="text-sm font-medium" style="color: var(--color-text-primary);">选择主题
+                                        </p>
                                     </div>
                                     <div class="py-1">
-                                        <button onclick="setTheme('light')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #0ea5e9;"></span>浅色模式</button>
-                                        <button onclick="setTheme('dark')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #00d98a;"></span>深色模式</button>
-                                        <button onclick="setTheme('sakura')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #ec4899;"></span>樱花</button>
-                                        <button onclick="setTheme('starry-night')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #e94560;"></span>星空夜景</button>
-                                        <button onclick="setTheme('forest')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #16a34a;"></span>森林</button>
-                                        <button onclick="setTheme('ocean')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #29b6f6;"></span>海洋</button>
-                                        <button onclick="setTheme('sunset')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #f59e0b;"></span>日落</button>
-                                        <button onclick="setTheme('lavender')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #a855f7;"></span>薰衣草</button>
+                                        <button onclick="setTheme('light')"
+                                            class="w-full flex items-center px-3 py-2 text-sm"
+                                            style="color: var(--color-text-secondary);"><span
+                                                class="w-4 h-4 rounded-full mr-3"
+                                                style="background-color: #0ea5e9;"></span>浅色模式</button>
+                                        <button onclick="setTheme('dark')"
+                                            class="w-full flex items-center px-3 py-2 text-sm"
+                                            style="color: var(--color-text-secondary);"><span
+                                                class="w-4 h-4 rounded-full mr-3"
+                                                style="background-color: #00d98a;"></span>深色模式</button>
+                                        <button onclick="setTheme('sakura')"
+                                            class="w-full flex items-center px-3 py-2 text-sm"
+                                            style="color: var(--color-text-secondary);"><span
+                                                class="w-4 h-4 rounded-full mr-3"
+                                                style="background-color: #ec4899;"></span>樱花</button>
+                                        <button onclick="setTheme('starry-night')"
+                                            class="w-full flex items-center px-3 py-2 text-sm"
+                                            style="color: var(--color-text-secondary);"><span
+                                                class="w-4 h-4 rounded-full mr-3"
+                                                style="background-color: #e94560;"></span>星空夜景</button>
+                                        <button onclick="setTheme('forest')"
+                                            class="w-full flex items-center px-3 py-2 text-sm"
+                                            style="color: var(--color-text-secondary);"><span
+                                                class="w-4 h-4 rounded-full mr-3"
+                                                style="background-color: #16a34a;"></span>森林</button>
+                                        <button onclick="setTheme('ocean')"
+                                            class="w-full flex items-center px-3 py-2 text-sm"
+                                            style="color: var(--color-text-secondary);"><span
+                                                class="w-4 h-4 rounded-full mr-3"
+                                                style="background-color: #29b6f6;"></span>海洋</button>
+                                        <button onclick="setTheme('sunset')"
+                                            class="w-full flex items-center px-3 py-2 text-sm"
+                                            style="color: var(--color-text-secondary);"><span
+                                                class="w-4 h-4 rounded-full mr-3"
+                                                style="background-color: #f59e0b;"></span>日落</button>
+                                        <button onclick="setTheme('lavender')"
+                                            class="w-full flex items-center px-3 py-2 text-sm"
+                                            style="color: var(--color-text-secondary);"><span
+                                                class="w-4 h-4 rounded-full mr-3"
+                                                style="background-color: #a855f7;"></span>薰衣草</button>
                                     </div>
                                 </div>
                             </div>
@@ -107,165 +201,119 @@
 
             <!-- Main Content -->
             <main class="flex-1 overflow-y-auto p-4 theme-page-bg">
-                <div id="errorBanner" class="hidden mb-3 theme-card theme-rounded-xl theme-shadow p-3" style="border-left: 4px solid var(--color-danger);">
+                <div id="errorBanner" class="hidden mb-3 theme-card theme-rounded-xl theme-shadow p-3"
+                    style="border-left: 4px solid var(--color-danger);">
                     <p class="text-sm" style="color: var(--color-danger);" id="errorMsg">加载失败</p>
                 </div>
 
-                <!-- Row 1: 4 compact stat cards -->
-                <div class="grid grid-cols-12 gap-3 mb-3">
-                    <!-- Disk Usage Card -->
-                    <div class="theme-card theme-rounded-xl theme-shadow p-4 col-span-12 sm:col-span-6 xl:col-span-3" style="max-height: 380px; overflow-y: auto;">
-                        <div class="flex items-center justify-between mb-3">
-                            <h2 class="text-sm font-semibold font-display" style="color: var(--color-text-primary);">磁盘使用</h2>
-                            <svg class="w-4 h-4" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7M4 7c0-2 1-3 3-3h10c2 0 3 1 3 3M4 7h16M9 11h6"></path></svg>
-                        </div>
-                        <!-- 当前节点磁盘汇总 -->
-                        <div class="mb-3 pb-3 border-b" style="border-color: var(--color-border-primary);">
-                            <div class="flex items-baseline gap-2 mb-2">
-                                <span id="diskUsed" class="text-xl font-bold font-display" style="color: var(--color-accent-primary);">--</span>
-                                <span class="text-xs" style="color: var(--color-text-muted);">/ <span id="diskTotal">--</span></span>
-                                <span id="diskPercent" class="ml-auto text-xs font-medium" style="color: var(--color-text-secondary);">--%</span>
-                            </div>
-                            <div class="w-full h-2 rounded-full overflow-hidden" style="background-color: var(--color-bg-tertiary);">
-                                <div id="diskBar" class="h-full rounded-full transition-all duration-500" style="width: 0%; background-color: var(--color-accent-primary);"></div>
-                            </div>
-                        </div>
-                        <!-- 各节点磁盘详情 -->
-                        <div>
-                            <p class="text-xs mb-2 font-medium" style="color: var(--color-text-muted);">各节点磁盘</p>
-                            <div id="diskNodeList" class="space-y-2">
-                                <p class="text-xs" style="color: var(--color-text-muted);">加载中...</p>
-                            </div>
-                        </div>
+                <!-- Section 1: 节点详情 -->
+                <section class="mb-5">
+                    <h2 class="text-xs font-semibold font-display uppercase tracking-wider mb-3"
+                        style="color: var(--color-text-muted);">节点详情</h2>
+                    <div id="nodesGrid" class="flex flex-wrap gap-4">
+                        <p class="text-sm w-full" style="color: var(--color-text-muted);">加载中...</p>
                     </div>
+                </section>
 
-                    <!-- Resource Overview Card -->
-                    <div class="theme-card theme-rounded-xl theme-shadow p-4 col-span-12 sm:col-span-6 xl:col-span-3">
-                        <div class="flex items-center justify-between mb-3">
-                            <h2 class="text-sm font-semibold font-display" style="color: var(--color-text-primary);">资源概览</h2>
-                            <svg class="w-4 h-4" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7M4 7c0-2 1-3 3-3h10c2 0 3 1 3 3M4 7h16M9 11h6"></path></svg>
+                <!-- Section 3: 本节点流量与请求（bento 非对称） -->
+                <section>
+                    <h2 class="text-xs font-semibold font-display uppercase tracking-wider mb-3"
+                        style="color: var(--color-text-muted);">本节点流量与请求</h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <!-- 左列：24h 图表 + 流量统计 堆叠 -->
+                        <div class="lg:col-span-1 space-y-4">
+                            <div class="theme-card theme-rounded-xl theme-shadow p-4">
+                                <div class="flex items-center justify-between mb-3">
+                                    <h3 class="text-sm font-semibold font-display"
+                                        style="color: var(--color-text-primary);">24 小时请求分析</h3>
+                                    <svg class="w-4 h-4" style="color: var(--color-text-muted);" fill="none"
+                                        stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 mb-3">
+                                    <div class="p-2 rounded-lg" style="background-color: var(--color-bg-tertiary);">
+                                        <p class="text-xs mb-0.5" style="color: var(--color-text-muted);">24h 请求数</p>
+                                        <p id="reqTotal24h" class="text-lg font-bold font-display"
+                                            style="color: var(--color-accent-primary);">--</p>
+                                    </div>
+                                    <div class="p-2 rounded-lg" style="background-color: var(--color-bg-tertiary);">
+                                        <p class="text-xs mb-0.5" style="color: var(--color-text-muted);">24h 流量</p>
+                                        <p id="reqBytes24h" class="text-lg font-bold font-display"
+                                            style="color: var(--color-text-primary);">--</p>
+                                    </div>
+                                </div>
+                                <div id="reqHourlyChart" class="flex items-end gap-0.5 h-24"></div>
+                                <p class="text-xs mt-1.5" style="color: var(--color-text-muted);">每小时请求次数（悬停查看明细）</p>
+                            </div>
+                            <div class="theme-card theme-rounded-xl theme-shadow p-4">
+                                <div class="flex items-center justify-between mb-3">
+                                    <h3 class="text-sm font-semibold font-display"
+                                        style="color: var(--color-text-primary);">流量统计</h3>
+                                    <svg class="w-4 h-4" style="color: var(--color-text-muted);" fill="none"
+                                        stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                                    </svg>
+                                </div>
+                                <div class="flex items-baseline gap-2 mb-3">
+                                    <span id="trafficTotal" class="text-xl font-bold font-display"
+                                        style="color: var(--color-accent-primary);">--</span>
+                                    <span class="text-xs" style="color: var(--color-text-muted);">总流出 · <span
+                                            id="trafficTotalReqs">--</span> 次</span>
+                                </div>
+                                <div id="trafficCategoryList" class="space-y-2"></div>
+                            </div>
                         </div>
-                        <div class="grid grid-cols-2 gap-2">
-                            <div class="p-2 rounded-lg" style="background-color: var(--color-bg-tertiary);">
-                                <p class="text-xs mb-0.5" style="color: var(--color-text-muted);">资源总数</p>
-                                <p id="resTotal" class="text-lg font-bold font-display" style="color: var(--color-text-primary);">--</p>
+                        <!-- 右列：宽幅请求表格 -->
+                        <div class="theme-card theme-rounded-xl theme-shadow p-4 lg:col-span-2">
+                            <div class="flex items-center justify-between mb-3">
+                                <h3 class="text-sm font-semibold font-display"
+                                    style="color: var(--color-text-primary);">最近请求</h3>
+                                <svg class="w-4 h-4" style="color: var(--color-text-muted);" fill="none"
+                                    stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01">
+                                    </path>
+                                </svg>
                             </div>
-                            <div class="p-2 rounded-lg" style="background-color: var(--color-bg-tertiary);">
-                                <p class="text-xs mb-0.5" style="color: var(--color-text-muted);">主资源</p>
-                                <p id="resMain" class="text-lg font-bold font-display" style="color: var(--color-accent-primary);">--</p>
-                            </div>
-                            <div class="p-2 rounded-lg" style="background-color: var(--color-bg-tertiary);">
-                                <p class="text-xs mb-0.5" style="color: var(--color-text-muted);">副本数</p>
-                                <p id="resReplica" class="text-lg font-bold font-display" style="color: var(--color-text-primary);">--</p>
-                            </div>
-                            <div class="p-2 rounded-lg" style="background-color: var(--color-bg-tertiary);">
-                                <p class="text-xs mb-0.5" style="color: var(--color-text-muted);">文件总大小</p>
-                                <p id="resSize" class="text-lg font-bold font-display" style="color: var(--color-text-primary);">--</p>
+                            <div class="overflow-x-auto" style="max-height: 380px; overflow-y: auto;">
+                                <table class="w-full text-xs">
+                                    <thead style="position: sticky; top: 0; z-index: 10;">
+                                        <tr style="background-color: var(--color-bg-tertiary);">
+                                            <th class="px-2 py-1.5 text-left font-medium"
+                                                style="color: var(--color-text-secondary);">时间</th>
+                                            <th class="px-2 py-1.5 text-left font-medium"
+                                                style="color: var(--color-text-secondary);">方法</th>
+                                            <th class="px-2 py-1.5 text-left font-medium"
+                                                style="color: var(--color-text-secondary);">路径</th>
+                                            <th class="px-2 py-1.5 text-left font-medium"
+                                                style="color: var(--color-text-secondary);">类别</th>
+                                            <th class="px-2 py-1.5 text-right font-medium"
+                                                style="color: var(--color-text-secondary);">状态</th>
+                                            <th class="px-2 py-1.5 text-right font-medium"
+                                                style="color: var(--color-text-secondary);">字节</th>
+                                            <th class="px-2 py-1.5 text-right font-medium"
+                                                style="color: var(--color-text-secondary);">耗时</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="recentReqBody">
+                                        <tr>
+                                            <td colspan="7" class="px-2 py-6 text-center"
+                                                style="color: var(--color-text-muted);">加载中...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
-
-                    <!-- Cluster Nodes Card -->
-                    <div class="theme-card theme-rounded-xl theme-shadow p-4 col-span-12 sm:col-span-6 xl:col-span-3">
-                        <div class="flex items-center justify-between mb-3">
-                            <h2 class="text-sm font-semibold font-display" style="color: var(--color-text-primary);">集群节点</h2>
-                            <svg class="w-4 h-4" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path></svg>
-                        </div>
-                        <div class="flex items-baseline gap-2 mb-3">
-                            <span id="nodeCount" class="text-xl font-bold font-display" style="color: var(--color-accent-primary);">--</span>
-                            <span class="text-xs" style="color: var(--color-text-muted);">个节点</span>
-                        </div>
-                        <div class="space-y-1.5">
-                            <div>
-                                <p class="text-xs" style="color: var(--color-text-muted);">当前节点</p>
-                                <p id="currentNode" class="font-mono text-xs break-all" style="color: var(--color-text-primary);">--</p>
-                            </div>
-                            <div>
-                                <p class="text-xs" style="color: var(--color-text-muted);">Web 入口</p>
-                                <p id="webEntry" class="font-mono text-xs break-all" style="color: var(--color-text-primary);">--</p>
-                            </div>
-                            <div>
-                                <p class="text-xs" style="color: var(--color-text-muted);">节点列表</p>
-                                <div id="nodeList" class="space-y-0.5"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- File Type Distribution Card -->
-                    <div class="theme-card theme-rounded-xl theme-shadow p-4 col-span-12 sm:col-span-6 xl:col-span-3">
-                        <div class="flex items-center justify-between mb-3">
-                            <h2 class="text-sm font-semibold font-display" style="color: var(--color-text-primary);">文件类型分布</h2>
-                            <svg class="w-4 h-4" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-                        </div>
-                        <div id="fileTypeList" class="space-y-2"></div>
-                    </div>
-                </div>
-
-                <!-- Row 2: chart + traffic + recent requests -->
-                <div class="grid grid-cols-12 gap-3">
-                    <!-- 24h Request Analysis Card -->
-                    <div class="theme-card theme-rounded-xl theme-shadow p-4 col-span-12 xl:col-span-3">
-                        <div class="flex items-center justify-between mb-3">
-                            <h2 class="text-sm font-semibold font-display" style="color: var(--color-text-primary);">24 小时请求分析</h2>
-                            <svg class="w-4 h-4" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2 mb-3">
-                            <div class="p-2 rounded-lg" style="background-color: var(--color-bg-tertiary);">
-                                <p class="text-xs mb-0.5" style="color: var(--color-text-muted);">24h 请求数</p>
-                                <p id="reqTotal24h" class="text-lg font-bold font-display" style="color: var(--color-accent-primary);">--</p>
-                            </div>
-                            <div class="p-2 rounded-lg" style="background-color: var(--color-bg-tertiary);">
-                                <p class="text-xs mb-0.5" style="color: var(--color-text-muted);">24h 流量</p>
-                                <p id="reqBytes24h" class="text-lg font-bold font-display" style="color: var(--color-text-primary);">--</p>
-                            </div>
-                        </div>
-                        <div id="reqHourlyChart" class="flex items-end gap-0.5 h-24"></div>
-                        <p class="text-xs mt-1.5" style="color: var(--color-text-muted);">每小时请求次数（悬停查看明细）</p>
-                    </div>
-
-                    <!-- Traffic by Category Card -->
-                    <div class="theme-card theme-rounded-xl theme-shadow p-4 col-span-12 sm:col-span-6 xl:col-span-3">
-                        <div class="flex items-center justify-between mb-3">
-                            <h2 class="text-sm font-semibold font-display" style="color: var(--color-text-primary);">流量统计</h2>
-                            <svg class="w-4 h-4" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
-                        </div>
-                        <div class="flex items-baseline gap-2 mb-3">
-                            <span id="trafficTotal" class="text-xl font-bold font-display" style="color: var(--color-accent-primary);">--</span>
-                            <span class="text-xs" style="color: var(--color-text-muted);">总流出 · <span id="trafficTotalReqs">--</span> 次</span>
-                        </div>
-                        <div id="trafficCategoryList" class="space-y-2"></div>
-                    </div>
-
-                    <!-- Recent Requests Card -->
-                    <div class="theme-card theme-rounded-xl theme-shadow p-4 col-span-12 xl:col-span-6">
-                        <div class="flex items-center justify-between mb-3">
-                            <h2 class="text-sm font-semibold font-display" style="color: var(--color-text-primary);">最近请求</h2>
-                            <svg class="w-4 h-4" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
-                        </div>
-                        <div class="overflow-x-auto" style="max-height: 240px; overflow-y: auto;">
-                            <table class="w-full text-xs">
-                                <thead style="position: sticky; top: 0; z-index: 10;">
-                                    <tr style="background-color: var(--color-bg-tertiary);">
-                                        <th class="px-2 py-1.5 text-left font-medium" style="color: var(--color-text-secondary);">时间</th>
-                                        <th class="px-2 py-1.5 text-left font-medium" style="color: var(--color-text-secondary);">方法</th>
-                                        <th class="px-2 py-1.5 text-left font-medium" style="color: var(--color-text-secondary);">路径</th>
-                                        <th class="px-2 py-1.5 text-left font-medium" style="color: var(--color-text-secondary);">类别</th>
-                                        <th class="px-2 py-1.5 text-right font-medium" style="color: var(--color-text-secondary);">状态</th>
-                                        <th class="px-2 py-1.5 text-right font-medium" style="color: var(--color-text-secondary);">字节</th>
-                                        <th class="px-2 py-1.5 text-right font-medium" style="color: var(--color-text-secondary);">耗时</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="recentReqBody">
-                                    <tr><td colspan="7" class="px-2 py-6 text-center" style="color: var(--color-text-muted);">加载中...</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
+                </section>
             </main>
         </div>
     </div>
 
     <script src="/dashboard.js"></script>
 </body>
+
 </html>

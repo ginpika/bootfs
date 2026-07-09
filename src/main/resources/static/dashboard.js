@@ -7,6 +7,13 @@ var TYPE_LABELS = {
     other: '其他'
 };
 
+var CATEGORY_LABELS = {
+    FILE: '文件服务',
+    HLS: '流媒体服务',
+    S3: 'S3 接口',
+    OTHER: '静态资源和其他'
+};
+
 function setTheme(theme) {
     document.documentElement.classList.forEach(function (c) {
         if (c.startsWith('theme-')) document.documentElement.classList.remove(c);
@@ -36,99 +43,139 @@ function hideError() {
     document.getElementById('errorBanner').classList.add('hidden');
 }
 
-function renderDisk(disk, disks) {
-    // 当前节点汇总
-    document.getElementById('diskUsed').textContent = formatBytes(disk.usedBytes);
-    document.getElementById('diskTotal').textContent = formatBytes(disk.totalBytes);
-    document.getElementById('diskPercent').textContent = disk.usagePercent + '%';
-    var bar = document.getElementById('diskBar');
-    bar.style.width = Math.min(100, disk.usagePercent) + '%';
-    if (disk.usagePercent >= 90) {
-        bar.style.backgroundColor = 'var(--color-danger)';
-    } else if (disk.usagePercent >= 75) {
-        bar.style.backgroundColor = 'var(--color-warning)';
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function extractHost(url) {
+    if (!url) return '--';
+    var match = String(url).match(/^https?:\/\/([^/]+)/);
+    return match ? match[1] : url;
+}
+
+function diskBarColor(pct) {
+    return pct >= 90 ? 'var(--color-danger)' : (pct >= 75 ? 'var(--color-warning)' : 'var(--color-accent-primary)');
+}
+
+function ringSvg(percent, size, strokeColor, centerTop, centerBottom) {
+    var dash = Math.min(100, Math.max(0, percent));
+    var r = 15.915;
+    return '<svg viewBox="0 0 36 36" style="width:' + size + ';height:' + size + ';display:block;">' +
+        '<circle cx="18" cy="18" r="' + r + '" fill="none" stroke-width="3.5" style="stroke: var(--color-bg-tertiary);"/>' +
+        '<circle cx="18" cy="18" r="' + r + '" fill="none" stroke-width="3.5" stroke-linecap="round" transform="rotate(-90 18 18)" ' +
+        'stroke-dasharray="' + dash + ' 100" style="stroke: ' + strokeColor + '; transition: stroke-dasharray 0.6s ease;"/>' +
+        (centerTop != null ? '<text x="18" y="19.5" text-anchor="middle" font-size="8" font-weight="700" style="fill: var(--color-text-primary); font-family: Space Grotesk, system-ui, sans-serif;">' + centerTop + '</text>' : '') +
+        (centerBottom != null ? '<text x="18" y="23.5" text-anchor="middle" font-size="3.2" style="fill: var(--color-text-muted); font-family: Outfit, system-ui, sans-serif;">' + centerBottom + '</text>' : '') +
+    '</svg>';
+}
+
+// ============ Section 1: 节点详情 ============
+
+function renderNodes(nodes) {
+    var grid = document.getElementById('nodesGrid');
+    if (!nodes || nodes.length === 0) {
+        grid.innerHTML = '<p class="text-sm w-full" style="color: var(--color-text-muted);">无节点数据</p>';
+        return;
+    }
+    grid.innerHTML = nodes.map(function (n) {
+        var cardStyle = n.isCurrent ? 'border-color: var(--color-accent-primary); border-width: 2px;' : '';
+        var cardOpacity = n.online ? '' : 'opacity: 0.55;';
+        var cardCls = 'theme-card theme-rounded-xl theme-shadow p-4 w-[340px] max-w-full';
+
+        var header = renderNodeHeader(n);
+
+        if (!n.online) {
+            return '<div class="' + cardCls + '" style="' + cardStyle + cardOpacity + '">' +
+                header +
+                '<p class="text-sm text-center py-6" style="color: var(--color-text-muted);">节点离线，无法获取数据</p>' +
+            '</div>';
+        }
+
+        return '<div class="' + cardCls + '" style="' + cardStyle + cardOpacity + '">' +
+            header +
+            renderNodeDisk(n.disk) +
+            renderNodeResources(n.resources) +
+            renderNodeFileTypes(n.fileTypes) +
+        '</div>';
+    }).join('');
+}
+
+function renderNodeHeader(n) {
+    var badge;
+    if (n.isCurrent) {
+        badge = '<span class="px-2 py-0.5 rounded-full text-xs font-medium" style="background-color: var(--color-accent-muted); color: var(--color-accent-primary);">当前节点</span>';
+    } else if (n.online) {
+        badge = '<span class="inline-flex items-center gap-1 text-xs font-medium" style="color: var(--color-success);">' +
+            '<span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--color-success);"></span>在线</span>';
     } else {
-        bar.style.backgroundColor = 'var(--color-accent-primary)';
+        badge = '<span class="inline-flex items-center gap-1 text-xs font-medium" style="color: var(--color-danger);">' +
+            '<span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--color-danger);"></span>离线</span>';
     }
 
-    // 各节点磁盘详情
-    var list = document.getElementById('diskNodeList');
-    if (!disks || disks.length === 0) {
-        list.innerHTML = '<p class="text-xs" style="color: var(--color-text-muted);">暂无节点数据</p>';
-        return;
-    }
-    list.innerHTML = disks.map(function (d) {
-        var nodeId = d.nodeId || '--';
-        var shortId = nodeId.length > 12 ? nodeId.substring(0, 12) + '...' : nodeId;
-        var pct = d.usagePercent || 0;
-        var barColor = pct >= 90 ? 'var(--color-danger)' : (pct >= 75 ? 'var(--color-warning)' : 'var(--color-accent-primary)');
-        var path = d.path || '--';
-        return '<div>' +
-            '<div class="flex items-center justify-between mb-0.5">' +
-                '<span class="text-xs font-mono truncate mr-2" style="color: var(--color-text-primary); max-width: 100px;" title="' + escapeHtml(nodeId) + '">' + escapeHtml(shortId) + '</span>' +
-                '<span class="text-xs font-medium" style="color: var(--color-text-secondary);">' + pct + '%</span>' +
-            '</div>' +
-            '<div class="w-full h-1.5 rounded-full overflow-hidden mb-0.5" style="background-color: var(--color-bg-tertiary);">' +
-                '<div class="h-full rounded-full transition-all duration-500" style="width: ' + Math.min(100, pct) + '%; background-color: ' + barColor + ';"></div>' +
-            '</div>' +
-            '<div class="flex justify-between text-xs" style="color: var(--color-text-muted);">' +
-                '<span>' + formatBytes(d.usedBytes) + ' / ' + formatBytes(d.totalBytes) + '</span>' +
-                '<span class="font-mono truncate ml-2" style="max-width: 80px;" title="' + escapeHtml(path) + '">' + escapeHtml(path.split('/').pop() || path) + '</span>' +
-            '</div>' +
-        '</div>';
-    }).join('');
+    var shortId = n.nodeId.length > 16 ? n.nodeId.substring(0, 16) + '...' : n.nodeId;
+    var host = extractHost(n.url);
+
+    return '<div class="flex items-center justify-between mb-3 gap-2">' +
+        '<div class="flex items-center gap-2 min-w-0">' +
+            badge +
+            '<span class="font-mono text-xs truncate" style="color: var(--color-text-primary);" title="' + escapeHtml(n.nodeId) + '">' + escapeHtml(shortId) + '</span>' +
+        '</div>' +
+        '<span class="font-mono text-xs whitespace-nowrap" style="color: var(--color-text-muted);" title="' + escapeHtml(n.url || '') + '">' + escapeHtml(host) + '</span>' +
+    '</div>';
 }
 
-function renderResources(res) {
-    document.getElementById('resTotal').textContent = res.total;
-    document.getElementById('resMain').textContent = res.mainCount;
-    document.getElementById('resReplica').textContent = res.replicaCount;
-    document.getElementById('resSize').textContent = formatBytes(res.totalSizeBytes);
+function renderNodeDisk(disk) {
+    if (!disk) return '';
+    var pct = disk.usagePercent || 0;
+    var path = disk.path || '--';
+    return '<div class="flex flex-col items-center my-4">' +
+        ringSvg(pct, '6rem', diskBarColor(pct), pct.toFixed(0) + '%') +
+        '<p class="text-xs mt-2" style="color: var(--color-text-secondary);"><span style="color: var(--color-text-primary); font-weight: 600;">' + formatBytes(disk.usedBytes) + '</span> / ' + formatBytes(disk.totalBytes) + '</p>' +
+        '<p class="font-mono text-xs truncate mt-0.5 max-w-full" style="color: var(--color-text-muted);" title="' + escapeHtml(path) + '">' + escapeHtml(path) + '</p>' +
+    '</div>';
 }
 
-function renderCluster(cluster) {
-    document.getElementById('nodeCount').textContent = cluster.nodeCount;
-    document.getElementById('currentNode').textContent = cluster.currentNode || '--';
-    document.getElementById('webEntry').textContent = cluster.webEntrypoint || '--';
-    var list = document.getElementById('nodeList');
-    var nodes = cluster.nodes || [];
-    if (nodes.length === 0) {
-        list.innerHTML = '<p class="font-mono text-xs" style="color: var(--color-text-muted);">无可用节点</p>';
-        return;
-    }
-    list.innerHTML = nodes.map(function (n) {
-        return '<p class="font-mono text-xs break-all" style="color: var(--color-text-secondary);">• ' + escapeHtml(n) + '</p>';
-    }).join('');
+function renderNodeResources(res) {
+    if (!res) return '';
+    return '<div class="grid grid-cols-3 gap-1.5 mb-3">' +
+        '<div class="p-1.5 rounded-lg text-center" style="background-color: var(--color-bg-tertiary);">' +
+            '<p class="text-xs mb-0.5" style="color: var(--color-text-muted);">资源</p>' +
+            '<p class="text-sm font-bold font-display" style="color: var(--color-text-primary);">' + (res.total != null ? res.total : '--') + '</p>' +
+        '</div>' +
+        '<div class="p-1.5 rounded-lg text-center" style="background-color: var(--color-bg-tertiary);">' +
+            '<p class="text-xs mb-0.5" style="color: var(--color-text-muted);">主</p>' +
+            '<p class="text-sm font-bold font-display" style="color: var(--color-accent-primary);">' + (res.mainCount != null ? res.mainCount : '--') + '</p>' +
+        '</div>' +
+        '<div class="p-1.5 rounded-lg text-center" style="background-color: var(--color-bg-tertiary);">' +
+            '<p class="text-xs mb-0.5" style="color: var(--color-text-muted);">副本</p>' +
+            '<p class="text-sm font-bold font-display" style="color: var(--color-text-primary);">' + (res.replicaCount != null ? res.replicaCount : '--') + '</p>' +
+        '</div>' +
+    '</div>' +
+    '<div class="p-1.5 rounded-lg mb-3" style="background-color: var(--color-bg-tertiary);">' +
+        '<div class="flex items-center justify-between">' +
+            '<span class="text-xs" style="color: var(--color-text-muted);">文件总大小</span>' +
+            '<span class="text-sm font-bold font-display" style="color: var(--color-text-primary);">' + formatBytes(res.totalSizeBytes) + '</span>' +
+        '</div>' +
+    '</div>';
 }
 
-function renderFileTypes(types) {
-    var list = document.getElementById('fileTypeList');
-    var total = types.reduce(function (s, t) { return s + t.count; }, 0);
-    if (total === 0) {
-        list.innerHTML = '<p class="text-sm" style="color: var(--color-text-muted);">暂无文件</p>';
-        return;
-    }
-    list.innerHTML = types.map(function (t) {
-        var percent = total > 0 ? (t.count * 100 / total) : 0;
+function renderNodeFileTypes(fileTypes) {
+    if (!fileTypes || fileTypes.length === 0) return '';
+    var items = fileTypes.filter(function (t) { return t.count > 0; });
+    if (items.length === 0) return '';
+    var badges = items.map(function (t) {
         var label = TYPE_LABELS[t.category] || t.category;
-        return '<div>' +
-            '<div class="flex items-center justify-between mb-1">' +
-                '<span class="text-sm" style="color: var(--color-text-primary);">' + label + '</span>' +
-                '<span class="text-xs" style="color: var(--color-text-muted);">' + t.count + ' (' + percent.toFixed(1) + '%)</span>' +
-            '</div>' +
-            '<div class="w-full h-2 rounded-full overflow-hidden" style="background-color: var(--color-bg-tertiary);">' +
-                '<div class="h-full rounded-full" style="width: ' + percent + '%; background-color: var(--color-accent-primary);"></div>' +
-            '</div>' +
-        '</div>';
-    }).join('');
+        return '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);">' +
+            label + ' <span class="font-semibold ml-1" style="color: var(--color-text-primary);">' + t.count + '</span></span>';
+    });
+    return '<div>' +
+        '<p class="text-xs mb-1.5" style="color: var(--color-text-muted);">文件类型</p>' +
+        '<div class="flex flex-wrap gap-1">' + badges.join('') + '</div>' +
+    '</div>';
 }
 
-var CATEGORY_LABELS = {
-    FILE: '文件服务',
-    HLS: '流媒体服务',
-    S3: 'S3 接口',
-    OTHER: '静态资源和其他'
-};
+// ============ Section 3: 本节点流量与请求 ============
 
 function renderTraffic(traffic) {
     if (!traffic) return;
@@ -199,28 +246,7 @@ function renderRequests(reqs) {
     }).join('');
 }
 
-function loadStats() {
-    hideError();
-    fetch('/api/dashboard/stats')
-        .then(function (r) { return r.json(); })
-        .then(function (res) {
-            if (!res.succeed) {
-                showError(res.message);
-                return;
-            }
-            var data = res.data;
-            renderDisk(data.disk, data.disks);
-            renderResources(data.resources);
-            renderCluster(data.cluster);
-            renderFileTypes(data.fileTypes);
-            renderTraffic(data.traffic);
-            renderRequests(data.requests);
-            renderUptime(data.appStartTime);
-        })
-        .catch(function (err) {
-            showError('请求失败');
-        });
-}
+// ============ 运行时长 ============
 
 var uptimeStartTime = 0;
 var uptimeTimer = null;
@@ -257,9 +283,26 @@ function formatUptime(ms) {
     return mins + '分 ' + secs + '秒';
 }
 
-function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// ============ 数据加载 ============
+
+function loadStats() {
+    hideError();
+    fetch('/api/dashboard/stats')
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if (!res.succeed) {
+                showError(res.message);
+                return;
+            }
+            var data = res.data;
+            renderNodes(data.nodes || []);
+            renderTraffic(data.traffic);
+            renderRequests(data.requests);
+            renderUptime(data.appStartTime);
+        })
+        .catch(function () {
+            showError('请求失败');
+        });
 }
 
 document.addEventListener('DOMContentLoaded', function () {

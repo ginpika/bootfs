@@ -8,6 +8,7 @@ import cc.ginpika.bootfs.domain.dto.FileObject;
 import cc.ginpika.bootfs.service.FileService;
 import cc.ginpika.bootfs.service.FileTransferService;
 import cc.ginpika.bootfs.domain.result.TransferResult;
+import cc.ginpika.bootfs.service.ClusterProxyService;
 import cc.ginpika.bootfs.service.ReverseProxyService;
 import cc.ginpika.bootfs.service.meilisearch.FullTextDocument;
 import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
@@ -54,14 +55,17 @@ public class ManageController {
     private TfsConfig tfsConfig;
     @Autowired
     private ThumbnailService thumbnailService;
+    @Autowired
+    private ClusterProxyService clusterProxyService;
 
-    public ManageController(FileService fileService, 
-        FileTransferService fileTransferService, 
-        ReverseProxyService reverseProxyService, 
+    public ManageController(FileService fileService,
+        FileTransferService fileTransferService,
+        ReverseProxyService reverseProxyService,
         MeiliSearchService meiliSearchService,
-        Context context, 
+        Context context,
         TfsConfig tfsConfig,
-        ThumbnailService thumbnailService) {
+        ThumbnailService thumbnailService,
+        ClusterProxyService clusterProxyService) {
         this.fileService = fileService;
         this.fileTransferService = fileTransferService;
         this.reverseProxyService = reverseProxyService;
@@ -69,6 +73,7 @@ public class ManageController {
         this.context = context;
         this.tfsConfig = tfsConfig;
         this.thumbnailService = thumbnailService;
+        this.clusterProxyService = clusterProxyService;
     }
 
     
@@ -107,6 +112,12 @@ public class ManageController {
                                              HttpServletRequest request) throws IOException {
         Object[] ret = fileService.download(uuid, request);
         if (ret == null) {
+            String remoteUrl = clusterProxyService.getRemoteNodeUrl(uuid);
+            if (remoteUrl != null) {
+                return ResponseEntity.status(302)
+                        .header(HttpHeaders.LOCATION, remoteUrl + "/f/" + uuid)
+                        .build();
+            }
             log.info("uuid {} 不存在, 返回 not found", uuid);
             return ResponseEntity.notFound().build();
         }

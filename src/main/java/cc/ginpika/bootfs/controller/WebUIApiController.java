@@ -11,6 +11,7 @@ import cc.ginpika.bootfs.domain.dto.FileObject;
 import cc.ginpika.bootfs.domain.dto.FileObjectWebVO;
 import cc.ginpika.bootfs.domain.dto.Tag;
 import cc.ginpika.bootfs.core.Context;
+import cc.ginpika.bootfs.service.ClusterProxyService;
 import cc.ginpika.bootfs.service.ReverseProxyService;
 import cc.ginpika.bootfs.service.etcd.EtcdService;
 import cc.ginpika.bootfs.service.meilisearch.ImageHostDocument;
@@ -54,8 +55,9 @@ public class WebUIApiController {
     private final TfsConfig tfsConfig;
     private final EtcdService etcdService;
     private final MeiliSearchService meiliSearchService;
-    private final AiMetadataService aiMetadataService; 
+    private final AiMetadataService aiMetadataService;
     private final ReverseProxyService reverseProxyService;
+    private final ClusterProxyService clusterProxyService;
 
     private static final Cache<String, String> cache = CacheBuilder.newBuilder().build();
 
@@ -395,7 +397,8 @@ public class WebUIApiController {
      */
     @PutMapping("/api/file/{uuid}/rename")
     public ResponseEntity<?> rename(@PathVariable("uuid") String uuid,
-                                    @RequestBody Map<String, String> body) {
+                                    @RequestBody Map<String, String> body,
+                                    HttpServletRequest request) {
         String newFileName = body.get("fileName");
         if (newFileName == null || newFileName.trim().isEmpty()) {
             return ResponseEntity.badRequest().body("文件名不能为空");
@@ -409,6 +412,10 @@ public class WebUIApiController {
         }
         FileObject fileObject = context.query(uuid);
         if (fileObject == null) {
+            String remoteUrl = clusterProxyService.getRemoteNodeUrl(uuid);
+            if (remoteUrl != null) {
+                return clusterProxyService.proxyRequest(remoteUrl, request, new JSONObject(body).toJSONString());
+            }
             return ResponseEntity.notFound().build();
         }
         fileObject.setFileName(newFileName);
@@ -553,9 +560,13 @@ public class WebUIApiController {
      * 获取文件详情，包含多媒体元数据（异步提取）
      */
     @GetMapping("/api/file/{uuid}/details")
-    public ResponseEntity<?> getFileDetails(@PathVariable("uuid") String uuid) {
+    public ResponseEntity<?> getFileDetails(@PathVariable("uuid") String uuid, HttpServletRequest request) {
         FileObject fileObject = context.query(uuid);
         if (fileObject == null) {
+            String remoteUrl = clusterProxyService.getRemoteNodeUrl(uuid);
+            if (remoteUrl != null) {
+                return clusterProxyService.proxyRequest(remoteUrl, request, (String) null);
+            }
             return ResponseEntity.notFound().build();
         }
 
@@ -600,9 +611,13 @@ public class WebUIApiController {
      * 读取图片中的 AI 生成元数据（Stable Diffusion / ComfyUI）
      */
     @GetMapping("/api/file/{uuid}/ai-metadata")
-    public ResponseEntity<?> getAiMetadata(@PathVariable("uuid") String uuid) {
+    public ResponseEntity<?> getAiMetadata(@PathVariable("uuid") String uuid, HttpServletRequest request) {
         FileObject fileObject = context.query(uuid);
         if (fileObject == null) {
+            String remoteUrl = clusterProxyService.getRemoteNodeUrl(uuid);
+            if (remoteUrl != null) {
+                return clusterProxyService.proxyRequest(remoteUrl, request, (String) null);
+            }
             return ResponseEntity.notFound().build();
         }
         try {
@@ -630,9 +645,13 @@ public class WebUIApiController {
      * 提取音频文件内嵌专辑封面
      */
     @GetMapping("/api/file/{uuid}/cover")
-    public ResponseEntity<?> getCoverArt(@PathVariable("uuid") String uuid) {
+    public ResponseEntity<?> getCoverArt(@PathVariable("uuid") String uuid, HttpServletRequest request) {
         FileObject fileObject = context.query(uuid);
         if (fileObject == null) {
+            String remoteUrl = clusterProxyService.getRemoteNodeUrl(uuid);
+            if (remoteUrl != null) {
+                return clusterProxyService.proxyRequest(remoteUrl, request, (String) null);
+            }
             return ResponseEntity.notFound().build();
         }
 

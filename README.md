@@ -26,7 +26,7 @@
 - 内置了一个 hls 流个人放送平台，并且可以碎片化的上传 hls 流文件，在线上与朋友共同欣赏大片
 - 内置了一个酷炫的瀑布流随机画廊
 - 通过 FFmpeg 实现了 webp 编解码以及 hls 转码能力
-- 基于 etcd + meilisearch 小而精的轻量化架构，内置元数据管理，~~基于对等节点设计的可分布式结构(也许在不远的将来)~~
+- 基于 etcd + meilisearch 小而精的轻量化架构，内置元数据管理，基于对等节点设计的可分布式结构(也许在不远的将来)
 
 Build with ：spring-boot + etcd + meilisearch
 
@@ -48,3 +48,7 @@ cp .env.example .env
 # 一键启动
 docker compose up -d
 ```
+
+## 集群部署
+
+见 [cluster-deploy.md](./docs/cluster-deploy.md)

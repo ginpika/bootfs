@@ -188,6 +188,23 @@ public class MeiliSearchService {
     }
 
     /**
+     * 增量更新某个文档的 title 和 fileName 字段（重命名时调用）
+     */
+    public void updateDocumentTitle(String indexUid, String uuid, String newTitle) {
+        try {
+            Index index = client.index(indexUid);
+            JSONObject partialDoc = new JSONObject();
+            partialDoc.put("uuid", uuid);
+            partialDoc.put("title", newTitle);
+            partialDoc.put("fileName", newTitle);
+            index.updateDocuments(JSON.toJSONString(Collections.singletonList(partialDoc)));
+            log.info("已更新索引 {} 中文档 {} 的 title: {}", indexUid, uuid, newTitle);
+        } catch (Exception e) {
+            log.error("更新文档标题失败, index={}, uuid={}", indexUid, uuid, e);
+        }
+    }
+
+    /**
      * 从索引中删除文档
      */
     public void deleteDocumentFromIndex(String indexUid, String uuid) {

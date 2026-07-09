@@ -420,6 +420,7 @@ public class WebUIApiController {
         }
         fileObject.setFileName(newFileName);
         contextIO.update(uuid, fileObject);
+        meiliSearchService.updateDocumentTitle("full-text", uuid, newFileName);
         return ResponseEntity.ok().build();
     }
 

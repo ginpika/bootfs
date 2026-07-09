@@ -168,6 +168,7 @@ public class FileService {
                 .size(file.getSize())
                 .albumAvailable("1")
                 .fileCreatedAt(System.currentTimeMillis())
+                .contextUuid(context.uuid)
                 .build();
         meiliSearchService.addToFullText(fullTextDocument);
         tmp.toFile().delete();
@@ -216,6 +217,7 @@ public class FileService {
                     .nsfw(fileObject.getNsfw())
                     .isPublicAccess(fileObject.getIsPublicAccess())
                     .fileCreatedAt(fileObject.getCreatedAt())
+                    .contextUuid(context.uuid)
                     .build();
             meiliSearchService.addToFullText(doc);
         } catch (Exception e) {

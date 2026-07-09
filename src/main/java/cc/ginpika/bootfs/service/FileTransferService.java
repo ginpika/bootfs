@@ -73,6 +73,7 @@ public class FileTransferService {
                     .nsfw(fileObject.getNsfw())
                     .isPublicAccess(fileObject.getIsPublicAccess())
                     .fileCreatedAt(fileObject.getCreatedAt())
+                    .contextUuid(context.uuid)
                     .build();
             meiliSearchService.addToFullText(doc);
         } catch (Exception e) {

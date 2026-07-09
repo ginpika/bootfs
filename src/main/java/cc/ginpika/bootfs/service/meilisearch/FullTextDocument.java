@@ -24,6 +24,8 @@ public class FullTextDocument {
     // means this document is a group index (a parent-level resource), has some children-level resources
     // always be described with FileObject`s parent field
     private JSONArray resources;
+    // which node storage this resource
+    private String contextUuid;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

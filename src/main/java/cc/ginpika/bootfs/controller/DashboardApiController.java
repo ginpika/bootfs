@@ -95,6 +95,9 @@ public class DashboardApiController {
 
         // 获取集群所有节点 URL
         List<NodeInfo> clusterNodes = getClusterNodes();
+        clusterNodes.forEach(node -> {
+            log.info("buildStats 获取到节点: {}", node);
+        });
         // 并行拉取其他节点的统计数据
         Map<String, Map<String, Object>> remoteStats = fetchAllRemoteNodeStats(clusterNodes);
 
@@ -287,6 +290,7 @@ public class DashboardApiController {
                     .get(5, TimeUnit.SECONDS);
         } catch (Exception e) {
             log.warn("等待远程节点统计数据超时或失败: {}", e.getMessage());
+            e.printStackTrace();
         }
         return results;
     }

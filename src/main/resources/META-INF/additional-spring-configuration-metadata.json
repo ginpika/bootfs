@@ -93,5 +93,10 @@
     "name": "s3.bucket",
     "type": "java.lang.String",
     "description": "S3 存储桶名称"
+  },
+  {
+    "name": "arthas.http-port",
+    "type": "java.lang.String",
+    "description": "arthas 的端口，默认 8563"
   }
 ]}

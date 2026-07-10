@@ -40,6 +40,7 @@ services:
       - data:/app
     ports:
       - "8181:8181"
+      - "127.0.0.1:8563:8563"
     environment:
       - TFS_COPIES=${TFS_COPIES}
       - TFS_WEB_ENTRYPOINT=${TFS_WEB_ENTRYPOINT}

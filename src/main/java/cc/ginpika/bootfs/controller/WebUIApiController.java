@@ -130,13 +130,18 @@ public class WebUIApiController {
         List<FileObject> allFiles = new ArrayList<>(fileMap.values());
         int total = allFiles.size();
 
-        int from = pageNumber * pageSize;
+        // pageNumber 其实就是 offset，老旧设计没改
+        int offset = pageNumber;
+        int from = offset;
         int to = Math.min(from + pageSize, allFiles.size());
+        // log.info("from: {}, to: {}", from, to);
         if (from >= allFiles.size()) {
             return FileObjectWebVO.builder()
                     .pageNumber(pageNumber).pageSize(pageSize).total(total)
                     .rows(Collections.emptyList()).build();
         }
+
+        
 
         List<FileObject> files = new ArrayList<>(allFiles.subList(from, to));
         for (FileObject fo : files) {

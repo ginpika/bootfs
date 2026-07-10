@@ -58,8 +58,7 @@ public class WebConfig implements WebMvcConfigurer {
                         "/*.css",
                         "/*.js",
                         "/*.ico",
-                        "/s3/**",
-                        "/api/dashboard/node-stats"
+                        "/s3/**"
                 );
     }
 }

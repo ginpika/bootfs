@@ -562,11 +562,13 @@ async function loadMediaFilesRecursively(needCount) {
     
     const params = new URLSearchParams({
         pageNumber: gridPage * GRID_PAGE_SIZE,
-        pageSize: Math.min(needCount, GRID_PAGE_SIZE),
+        pageSize: GRID_PAGE_SIZE, 
         search: searchQuery
     });
+
+    // console.log(`${params}`)
     
-    console.log(`Loading grid: need ${needCount} more, offset ${gridPage * GRID_PAGE_SIZE}, limit ${Math.min(needCount, GRID_PAGE_SIZE)}`);
+    // console.log(`Loading grid: need ${needCount} more, offset ${gridPage * GRID_PAGE_SIZE}, limit ${Math.min(needCount, GRID_PAGE_SIZE)}`);
     
     try {
         const response = await fetch(`/queryPageOffset?${params}`);

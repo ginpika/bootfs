@@ -42,6 +42,27 @@
 
 Build with ：spring-boot + etcd + meilisearch
 
+## 开发
+
+以 Mac 为例，通过 Homebrew 安装依赖后，启动 etcd 实例和 meilisearch 实例
+
+```shell
+brew install etcd
+brew install meilisearch
+brew install ffmpeg-full
+cd ./bootfs
+./etcd
+./meilisearch -master-key=YOUR_MASTER_KEY
+```
+
+调整 application-dev.properties 相关配置
+
+将 sso.enabled = false 可以不需要 Hostid 启动 BootFS
+
+部分功能需要 ffmpeg 支持，比如 webp 编解码以及 hls 转码能力
+
+Windows 开发者可以尝试 winget，或者是前往官网自行下载预编译的二进制程序。
+
 ## 部署
 
 HostID 是一个基于电子邮件实现的轻量级账户底座，可以作为个人邮箱的同时，管理小规模的站点如个人博客，小型论坛等。
@@ -61,6 +82,41 @@ cp .env.example .env
 docker compose up -d
 ```
 
+### .env.exapmle
+
+```.env
+# 文件的副本数，单节点建议为 1
+TFS_COPIES=1
+# 如果是本地开发，则为 http://localhost:8181
+TFS_WEB_ENTRYPOINT=https://bootfs.your-domain.com 
+
+# MeiliSearch Key
+MEILISEARCH_MASTER_KEY=YOUR_MEILISEARCH_MASTERKEY
+# MeiliSearch Web UI 的地址（为兼容旧版本，在未来将被逐渐弃用），本地开发时，应为 http://localhost:7700
+MEILISEARCH_WEB_UI=https://meilisearch.your-domain.com
+# MeiliSearch 的地址，基本上应与 MEILISEARCH_WEB_UI 一致。
+MEILISEARCH_URL=https://meilisearch.your-domain.com
+
+# Hostid 服务器地址，本地测试时，应为 Hostid 服务端默认地址 http://localhost:3001
+SSO_SERVER_URL=https://hostid.your-domain.com
+# SSO 信息页地址，Hostid 的 SSO Info 的公网地址，本地测试时，应为 Hostid UI 默认地址 http://localhost:3000
+SSO_INFO_URL=https://hostid-ui.your-domain.com/sso/info
+```
+
 ## 集群部署
 
 见 [cluster-deploy.md](./docs/cluster-deploy.md)
+
+## 开发计划（优先度从上到下）
+
+截止 2026.07.10，BootFS 已经实现了预期时的所有功能，现在需要进入一段较长时间的 debug 周期。
+
+经过一段时间的生产环境验证后，我会开始考虑开发以下内容。
+
+- 现有功能的 debug & 修复
+- 系统仪表盘的优化 & 修复工作
+- s3 协议在集群环境下的支持
+- 支持 3D 模型的预览和详情
+- 去中心化P2P节点握手
+- Query 接口的优化
+- Controller 层整理

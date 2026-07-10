@@ -38,8 +38,7 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/etcd/**",
                         "/meilisearch",
                         "/api/meilisearch/**",
-                        "/dashboard",
-                        "/api/dashboard/**"
+                        "/dashboard"
                 )
                 .excludePathPatterns(
                         "/error",
@@ -58,7 +57,8 @@ public class WebConfig implements WebMvcConfigurer {
                         "/*.css",
                         "/*.js",
                         "/*.ico",
-                        "/s3/**"
+                        "/s3/**",
+                        "/api/dashboard/**"
                 );
     }
 }

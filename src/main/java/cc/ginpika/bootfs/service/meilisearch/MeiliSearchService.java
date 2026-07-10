@@ -411,7 +411,7 @@ public class MeiliSearchService {
                 });
             }
             if (setuList.isEmpty()) {
-                log.warn("No public images found in image-host index");
+                // log.warn("No public images found in image-host index");
                 return null;
             }
             int lucky = new Random().nextInt(setuList.size());

@@ -16,6 +16,12 @@ The answer may be one of the following, and I happen to satisfy all of them pers
 - For some reason, you don't want to use cloud storage from big public cloud providers and prefer a self-hosted solution.
 - You need to find a more comprehensive digital asset management software.
 
+## Architecture
+
+![BootFS Cluster Architecture](./Architecture.png)
+
+- Decentralized Peer-to-Peer Edge Storage Architecture
+
 ## Features
 
 - Excellent audio/video preview in both list and grid modes, supporting preview of multiple formats with detailed file descriptions.
@@ -26,7 +32,7 @@ The answer may be one of the following, and I happen to satisfy all of them pers
 - Built-in HLS streaming personal broadcasting platform with fragmented HLS file uploads for sharing movies with friends online.
 - Built-in stunning waterfall random gallery.
 - WebP encoding/decoding and HLS transcoding capabilities via FFmpeg.
-- Small yet refined lightweight architecture based on etcd + Meilisearch with built-in metadata management, ~~peer-to-peer distributed structure (maybe in the near future)~~.
+- Small yet refined lightweight architecture based on etcd + Meilisearch with built-in metadata management, peer-to-peer distributed structure (maybe in the near future).
 
 Built with: spring-boot + etcd + meilisearch
 
@@ -48,3 +54,7 @@ cp .env.example .env
 # Launch with one click
 docker compose up -d
 ```
+
+## Cluster Deployment
+
+See [Cluster Deployment](./docs/cluster-deploy-en.md)

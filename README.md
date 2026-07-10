@@ -16,6 +16,12 @@
 - 出于某种原因，你不想使用公有云大厂提供的网盘，你想要一个自托管的网盘
 - 你需要找到一个更全面的数字资产管理软件
 
+## 架构
+
+![BootFS 集群架构参考](./Architecture.png)
+
+采用去中心化对等边缘存储架构 (Decentralized Peer-to-Peer Edge Storage Architecture)
+
 ## 特性
 
 - 优秀的列表 / 网格模式下的音视频预览能力，支持多种格式的详情/文件描述预览
@@ -26,7 +32,7 @@
 - 内置了一个 hls 流个人放送平台，并且可以碎片化的上传 hls 流文件，在线上与朋友共同欣赏大片
 - 内置了一个酷炫的瀑布流随机画廊
 - 通过 FFmpeg 实现了 webp 编解码以及 hls 转码能力
-- 基于 etcd + meilisearch 小而精的轻量化架构，内置元数据管理，基于对等节点设计的可分布式结构(也许在不远的将来)
+- 基于 etcd + meilisearch 小而精的轻量化架构，内置元数据管理，基于对等节点设计的可分布式结构
 
 Build with ：spring-boot + etcd + meilisearch
 

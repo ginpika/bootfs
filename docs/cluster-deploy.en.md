@@ -1,24 +1,24 @@
-# 集群部署
+# Cluster Deployment
 
-如果你具备 Etcd & docker compose 的相关能力或是经验丰富的开发人员，那么你完全可以根据架构自行部署并跳过本章节。
+If you are familiar with Etcd & Docker Compose or are an experienced developer, you can deploy based on the architecture on your own and skip this chapter.
 
-本章节提供了一个参考性的集群启动配置。
+This chapter provides a reference cluster startup configuration.
 
-## 部署
+## Deployment
 
-基于 TailScale + Etcd Discovery （Recommended）
+Based on Tailscale + Etcd Discovery (Recommended)
 
-由于 etcd 涉及到一些安全问题，所以我推荐使用 [Tailscale](https://tailscale.com/) 来构建网络。
+Since etcd involves some security considerations, I recommend using [Tailscale](https://tailscale.com/) to build the network.
 
-加上我们预期部署的节点为 2，访问 [点击这里在 discovery.etcd.io 请求一个 size 为 2 的 discovery token](https://discovery.etcd.io/new?size=2)，获取到一个 discovery token。
+Given that we expect to deploy 2 nodes, visit [Click here to request a discovery token with size 2 from discovery.etcd.io](https://discovery.etcd.io/new?size=2) to obtain a discovery token.
 
-例如：https://discovery.etcd.io/a24d8b8054c829a6a4406ba3901cdce6
+For example: `https://discovery.etcd.io/a24d8b8054c829a6a4406ba3901cdce6`
 
-我们以节点 A （100.105.106.92） 为例。
+Let's take Node A (100.105.106.92) as an example.
 
-A 节点的 docker-compose.yml 和默认的单机 compose 几乎完全一致。
+Node A's `docker-compose.yml` is almost identical to the default standalone compose file.
 
-我们需要一个中心化的 MeiliSearch 实例。
+We need a centralized MeiliSearch instance.
 
 ```yaml
 services:
@@ -85,10 +85,9 @@ volumes:
   data:
 ```
 
-节点 B (100.87.61.11) 以及其他节点，不需要再部署自己的 MeiliSearch 实例。
+Node B (100.87.61.11) and other nodes do not need to deploy their own MeiliSearch instance.
 
-相对的，在节点 B 的 .env 文件中，我们应该将相关配置指向节点 A 的 MeiliSearch 实例。
-
+Instead, in Node B's `.env` file, we should point the relevant configuration to Node A's MeiliSearch instance.
 
 ```yaml
 services:

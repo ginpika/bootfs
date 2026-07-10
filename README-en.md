@@ -2,6 +2,12 @@
 
 [中文](./README.md)
 
+<details>
+  <summary>UI Preview</summary>
+  <img src="./docs/preview1.png" alt="列表界面" width="600">
+  <img src="./docs/preview2.png" alt="媒体瀑布流网格界面" width="600">
+</details>
+
 A lightweight file management system focused on multimedia files, built with Spring Boot & FFmpeg.
 
 ## Why do you need BootFS?

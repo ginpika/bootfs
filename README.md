@@ -2,6 +2,12 @@
 
 [English](./README-en.md)
 
+<details>
+  <summary>界面预览</summary>
+  <img src="./docs/preview1.png" alt="列表界面" width="600">
+  <img src="./docs/preview2.png" alt="媒体瀑布流网格界面" width="600">
+</details>
+
 一个轻量级 & 专注于多媒体文件的文件管理系统，基于 Spring Boot & FFmpeg。
 
 ## 你为什么需要 BootFS ？

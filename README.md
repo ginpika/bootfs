@@ -4,6 +4,7 @@
 
 <details>
   <summary>界面预览</summary>
+  <img src="./docs/preview3.png" alt="双栏操作界面" width="600">
   <img src="./docs/preview1.png" alt="列表界面" width="600">
   <img src="./docs/preview2.png" alt="媒体瀑布流网格界面" width="600">
 </details>

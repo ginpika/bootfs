@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.4
 # The JAR includes both RocksDB JNI architectures; compile Java on the builder host.
-FROM --platform=$BUILDPLATFORM maven:3.9-eclipse-temurin-17 AS builder
+FROM --platform=$BUILDPLATFORM maven:3.9-eclipse-temurin-26 AS builder
 WORKDIR /build
 COPY pom.xml .
 # Keep dependencies in an image layer so the GHA cache restores them on new runners.

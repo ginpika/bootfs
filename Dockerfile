@@ -1,10 +1,12 @@
 # syntax=docker/dockerfile:1.4
-FROM maven:3.9-eclipse-temurin-17 AS builder
+# The JAR includes both RocksDB JNI architectures; compile Java on the builder host.
+FROM --platform=$BUILDPLATFORM maven:3.9-eclipse-temurin-17 AS builder
 WORKDIR /build
 COPY pom.xml .
-RUN --mount=type=cache,target=/root/.m2 mvn dependency:go-offline -B
+# Keep dependencies in an image layer so the GHA cache restores them on new runners.
+RUN mvn -B -ntp dependency:go-offline
 COPY src ./src
-RUN --mount=type=cache,target=/root/.m2 mvn package -DskipTests -B
+RUN mvn -B -ntp package -DskipTests
 
 FROM eclipse-temurin:17-jre-jammy
 ENV TZ=Asia/Shanghai

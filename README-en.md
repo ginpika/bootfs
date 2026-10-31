@@ -70,6 +70,10 @@ cp .env.example .env
 docker compose up -d
 ```
 
+GitHub Actions runs the JDK 17 tests, then builds amd64 and arm64 images in parallel. Both images must pass startup, FFmpeg, upload/download, search, and persistence checks after container recreation before publication to GHCR. Pull requests only verify; the current default-branch commit updates `latest`, version tags publish their versions, and every publication includes a `sha-<full commit SHA>` tag.
+
+Use `BOOTFS_IMAGE=ghcr.io/ginpika/bootfs:sha-<full commit SHA>` from the publication job summary with `docker compose -f docker-compose.ghcr.yml up -d` to deploy a specific revision. Manual workflow runs retain the option to disable Docker caching.
+
 ## Cluster Deployment
 
 See [Cluster Deployment](./docs/cluster-deploy-en.md)

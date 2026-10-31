@@ -87,6 +87,10 @@ docker compose up --build -d
 
 运行时只需要 BootFS 容器与数据卷。单节点、三节点、存储副本保证和迁移步骤见 [内核指南](./docs/mononode-kernel.md)；集群配置见 [集群部署](./docs/cluster-deploy.md)。
 
+GitHub Actions 先运行 JDK 17 测试，再并行构建 amd64 / arm64 镜像。两个架构都通过容器启动、FFmpeg、文件上传下载、搜索和容器重建后的持久化检查后，才合并并发布 GHCR 镜像。PR 仅验证；默认分支的最新提交更新 `latest`，版本标签发布对应版本，所有发布均提供 `sha-<完整提交 SHA>` 标签。
+
+使用发布任务摘要中的 `BOOTFS_IMAGE=ghcr.io/ginpika/bootfs:sha-<完整提交 SHA>` 配合 `docker compose -f docker-compose.ghcr.yml up -d` 部署指定提交。手动运行工作流时仍可勾选禁用 Docker 缓存。
+
 ## 开发计划（优先度从上到下）
 
 - 现有功能的 debug & 修复

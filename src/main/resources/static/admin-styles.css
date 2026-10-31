@@ -137,15 +137,13 @@
 }
 
 /* View-mode button groups: zero-width when hidden, fade with opacity */
-#listModeActions,
-#gridModeActions {
+#listModeActions {
     width: 0;
     overflow: hidden;
     transition: opacity 0.25s ease;
 }
 
-#listModeActions:not(.view-hidden),
-#gridModeActions:not(.view-hidden) {
+#listModeActions:not(.view-hidden) {
     width: auto;
     overflow: visible;
 }
@@ -155,8 +153,7 @@
     left: 12px;
 }
 
-#listModeActions.view-hidden,
-#gridModeActions.view-hidden {
+#listModeActions.view-hidden {
     opacity: 0;
     pointer-events: none;
 }
@@ -172,8 +169,9 @@
     color: white;
 }
 
-/* NSFW blur effect: only on the media area (first child div of card) */
-.waterfall-card.nsfw-blur > div:first-child {
+/* NSFW blur effect: only on grid media and list thumbnails */
+.waterfall-card.nsfw-blur > div:first-child,
+.list-row.nsfw-blur .list-thumbnail img {
     filter: blur(25px);
     transition: filter 0.3s ease;
 }

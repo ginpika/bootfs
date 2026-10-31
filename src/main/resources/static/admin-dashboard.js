@@ -103,8 +103,6 @@ function restoreViewState() {
         if (paginationRow) paginationRow.classList.add('hidden');
         const listModeActions = document.getElementById('listModeActions');
         if (listModeActions) listModeActions.classList.add('view-hidden');
-        const gridModeActions = document.getElementById('gridModeActions');
-        if (gridModeActions) gridModeActions.classList.remove('view-hidden');
     } else {
         if (gridView) gridView.classList.add('hidden');
         if (listView) listView.classList.remove('hidden');
@@ -113,8 +111,6 @@ function restoreViewState() {
         if (paginationRow) paginationRow.classList.remove('hidden');
         const listModeActions = document.getElementById('listModeActions');
         if (listModeActions) listModeActions.classList.remove('view-hidden');
-        const gridModeActions = document.getElementById('gridModeActions');
-        if (gridModeActions) gridModeActions.classList.add('view-hidden');
     }
 
     // Restore NSFW blur state from localStorage
@@ -721,7 +717,7 @@ async function appendToWaterfallAsync(files) {
                 
                 targetColumn.appendChild(card);
                 
-                applyNsfwBlurToCard(card);
+                applyNsfwBlurToItem(card);
 
                 const albumCover = card.querySelector('.album-cover');
                 if (albumCover && isAlbum(file)) {
@@ -735,7 +731,7 @@ async function appendToWaterfallAsync(files) {
                                      onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center\\' style=\\'background-color: var(--color-bg-tertiary);\\'><svg class=\\'w-16 h-16\\' style=\\'color: var(--color-text-muted);\\' fill=\\'none\\' stroke=\\'currentColor\\' viewBox=\\'0 0 24 24\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' stroke-width=\\'2\\' d=\\'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z\\'></path></svg></div>';">
                             `;
                             // Re-apply NSFW blur after poster loads
-                            applyNsfwBlurToCard(card);
+                            applyNsfwBlurToItem(card);
                         }
                     });
                 }
@@ -796,6 +792,7 @@ function renderFileList(data) {
     
     // Add event listeners to list rows
     listContainer.querySelectorAll('.list-row').forEach(row => {
+        applyNsfwBlurToItem(row);
         const uuid = row.dataset.uuid;
         const file = data.rows.find(f => f.uuid === uuid);
         
@@ -1066,7 +1063,7 @@ function createListRow(file) {
             </td>
             <td class="px-6 py-4">
                 <div class="flex items-center">
-                    <div class="flex-shrink-0 h-10 w-10">
+                    <div class="list-thumbnail flex-shrink-0 h-10 w-10 overflow-hidden theme-rounded-lg">
                         ${isImageFile ? `
                             ${hasThumb(file) ? `
                                 <img class="h-10 w-10 theme-rounded-lg object-cover"
@@ -1513,8 +1510,6 @@ function switchView(view) {
         }
         const listModeActions = document.getElementById('listModeActions');
         if (listModeActions) listModeActions.classList.add('view-hidden');
-        const gridModeActions = document.getElementById('gridModeActions');
-        if (gridModeActions) gridModeActions.classList.remove('view-hidden');
         const localFolderPanel = document.getElementById('localFolderPanel');
         const mainView = document.getElementById('mainView');
         // 跳过关闭面板时的动画，避免左侧列表宽度变化的过渡效果
@@ -1536,8 +1531,6 @@ function switchView(view) {
         }
         const listModeActions = document.getElementById('listModeActions');
         if (listModeActions) listModeActions.classList.remove('view-hidden');
-        const gridModeActions = document.getElementById('gridModeActions');
-        if (gridModeActions) gridModeActions.classList.add('view-hidden');
         restoreLocalPanel();
         loadFileList();
     }
@@ -2615,24 +2608,14 @@ async function fetchAlbumPoster(uuid) {
     return null;
 }
 
-// Apply or remove NSFW blur on all waterfall cards
+// Apply or remove NSFW blur in both grid and list views
 function applyNsfwBlurToAll() {
-    const cards = document.querySelectorAll('.waterfall-card');
-    cards.forEach(card => {
-        const uuid = card.getAttribute('data-uuid');
-        if (!uuid) return;
-        // Find the file data from previewMediaFiles or query the DOM for tags
-        if (nsfwBlurActive && cardHasNsfwTag(card)) {
-            card.classList.add('nsfw-blur');
-        } else {
-            card.classList.remove('nsfw-blur');
-        }
-    });
+    document.querySelectorAll('.waterfall-card, .list-row').forEach(applyNsfwBlurToItem);
 }
 
-// Check if a waterfall card element has NSFW tags by reading its tag badges
-function cardHasNsfwTag(card) {
-    const badges = card.querySelectorAll('.waterfall-tag-badge');
+// Check the tag labels shared by grid cards and list rows
+function itemHasNsfwTag(item) {
+    const badges = item.querySelectorAll('.waterfall-tag-badge, .tag-badge-text');
     for (const badge of badges) {
         const text = (badge.textContent || '').toLowerCase().trim();
         if (text === 'nsfw' || text.startsWith('nsfw:') || text.endsWith(':nsfw')) {
@@ -2642,12 +2625,9 @@ function cardHasNsfwTag(card) {
     return false;
 }
 
-// Apply NSFW blur to a single card element (call after card is inserted)
-function applyNsfwBlurToCard(card) {
-    if (!nsfwBlurActive) return;
-    if (cardHasNsfwTag(card)) {
-        card.classList.add('nsfw-blur');
-    }
+// Synchronize blur after an item is rendered or the toggle changes
+function applyNsfwBlurToItem(item) {
+    item.classList.toggle('nsfw-blur', nsfwBlurActive && itemHasNsfwTag(item));
 }
 
 function formatFileSize(bytes) {

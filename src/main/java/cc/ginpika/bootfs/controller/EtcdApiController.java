@@ -1,8 +1,6 @@
 package cc.ginpika.bootfs.controller;
 
 import cc.ginpika.bootfs.service.etcd.EtcdService;
-import io.etcd.jetcd.ByteSequence;
-import io.etcd.jetcd.options.GetOption;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -28,55 +26,18 @@ public class EtcdApiController {
                                          @RequestParam(value = "mode", defaultValue = "fuzzy") String mode) {
         Map<String, Object> result = new HashMap<>();
         try {
-            List<io.etcd.jetcd.KeyValue> kvs;
-
+            Map<String,String> kvs = new TreeMap<>();
             if ("exact".equals(mode) && !prefix.isEmpty()) {
-                // 精确查询：只查单个 key
-                kvs = etcdService.client.getKVClient()
-                        .get(ByteSequence.from(prefix.getBytes()))
-                        .join()
-                        .getKvs();
+                String value = etcdService.getOne(prefix);
+                if (value != null) kvs.put(prefix,value);
             } else {
-                // 模糊查询：先按前缀从 etcd 拉取，再在服务端做 contains 过滤
-                // 提取 search 的前缀部分用于缩小 etcd 查询范围
-                String fetchPrefix = extractPrefixForQuery(prefix);
-                if (fetchPrefix.isEmpty()) {
-                    // 查全量 key：etcd range 查询，从 \0 开始
-                    ByteSequence keyStart = ByteSequence.from(new byte[]{0});
-                    kvs = etcdService.client.getKVClient()
-                            .get(keyStart,
-                                    GetOption.builder().withRange(ByteSequence.from(new byte[]{0}))
-                                            .withSortField(GetOption.SortTarget.KEY)
-                                            .withSortOrder(GetOption.SortOrder.ASCEND)
-                                            .build())
-                            .join()
-                            .getKvs();
-                } else {
-                    kvs = etcdService.client.getKVClient()
-                            .get(ByteSequence.from(fetchPrefix.getBytes()),
-                                    GetOption.builder().isPrefix(true)
-                                            .withSortField(GetOption.SortTarget.KEY)
-                                            .withSortOrder(GetOption.SortOrder.ASCEND)
-                                            .build())
-                            .join()
-                            .getKvs();
-                }
-
-                // 服务端 contains 过滤
-                if (!prefix.isEmpty()) {
-                    String searchTerm = prefix;
-                    kvs = kvs.stream()
-                            .filter(kv -> kv.getKey().toString().contains(searchTerm))
-                            .collect(Collectors.toList());
-                }
+                etcdService.scan("").forEach((key,value) -> {
+                    if (key.contains(prefix)) kvs.put(key,value);
+                });
             }
-
-            List<Map<String, String>> items = kvs.stream().map(kv -> {
-                Map<String, String> item = new HashMap<>();
-                item.put("key", kv.getKey().toString());
-                item.put("value", kv.getValue().toString());
-                return item;
-            }).collect(Collectors.toList());
+            List<Map<String,String>> items = kvs.entrySet().stream()
+                    .map(entry -> Map.of("key",entry.getKey(),"value",entry.getValue()))
+                    .collect(Collectors.toList());
 
             result.put("succeed", true);
             result.put("data", items);
@@ -132,7 +93,10 @@ public class EtcdApiController {
         try {
             String value = etcdService.getOne(key);
             result.put("succeed", true);
-            result.put("data", Map.of("key", key, "value", value));
+            Map<String,String> item = new HashMap<>();
+            item.put("key",key);
+            item.put("value",value);
+            result.put("data",item);
         } catch (Exception e) {
             log.error("查询 etcd key 失败", e);
             result.put("succeed", false);

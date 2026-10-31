@@ -62,8 +62,12 @@ public class MeiliSearchApiController {
     public Map<String, Object> searchDocuments(@PathVariable String indexUid,
                                                 @RequestParam(defaultValue = "") String q,
                                                 @RequestParam(defaultValue = "0") int offset,
-                                                @RequestParam(defaultValue = "20") int limit) {
-        return meiliSearchService.searchDocuments(indexUid, q, offset, limit);
+                                                @RequestParam(defaultValue = "20") int limit,
+                                                @RequestParam(required = false) String sort,
+                                                @RequestParam(defaultValue = "false") boolean descending,
+                                                @RequestParam(required = false) Long minRevision,
+                                                @RequestParam(defaultValue = "1000") long timeoutMs) {
+        return meiliSearchService.searchDocuments(indexUid, q, offset, limit, sort, descending, minRevision, timeoutMs);
     }
 
     @PostMapping("/indexes/{indexUid}/documents")

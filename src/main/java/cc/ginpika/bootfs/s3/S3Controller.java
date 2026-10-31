@@ -22,6 +22,34 @@ import java.nio.charset.StandardCharsets;
 @RequiredArgsConstructor
 public class S3Controller {
 
+    @ExceptionHandler(cc.ginpika.bootfs.kernel.object.PublicationPendingException.class)
+    public void pending(cc.ginpika.bootfs.kernel.object.PublicationPendingException error, HttpServletResponse response) throws IOException {
+        response.setStatus(503); response.setHeader("X-BootFS-Upload-Id", error.getUploadId());
+        response.setContentType(MediaType.APPLICATION_XML_VALUE);
+        response.getWriter().write("<Error><Code>ServiceUnavailable</Code><Message>Upload not acknowledged; query status or retry with the same request ID.</Message></Error>");
+    }
+
+    @ExceptionHandler(S3PayloadException.class)
+    public void invalidPayload(S3PayloadException error, HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        resp.setStatus(400);
+        resp.setContentType(MediaType.APPLICATION_XML_VALUE);
+        resp.getWriter().write(error.isDigestMismatch()
+                ? "<Error><Code>XAmzContentSHA256Mismatch</Code><Message>Payload hash does not match.</Message></Error>"
+                : "<Error><Code>InvalidRequest</Code><Message>Unsupported payload encoding or hash.</Message></Error>");
+    }
+
+    @ExceptionHandler(S3ConcurrentWriteException.class)
+    public void concurrentWrite(S3ConcurrentWriteException error, HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        resp.setStatus(409);
+        resp.setContentType(MediaType.APPLICATION_XML_VALUE);
+        resp.getWriter().write("<Error><Code>OperationAborted</Code><Message>Concurrent object modification; retry the request.</Message></Error>");
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public void invalidRequest(IllegalArgumentException error, HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        writeError(resp,S3ErrorCode.INVALID_REQUEST,req,error.getMessage());
+    }
+
     private final S3Config s3Config;
     private final S3StorageService storageService;
     private final S3KeyIndex keyIndex;

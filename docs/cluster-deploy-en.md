@@ -1,4 +1,6 @@
-# Cluster Deployment
+# Legacy Cluster Deployment
+
+> This page documents the legacy external etcd deployment. For the embedded kernel, use [current deployment](cluster-deploy.md), [dynamic networking](mononode-dynamic-cluster.md), and [portable backup/restore](mononode-backup.md). Do not apply the legacy configuration to an initialized kernel directory.
 
 If you are familiar with Etcd & Docker Compose or are an experienced developer, you can deploy based on the architecture on your own and skip this chapter.
 

@@ -23,6 +23,8 @@ public class ThumbnailService {
     private final TfsConfig tfsConfig;
     private final Context context;
     private final ContextIO contextIO;
+    private final cc.ginpika.bootfs.service.meilisearch.MeiliSearchService search;
+    private final cc.ginpika.bootfs.kernel.cluster.ResourceVisibility visibility;
 
     public static final Set<String> IMAGE_EXTENSIONS = Set.of(".jpg", ".jpeg", ".png", ".gif");
     public static final Set<String> VIDEO_EXTENSIONS = Set.of(".mp4", ".webm", ".avi", ".mov", ".mkv", ".flv", ".wmv", ".m4v", ".ts");
@@ -73,6 +75,7 @@ public class ThumbnailService {
     }
 
     public void generate(String uuid) throws IOException, InterruptedException {
+        if (visibility.deleted(uuid)) return;
         FileObject fileObject = context.query(uuid);
         if (fileObject == null) return;
 
@@ -133,12 +136,20 @@ public class ThumbnailService {
         Process process = pb.start();
         byte[] output = process.getInputStream().readAllBytes();
         int exitCode = process.waitFor();
+        if (visibility.deleted(uuid)) {
+            Files.deleteIfExists(thumbFile);
+            return;
+        }
         if (exitCode != 0) {
             log.error("ffmpeg 生成缩略图失败，退出码 {}，输出: {}", exitCode, new String(output));
             Files.deleteIfExists(thumbFile);
         } else {
             fileObject.setThumbAvailable("1");
             contextIO.update(uuid, fileObject);
+            search.addToFullText(cc.ginpika.bootfs.service.meilisearch.FullTextDocument.builder().uuid(uuid).thumbAvailable("1").build());
         }
     }
+
+    @javax.annotation.PreDestroy
+    public void close() { executor.shutdownNow(); }
 }

@@ -1,5 +1,7 @@
 # BootFS
 
+This branch now embeds RocksDB, Apache Ratis and Lucene. The older deployment instructions below describe the legacy architecture. Follow the [current kernel and migration guide](./docs/mononode-kernel.md) and [cluster guide](./docs/cluster-deploy.md) for this revision.
+
 [中文](./README.md)
 
 <details>
@@ -43,6 +45,12 @@ The answer may be one of the following, and I happen to satisfy all of them pers
 
 Built with: spring-boot + etcd + meilisearch
 
+## Local development
+
+Install JDK 17 and Maven, then run `./dev.sh`. The script selects JDK 17 for both Maven and the application and enables the `dev` profile. Additional Maven options are forwarded, for example `./dev.sh -Dspring-boot.run.arguments=--server.port=8282`.
+
+When running `mvn spring-boot:run` directly, set `JAVA_HOME` to JDK 17 and confirm with `mvn -version`. Java 8 cannot load this application; newer JDKs can fail in the pinned Lombok processor with `TypeTag :: UNKNOWN`.
+
 ## Deployment
 
 HostID is a lightweight account foundation based on email, serving as a personal mailbox while managing small-scale sites like personal blogs and small forums.
@@ -65,3 +73,5 @@ docker compose up -d
 ## Cluster Deployment
 
 See [Cluster Deployment](./docs/cluster-deploy-en.md)
+
+Dynamic node discovery, conflict versions, online membership and graceful leave are described in [dynamic networking](docs/mononode-dynamic-cluster.md). Object write policies and failure semantics are in the [kernel guide](docs/mononode-kernel.md); complete offline kernel export and new-cluster recovery are in [backup/restore](docs/mononode-backup.md).

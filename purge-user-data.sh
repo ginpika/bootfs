@@ -62,6 +62,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# This legacy tool cannot safely reset a replicated kernel or its projection/recovery state.
+if [[ -d "$(dirname "$DB_JSON")/kernel" || -d "$(dirname "$DATA_DIR")/kernel" ]]; then
+  echo "错误: 检测到内置 mononode 内核。此脚本仅适用于旧 etcd/MeiliSearch 部署，已停止，未删除任何数据。" >&2
+  exit 1
+fi
+
 # ===== 工具函数 =====
 
 # 统一的 etcdctl 调用：优先 docker exec，其次本地 etcdctl

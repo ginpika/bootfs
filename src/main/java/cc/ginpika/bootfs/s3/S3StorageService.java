@@ -49,54 +49,23 @@ public class S3StorageService {
     private final S3KeyIndex keyIndex;
     private final S3XmlWriter xmlWriter;
 
-    public S3ObjectMeta putObject(String bucket, String key, HttpServletRequest req) throws IOException {
-        String uuid = IdGenerator.getUniqueId();
-        Path path = Path.of(tfsConfig.getPathPrefix(), uuid);
-        ensureDataDir();
-
-        MessageDigest md5;
-        try {
-            md5 = MessageDigest.getInstance("MD5");
-        } catch (Exception e) {
-            throw new IOException(e);
+    public synchronized S3ObjectMeta putObject(String bucket, String key, HttpServletRequest req) throws IOException {
+        String hash = req.getHeader("x-amz-content-sha256");
+        String encoding = req.getHeader("Content-Encoding");
+        if ((encoding != null && encoding.toLowerCase(Locale.ROOT).contains("aws-chunked"))
+                || (hash != null && !hash.equals("UNSIGNED-PAYLOAD") && !hash.matches("[0-9a-fA-F]{64}"))) {
+            throw new S3PayloadException("Streaming aws-chunked signing modes are not supported", false);
         }
-
-        long size;
-        try (InputStream in = req.getInputStream();
-             DigestInputStream dis = new DigestInputStream(in, md5);
-             OutputStream out = Files.newOutputStream(path, StandardOpenOption.CREATE_NEW)) {
-            size = dis.transferTo(out);
-        }
-        String etag = S3CryptoUtils.hex(md5.digest());
-
-        String contentType = req.getContentType();
-        if (contentType == null) contentType = "application/octet-stream";
-
-        FileObject fo = new FileObject(path.toString(), uuid, key, size);
-        context.record(fo, uuid);
-
-        int dot = key.lastIndexOf('.');
-        String ext = dot >= 0 ? key.substring(dot) : "";
-        JSONObject meta = new JSONObject();
-        meta.put("size", size);
-        meta.put("ext", ext);
-        meta.put("etag", etag);
-        etcdService.putFile(uuid, context.buildUrl(uuid), meta.toJSONString());
-
-        try {
-            fileService.replication(new File(path.toString()), uuid, key);
-        } catch (Exception e) {
-            log.warn("S3 PutObject replication failed for {}: {}", uuid, e.getMessage());
-        }
-
-        S3ObjectMeta s3meta = new S3ObjectMeta(uuid, size, etag, System.currentTimeMillis(), key, contentType);
-        keyIndex.putIndex(bucket, key, s3meta);
-        return s3meta;
+        String expected = keyIndex.rawIndex(bucket, key);
+        String type = req.getContentType() == null ? "application/octet-stream" : req.getContentType();
+        FileService.PublishedResource published = fileService.publishS3(req.getInputStream(), key, bucket, type, expected, hash, req.getHeader("X-BootFS-Request-Id"));
+        return new S3ObjectMeta(published.file().getUuid(), published.file().getSize(), published.etag(),
+                published.file().getCreatedAt(), key, type);
     }
 
     public void getObject(String bucket, String key, HttpServletRequest req, HttpServletResponse resp) throws IOException {
         S3ObjectMeta meta = keyIndex.getIndex(bucket, key);
-        if (meta == null) {
+        if (meta == null || etcdService.getOne("/tombstones/" + meta.getUuid()) != null) {
             writeError(resp, S3ErrorCode.NO_SUCH_KEY, req);
             return;
         }
@@ -105,15 +74,13 @@ public class S3StorageService {
         if (localFile != null && localFile.exists()) {
             writeLocalObject(localFile, meta, req, resp);
         } else {
-            // 远程文件兜底(媒体类型有效,非媒体远程 MVP2 补)
-            reverseProxyService.reverseProxyFile(meta.getUuid(), resp, req);
-            resp.setHeader("ETag", "\"" + meta.getEtag() + "\"");
+            proxyRemoteObject(meta, req, resp);
         }
     }
 
     public void headObject(String bucket, String key, HttpServletResponse resp, HttpServletRequest req) throws IOException {
         S3ObjectMeta meta = keyIndex.getIndex(bucket, key);
-        if (meta == null) {
+        if (meta == null || etcdService.getOne("/tombstones/" + meta.getUuid()) != null) {
             writeError(resp, S3ErrorCode.NO_SUCH_KEY, req);
             return;
         }
@@ -125,19 +92,56 @@ public class S3StorageService {
         resp.setContentLengthLong(meta.getSize());
     }
 
-    public void deleteObject(String bucket, String key) {
+    public synchronized void deleteObject(String bucket, String key) throws S3ConcurrentWriteException {
         S3ObjectMeta meta = keyIndex.getIndex(bucket, key);
-        if (meta == null) return; // 幂等
-        String uuid = meta.getUuid();
-        FileObject fo = context.query(uuid);
-        if (fo != null && fo.getPath() != null) {
-            try {
-                new File(fo.getPath()).delete();
-            } catch (Exception ignored) {}
+        if (meta == null) return;
+        // The shared lifecycle commits the tombstone before conditionally removing its bindings.
+        // A competing PUT with a different resource generation is preserved.
+        fileService.deleteResource(meta.getUuid());
+    }
+
+    private void proxyRemoteObject(S3ObjectMeta meta, HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        if (etcdService.getOne("/tombstones/" + meta.getUuid()) != null) {
+            writeError(resp, S3ErrorCode.NO_SUCH_KEY, req);
+            return;
         }
-        context.remove(uuid);
-        etcdService.delFileAndReplicas(uuid);
-        keyIndex.deleteIndex(bucket, key);
+        java.util.Set<String> candidates = new java.util.LinkedHashSet<>();
+        String primary = etcdService.getOne("/files/" + meta.getUuid());
+        if (primary != null) candidates.add(primary);
+        etcdService.scan("/files/" + meta.getUuid() + "/replicas/").forEach((key, value) -> {
+            if (!key.endsWith("/meta")) candidates.add(value);
+        });
+        org.apache.http.client.config.RequestConfig config = org.apache.http.client.config.RequestConfig.custom()
+                .setConnectTimeout(5000).setSocketTimeout(60000).build();
+        try (org.apache.http.impl.client.CloseableHttpClient client = org.apache.http.impl.client.HttpClients.custom()
+                .setDefaultRequestConfig(config).disableContentCompression().disableRedirectHandling().build()) {
+            for (String url : candidates) {
+                org.apache.http.client.methods.HttpGet get = new org.apache.http.client.methods.HttpGet(url);
+                get.setHeader("Accept-Encoding", "identity");
+                get.setHeader("Is-Proxy", "1");
+                get.setHeader("Accept-Type", meta.getContentType() == null ? "application/octet-stream" : meta.getContentType());
+                for (String header : new String[]{"Range", "If-Range", "If-Modified-Since", "If-None-Match"}) {
+                    if (req.getHeader(header) != null) get.setHeader(header, req.getHeader(header));
+                }
+                try (org.apache.http.client.methods.CloseableHttpResponse upstream = client.execute(get)) {
+                    int status = upstream.getStatusLine().getStatusCode();
+                    if (status == 404 || status >= 500 || (status >= 300 && status != 304)) continue;
+                    resp.setStatus(status);
+                    for (String header : new String[]{"Content-Length", "Content-Range", "Accept-Ranges", "Last-Modified"}) {
+                        org.apache.http.Header value = upstream.getFirstHeader(header);
+                        if (value != null) resp.setHeader(header, value.getValue());
+                    }
+                    resp.setContentType(meta.getContentType() == null ? "application/octet-stream" : meta.getContentType());
+                    resp.setHeader("ETag", "\"" + meta.getEtag() + "\"");
+                    if (upstream.getEntity() != null) upstream.getEntity().writeTo(resp.getOutputStream());
+                    return;
+                } catch (IOException failure) {
+                    if (resp.isCommitted()) throw failure;
+                    log.warn("S3 resource {} candidate {} unavailable", meta.getUuid(), url, failure);
+                }
+            }
+        }
+        resp.sendError(503, "No confirmed object replica is currently reachable");
     }
 
     private void writeLocalObject(File file, S3ObjectMeta meta, HttpServletRequest req, HttpServletResponse resp) throws IOException {
@@ -147,31 +151,30 @@ public class S3StorageService {
         boolean partial = false;
 
         String rangeHeader = req.getHeader("Range");
-        if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
-            String spec = rangeHeader.substring(6).trim();
-            int dash = spec.indexOf('-');
+        String ifRange = req.getHeader("If-Range");
+        boolean rangeAllowed = ifRange == null || ifRange.equals("\"" + meta.getEtag() + "\"")
+                || ifRange.equals(formatHttpDate(meta.getLastModified()));
+        if (rangeHeader != null && rangeAllowed) {
             try {
+                if (!rangeHeader.startsWith("bytes=") || rangeHeader.indexOf(',') >= 0) throw new IllegalArgumentException();
+                String spec = rangeHeader.substring(6).trim();
+                int dash = spec.indexOf('-');
+                if (dash < 0 || spec.indexOf('-', dash + 1) >= 0 || total == 0) throw new IllegalArgumentException();
                 if (dash == 0) {
                     long suffix = Long.parseLong(spec.substring(1));
+                    if (suffix <= 0) throw new IllegalArgumentException();
                     start = Math.max(0, total - suffix);
-                    end = total - 1;
-                    partial = true;
-                } else if (dash > 0) {
+                } else {
                     start = Long.parseLong(spec.substring(0, dash));
-                    end = (dash < spec.length() - 1) ? Long.parseLong(spec.substring(dash + 1)) : total - 1;
-                    partial = true;
+                    if (dash < spec.length() - 1) end = Long.parseLong(spec.substring(dash + 1));
+                    if (start < 0 || start >= total || end < start) throw new IllegalArgumentException();
+                    end = Math.min(end, total - 1);
                 }
-                if (partial) {
-                    if (start >= total) {
-                        resp.setStatus(416);
-                        resp.setHeader("Content-Range", "bytes */" + total);
-                        return;
-                    }
-                    if (end >= total) end = total - 1;
-                    if (end < start) end = start;
-                }
-            } catch (NumberFormatException ignored) {
-                partial = false;
+                partial = true;
+            } catch (IllegalArgumentException invalid) {
+                resp.setStatus(416);
+                resp.setHeader("Content-Range", "bytes */" + total);
+                return;
             }
         }
 

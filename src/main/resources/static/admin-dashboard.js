@@ -1969,7 +1969,7 @@ function convertToHLS() {
 }
 
 function convertSingleToHLS(uuid) {
-    fetch(`/hls/convert?uuid=${uuid}`)
+    fetch(`/hls/convert?uuid=${uuid}`, { method: 'POST' })
     .then(response => response.text())
     .then(data => {
         showToast('HLS 转码已启动', 'success');

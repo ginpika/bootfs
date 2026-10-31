@@ -1,6 +1,5 @@
 package cc.ginpika.bootfs.controller;
 
-import cc.ginpika.bootfs.config.MeiliSearchConfig;
 import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.domain.dto.FileObject;
 import cc.ginpika.bootfs.core.Context;
@@ -27,7 +26,6 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class WebUIController {
     private final Context context;
-    private final MeiliSearchConfig meiliSearchConfig;
     private final TfsConfig tfsConfig;
     private final SsoConfig ssoConfig;
 
@@ -36,9 +34,6 @@ public class WebUIController {
     public ModelAndView indexOld(HttpServletRequest request) {
         ModelAndView mv = new ModelAndView();
         mv.setViewName("index");
-        if (StringUtils.isNotBlank(meiliSearchConfig.getWebUi())) {
-            mv.getModel().put("meilisearchWebUi", meiliSearchConfig.getWebUi());
-        }
         SsoUser ssoUser = (SsoUser) request.getAttribute("ssoUser");
         if (ssoUser != null) {
             mv.getModel().put("ssoUser", ssoUser);
@@ -54,15 +49,6 @@ public class WebUIController {
     public ModelAndView index(HttpServletRequest request) {
         ModelAndView mv = new ModelAndView();
         mv.setViewName("admin-dashboard");
-        if (StringUtils.isNotBlank(meiliSearchConfig.getWebUi())) {
-            mv.getModel().put("meilisearchWebUi", meiliSearchConfig.getWebUi());
-        }
-        if (StringUtils.isNotBlank(meiliSearchConfig.getUrl())) {
-            mv.getModel().put("meilisearchUrl", meiliSearchConfig.getUrl());
-        }
-        if (StringUtils.isNotBlank(meiliSearchConfig.getMasterKey())) {
-            mv.getModel().put("meilisearchToken", meiliSearchConfig.getMasterKey());
-        }
         SsoUser ssoUser = (SsoUser) request.getAttribute("ssoUser");
         if (ssoUser != null) {
             mv.getModel().put("ssoUser", ssoUser);
@@ -78,9 +64,6 @@ public class WebUIController {
     public ModelAndView oldAdmin(HttpServletRequest request) {
         ModelAndView mv = new ModelAndView();
         mv.setViewName("index");
-        if (StringUtils.isNotBlank(meiliSearchConfig.getWebUi())) {
-            mv.getModel().put("meilisearchWebUi", meiliSearchConfig.getWebUi());
-        }
         SsoUser ssoUser = (SsoUser) request.getAttribute("ssoUser");
         if (ssoUser != null) {
             mv.getModel().put("ssoUser", ssoUser);

@@ -23,10 +23,17 @@ public class S3Config {
     private String region = "us-east-1";
     private String bucket = "bootfs";
 
+    @javax.annotation.PostConstruct
+    public void validateCredentials() {
+        if (accessKey == null || accessKey.isBlank() || secretKey == null || secretKey.isBlank()) {
+            throw new IllegalArgumentException("Enabled S3 requires explicit access-key and secret-key");
+        }
+    }
+
     @Bean
     public FilterRegistrationBean<S3AuthFilter> s3AuthFilterRegistration(S3AuthFilter s3AuthFilter) {
         FilterRegistrationBean<S3AuthFilter> reg = new FilterRegistrationBean<>(s3AuthFilter);
-        reg.addUrlPatterns("/s3/*");
+        reg.addUrlPatterns("/s3", "/s3/*");
         reg.setOrder(Ordered.HIGHEST_PRECEDENCE + 10);
         reg.setName("s3AuthFilter");
         return reg;

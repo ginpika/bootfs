@@ -21,7 +21,7 @@ public class HlsController {
 
     public static ReentrantLock CPU_LOCK = new ReentrantLock();
 
-    @RequestMapping("/convert")
+    @PostMapping("/convert")
     public ResponseEntity<?> convert(@RequestParam("uuid") String uuid) {
         if (CPU_LOCK.isLocked()) {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
@@ -50,8 +50,8 @@ public class HlsController {
             } else if (file.endsWith(".m3u8")) {
                 return ResponseEntity.ok().header("Content-Type", "application/vnd.apple.mpegurl").body(resource);
             }
-            return ResponseEntity.ok().body("404 Not Found");
+            return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.ok().body("404 Not Found");
+        return ResponseEntity.notFound().build();
     }
 }

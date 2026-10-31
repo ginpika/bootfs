@@ -1,56 +1,20 @@
 # syntax=docker/dockerfile:1.4
-
-# Stage 1: Build stage - compile the application
-FROM maven:3.10-eclipse-temurin-17 AS builder
-
+FROM maven:3.9-eclipse-temurin-17 AS builder
 WORKDIR /build
-
-# Copy pom.xml first
 COPY pom.xml .
-
-# Download dependencies with cache mount
-# The .m2 directory is cached separately from the image layers
-RUN --mount=type=cache,target=/root/.m2 \
-    mvn dependency:go-offline -B
-
-# Copy source code and build with cache mount
+RUN --mount=type=cache,target=/root/.m2 mvn dependency:go-offline -B
 COPY src ./src
-RUN --mount=type=cache,target=/root/.m2 \
-    mvn clean package -DskipTests -B
+RUN --mount=type=cache,target=/root/.m2 mvn package -DskipTests -B
 
-# Stage 2: Runtime stage - minimal JRE image
 FROM eclipse-temurin:17-jre-jammy
-
-ENV TZ=PRC
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
-# Install ffmpeg (for HLS transcoding + webp thumbnail generation)
+ENV TZ=Asia/Shanghai
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create non-root user for security
-RUN groupadd -r bootfs && useradd -r -g bootfs bootfs
-
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r bootfs && useradd -r -g bootfs bootfs \
+    && mkdir -p /app /data/cache && chown -R bootfs:bootfs /app /data
 WORKDIR /app
-
-# Copy the built jar from builder stage
 COPY --from=builder /build/target/bootfs-*.jar /app.jar
-
-# Create data directory and set permissions
-RUN mkdir -p /data && chown -R bootfs:bootfs /app
-
 USER bootfs
-
 EXPOSE 8181
-
-ENTRYPOINT exec java $JAVA_OPTS -Dspring.profiles.active=prod -jar /app.jar \
-    --server.tomcat.connection-timeout=1800000 \
-    --tfs.copies=$TFS_COPIES \
-    --tfs.web-entrypoint=$TFS_WEB_ENTRYPOINT \
-    --tfs.data-dir=/data \
-    --meili-search.master-key=$MEILISEARCH_MASTER_KEY \
-    --meili-search.web-ui=$MEILISEARCH_WEB_UI \
-    --meili-search.url=$MEILISEARCH_URL \
-    --sso.server-url=$SSO_SERVER_URL \
-    --sso.info-url=$SSO_INFO_URL
+ENTRYPOINT ["java", "-Dspring.profiles.active=prod", "-jar", "/app.jar"]

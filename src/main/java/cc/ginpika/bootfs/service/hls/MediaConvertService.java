@@ -21,21 +21,27 @@ public class MediaConvertService {
     TfsConfig tfsConfig;
     @Resource
     ContextIO contextIO;
+    @Resource
+    cc.ginpika.bootfs.service.meilisearch.MeiliSearchService search;
+    @Resource
+    cc.ginpika.bootfs.kernel.cluster.ResourceVisibility visibility;
 
     public static final String EXE_SUFFIX =
             System.getProperty("os.name").toLowerCase().startsWith("win") ? ".exe" : "";
 
     // TODO plan refactor, this method is too lang
     public void mp4ToH264Hls(String uuid) {
+        if (visibility.deleted(uuid)) throw new IllegalArgumentException("Resource was deleted");
         Path ffmpeg = Path.of(tfsConfig.getFfmpegUrl());
 
         FileObject fileObject = context.STORAGE.get(uuid);
+        if (fileObject == null) throw new IllegalArgumentException("Resource not found");
 
         // output_segment
         String outputUuid = fileObject.getUuid();
         Path outputSegmentDir = Path.of(tfsConfig.getPathPrefix(), "hls", outputUuid);
         try {
-            if (Files.exists(outputSegmentDir)) {
+            if (Files.isRegularFile(outputSegmentDir.resolve("playlist.m3u8")) && "1".equals(fileObject.getHlsAvailable())) {
                 log.info("目标 uuid 已经经过 hls 转码");
                 fileObject.setHlsAvailable("1");
                 contextIO.update(uuid, fileObject);
@@ -58,8 +64,7 @@ public class MediaConvertService {
         Path playlistPath = Path.of(String.valueOf(outputSegmentDir), "playlist.m3u8");
         Path outputSegmentPath = Path.of(String.valueOf(outputSegmentDir), "segment_%05d.ts");
 
-        // if not run in win, chmod ffmpeg binary file for media software encoding
-        if (!System.getProperty("os.name").toLowerCase().startsWith("win")) this.chmodFfmpeg();
+
 
         ProcessBuilder processBuilder = new ProcessBuilder();
 
@@ -99,19 +104,29 @@ public class MediaConvertService {
                         playlistPath.toString());
             }
 
-            processBuilder.directory(ffmpeg.getParent().toFile());
+
 
             processBuilder.redirectErrorStream(true);
             Process process = processBuilder.start();
             log.info(processBuilder.command().toString());
             Thread pLog = new Thread(() -> logStream(process.getInputStream(), outputLog));
             pLog.start();
-            process.waitFor();
-            process.destroy();
+            int exit = process.waitFor();
+            pLog.join();
+            if (visibility.deleted(uuid)) {
+                cc.ginpika.bootfs.core.io.DurableFiles.deleteTree(outputSegmentDir);
+                return;
+            }
+            if (exit != 0 || !Files.isRegularFile(playlistPath)) {
+                cc.ginpika.bootfs.core.io.DurableFiles.deleteTree(outputSegmentDir);
+                throw new IOException("FFmpeg conversion failed with exit code " + exit);
+            }
             fileObject.setHlsAvailable("1");
             contextIO.update(uuid, fileObject);
+            search.addToFullText(cc.ginpika.bootfs.service.meilisearch.FullTextDocument.builder().uuid(uuid).hlsAvailable("1").build());
         } catch (Exception e) {
-            log.error("MediaConvertService", e);
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            throw new IllegalStateException("Media conversion failed", e);
         }
     }
 
@@ -130,15 +145,4 @@ public class MediaConvertService {
         }
     }
 
-    private void chmodFfmpeg() {
-        try  {
-            ProcessBuilder processBuilder = new ProcessBuilder();
-            processBuilder.command("chmod", "777", tfsConfig.getFfmpegUrl());
-            Process process = processBuilder.start();
-            process.waitFor();
-            process.destroy();
-        } catch (IOException | InterruptedException e) {
-            log.error("chmod ffmpeg failed", e);
-        }
-    }
 }

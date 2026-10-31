@@ -2,6 +2,8 @@
 
 [English](./README-en.md)
 
+当前分支正在演进为内置 mononode：RocksDB + Apache Ratis + Lucene。运行、旧数据迁移和实现边界请先阅读 [内核指南](./docs/mononode-kernel.md)。
+
 <details>
   <summary>界面预览</summary>
   <img src="./docs/preview3.png" alt="双栏操作界面" width="600">
@@ -25,7 +27,9 @@
 
 ## 架构
 
-![BootFS 集群架构参考](./Architecture.png)
+![BootFS 历史外置中间件架构参考](./Architecture.png)
+
+上图保留设计沿革。当前内置内核与集群部署见 [mononode-kernel.md](./docs/mononode-kernel.md) 和 [cluster-deploy.md](./docs/cluster-deploy.md)。
 
 采用去中心化对等边缘存储架构 (Decentralized Peer-to-Peer Edge Storage Architecture)
 
@@ -39,74 +43,49 @@
 - 内置了一个 hls 流个人放送平台，并且可以碎片化的上传 hls 流文件，在线上与朋友共同欣赏大片
 - 内置了一个酷炫的瀑布流随机画廊
 - 通过 FFmpeg 实现了 webp 编解码以及 hls 转码能力
-- 基于 etcd + meilisearch 小而精的轻量化架构，内置元数据管理，基于对等节点设计的可分布式结构
+- 内嵌 RocksDB 元数据、Apache Ratis 共识和 Lucene 检索，单程序部署，支持显式静态 Raft 集群
 
-Build with ：spring-boot + etcd + meilisearch
+Build with：Spring Boot + RocksDB + Apache Ratis + Lucene + FFmpeg
 
 ## 开发
 
-以 Mac 为例，通过 Homebrew 安装依赖后，启动 etcd 实例和 meilisearch 实例
+使用 JDK 17 和系统 Maven。媒体处理需要 FFmpeg。
+
+本地开发启动（自动查找 JDK 17，避免系统 Java 与 Maven 使用不同版本）：
 
 ```shell
-brew install etcd
-brew install meilisearch
-brew install ffmpeg-full
-cd ./bootfs
-./etcd
-./meilisearch -master-key=YOUR_MASTER_KEY
+./dev.sh
+# 额外 Maven 参数示例：
+./dev.sh -Dspring-boot.run.arguments=--server.port=8282
 ```
 
-调整 application-dev.properties 相关配置
+若直接使用 `mvn spring-boot:run`，请先将 `JAVA_HOME` 指向 JDK 17，并用 `mvn -version` 确认。Java 8 无法运行本项目，较新 JDK 可能与当前 Lombok 注解处理器不兼容（如 `TypeTag :: UNKNOWN`）。macOS Homebrew 安装的 JDK 17 可这样使用：
 
-将 sso.enabled = false 可以不需要 Hostid 启动 BootFS
+```shell
+export JAVA_HOME="$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home"
+export PATH="$JAVA_HOME/bin:$PATH"
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
+```
 
-部分功能需要 ffmpeg 支持，比如 webp 编解码以及 hls 转码能力
+手动构建和运行也需使用同一 JDK 17：
 
-Windows 开发者可以尝试 winget，或者是前往官网自行下载预编译的二进制程序。
+```shell
+mvn test
+mvn package -DskipTests
+java -jar target/bootfs-v1.0.0-beta.1.jar --spring.profiles.active=dev
+```
+
+开发配置默认关闭 SSO。旧数据目录需要显式迁移，不能直接将本地文件清单当作外部搜索元数据的完整备份。
 
 ## 部署
 
-HostID 是一个基于电子邮件实现的轻量级账户底座，可以作为个人邮箱的同时，管理小规模的站点如个人博客，小型论坛等。
-
-默认开启基于 hostid 的 sso 鉴权，无需额外配置，如需关闭请查阅 application.properties & Dockerfile 并配置 .env
-
-**前置(recommend):** **[Hostid](https://github.com/ginpika/hostid)**
-
 ```shell
-# 找个地方
-mkdir bootfs
-# 获取 compose.yaml
-wget -O compose.yaml https://raw.githubusercontent.com/ginpika/bootfs/refs/heads/main/docker-compose.ghcr.yml
-# 根据 application.properties & Dockerfile 编写 .env
 cp .env.example .env
-# 一键启动
-docker compose up -d
+# 配置站点入口、SSO 和可选 S3 凭据
+docker compose up --build -d
 ```
 
-### .env.exapmle
-
-```.env
-# 文件的副本数，单节点建议为 1
-TFS_COPIES=1
-# 如果是本地开发，则为 http://localhost:8181
-TFS_WEB_ENTRYPOINT=https://bootfs.your-domain.com 
-
-# MeiliSearch Key
-MEILISEARCH_MASTER_KEY=YOUR_MEILISEARCH_MASTERKEY
-# MeiliSearch Web UI 的地址（为兼容旧版本，在未来将被逐渐弃用），本地开发时，应为 http://localhost:7700
-MEILISEARCH_WEB_UI=https://meilisearch.your-domain.com
-# MeiliSearch 的地址，基本上应与 MEILISEARCH_WEB_UI 一致。
-MEILISEARCH_URL=https://meilisearch.your-domain.com
-
-# Hostid 服务器地址，本地测试时，应为 Hostid 服务端默认地址 http://localhost:3001
-SSO_SERVER_URL=https://hostid.your-domain.com
-# SSO 信息页地址，Hostid 的 SSO Info 的公网地址，本地测试时，应为 Hostid UI 默认地址 http://localhost:3000
-SSO_INFO_URL=https://hostid-ui.your-domain.com/sso/info
-```
-
-## 集群部署
-
-见 [cluster-deploy.md](./docs/cluster-deploy.md)
+运行时只需要 BootFS 容器与数据卷。单节点、三节点、存储副本保证和迁移步骤见 [内核指南](./docs/mononode-kernel.md)；集群配置见 [集群部署](./docs/cluster-deploy.md)。
 
 ## 开发计划（优先度从上到下）
 
@@ -118,3 +97,11 @@ SSO_INFO_URL=https://hostid-ui.your-domain.com/sso/info
 - 去中心化P2P节点握手
 - Query 接口的优化
 - Controller 层整理
+
+### 动态组网、内容耐久性与恢复
+
+独立节点相互发现、带数据合并、运行中加入/安全退出使用新的 `dynamic` 模式；冲突 key 按版本保留，组网不搬迁旧对象。上传可选择 `single-local` 或 `replicated(k)`，后者在发布普通/S3 资源前等待 k 个不同节点的耐久确认。内置维护命令可离线导出、校验并恢复到新单机或新 Raft 集群。
+
+- [动态组网与版本](docs/mononode-dynamic-cluster.md)
+- [完整内核备份恢复](docs/mononode-backup.md)
+- [配置、故障语义及当前边界](docs/mononode-kernel.md)

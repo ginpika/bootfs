@@ -1,62 +1,29 @@
-version: '3.8'
-
+# Build and publish THIS revision before selecting BOOTFS_IMAGE; older images use the legacy deployment.
 services:
-  etcd:
-    image: quay.io/coreos/etcd:v3.6.7
-    command: >
-      /usr/local/bin/etcd
-      --name etcd
-      --data-dir /etcd-data
-      --listen-client-urls http://0.0.0.0:2379
-      --advertise-client-urls http://etcd:2379
-      --listen-peer-urls http://0.0.0.0:2380
-      --initial-advertise-peer-urls http://etcd:2380
-      --initial-cluster-token etcd-cluster
-      --initial-cluster "etcd=http://etcd:2380"
-      --initial-cluster-state new
-      --enable-pprof
-    networks:
-      - net
-    volumes:
-      - etcd_data:/etcd-data
-
-  meilisearch:
-    image: getmeili/meilisearch:v1.34.1
-    networks:
-      - net
-    volumes:
-      - meilisearch_data:/meili_data
-    ports:
-      - "7700:7700"
-    command: >
-      /meilisearch
-      --master-key ${MEILISEARCH_MASTER_KEY}
-
   app:
-    image: ghcr.io/ginpika/bootfs:latest
-    env_file:
-      - .env
-    networks:
-      - net
-    volumes:
-      - data:/app
+    image: ${BOOTFS_IMAGE:?Set BOOTFS_IMAGE to an image built from this revision}
     ports:
       - "8181:8181"
-      - "127.0.0.1:8563:8563"
+    volumes:
+      - data:/data
     environment:
-      - TFS_COPIES=${TFS_COPIES}
-      - TFS_WEB_ENTRYPOINT=${TFS_WEB_ENTRYPOINT}
-      - MEILISEARCH_MASTER_KEY=${MEILISEARCH_MASTER_KEY}
-      - MEILISEARCH_WEB_UI=${MEILISEARCH_WEB_UI}
-      - MEILISEARCH_URL=${MEILISEARCH_URL}
-    depends_on:
-      - etcd
-      - meilisearch
-
-networks:
-  net:
-
+      TFS_ROOT_PATH: /data
+      TFS_WEB_ENTRYPOINT: ${TFS_WEB_ENTRYPOINT:-http://localhost:8181}
+      TFS_COPIES: ${TFS_COPIES:-1}
+      SSO_ENABLED: ${SSO_ENABLED:-true}
+      SSO_SERVER_URL: ${SSO_SERVER_URL:-http://localhost:3001}
+      SSO_INFO_URL: ${SSO_INFO_URL:-http://localhost:3000/sso/info}
+      S3_ENABLED: ${S3_ENABLED:-false}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      S3_BUCKET: ${S3_BUCKET:-bootfs}
+      BOOTFS_CLUSTER_TOKEN: ${BOOTFS_CLUSTER_TOKEN:-}
+      BOOTFS_METADATA_MODE: ${BOOTFS_METADATA_MODE:-embedded}
+      BOOTFS_CLUSTER_DISCOVERY_ENABLED: ${BOOTFS_CLUSTER_DISCOVERY_ENABLED:-true}
+      BOOTFS_CLUSTER_RAFT_ADDRESS: ${BOOTFS_CLUSTER_RAFT_ADDRESS:-}
+      BOOTFS_RAFT_ALLOW_INSECURE_NETWORK: ${BOOTFS_RAFT_ALLOW_INSECURE_NETWORK:-false}
+      BOOTFS_OBJECT_WRITE_POLICY: ${BOOTFS_OBJECT_WRITE_POLICY:-single-local}
+      BOOTFS_OBJECT_REQUIRED_COPIES: ${BOOTFS_OBJECT_REQUIRED_COPIES:-0}
+      BOOTFS_OBJECT_PREPARE_TIMEOUT_MS: ${BOOTFS_OBJECT_PREPARE_TIMEOUT_MS:-30000}
 volumes:
-  etcd_data:
-  meilisearch_data:
   data:

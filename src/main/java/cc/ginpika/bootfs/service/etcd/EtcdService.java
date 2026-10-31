@@ -1,209 +1,70 @@
 package cc.ginpika.bootfs.service.etcd;
 
-import cc.ginpika.bootfs.config.EtcdConfig;
 import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.core.Context;
-import cc.ginpika.bootfs.core.IdGenerator;
-import io.etcd.jetcd.ByteSequence;
-import io.etcd.jetcd.Client;
-import io.etcd.jetcd.KV;
-import io.etcd.jetcd.KeyValue;
-import io.etcd.jetcd.options.DeleteOption;
-import io.etcd.jetcd.options.GetOption;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import cc.ginpika.bootfs.kernel.metadata.MetadataStore;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Service;
+import java.util.*;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
-
-@Slf4j
+/** Compatibility facade for existing routes; storage is now the embedded metadata kernel. */
 @Service
 public class EtcdService {
-    public Client client = null;
-    @Autowired
-    private EtcdConfig etcdConfig;
-    @Autowired
-    private TfsConfig tfsConfig;
-    @Autowired
-    private Context context;
+    private final MetadataStore store;
+    private final TfsConfig config;
+    private final Context context;
 
-    public EtcdService(EtcdConfig etcdConfig, TfsConfig tfsConfig, Context context) {
-        this.etcdConfig = etcdConfig;
-        this.tfsConfig = tfsConfig;
+    public EtcdService(MetadataStore store, TfsConfig config, Context context) {
+        this.store = store;
+        this.config = config;
         this.context = context;
     }
-
-    private final List<String> nodes = new ArrayList<>();
-
-    @EventListener
-    public void onRefresh(ContextRefreshedEvent event) {
-        client = Client.builder().endpoints(etcdConfig.getEndpoints().toArray(new String[0])).build();
-        log.info("[EtcdService] etcd client is ready");
-        try {
-            registry();
-        } catch (IOException e) {
-            e.printStackTrace();
-            log.info("配置中的 etcd 服务不可用，启用环境内的 etcd");
-            client = Client.builder().endpoints("http://127.0.0.1:2379").build();
-        }
-        log.info("[EtcdService] etcd client registry success");
-        log.info("node : {}", context.uuid);
-        ping();
-        log.info("current cluster nodes count: {}", this.nodes.size());
-    }
-
-    @EventListener
-    public void onClosed(ContextRefreshedEvent event) {}
-
-    public void put(String k, String v) {
-        ByteSequence key = ByteSequence.from(k.getBytes());
-        ByteSequence value = ByteSequence.from(v.getBytes());
-        KV kv = client.getKVClient();
-        kv.put(key, value).join();
-        log.info("写入 etcd {} -> {}", key, value);
-        kv.close();
-    }
-
-    public String getOne(String key) {
-        KV kv = client.getKVClient();
-        Optional<KeyValue> optionalKeyValue = kv.get(ByteSequence.from(key.getBytes())).join().getKvs().stream().findFirst();
-        return optionalKeyValue.map(keyValue -> keyValue.getValue().toString()).orElse(null);
-    }
-
-    public List<String> getWithPrefix(String prefix) {
-        return client.getKVClient()
-                .get(ByteSequence.from(prefix.getBytes()), GetOption.builder()
-                        .isPrefix(true).build())
-                .join()
-                .getKvs().stream().map(KeyValue::getValue).map(ByteSequence::toString).collect(Collectors.toList());
-    }
-
-    public void deleteWithPrefix(String prefix) {
-        log.info("deleteWithPrefix: {}", prefix);
-        client.getKVClient()
-                .delete(ByteSequence.from(prefix.getBytes()), DeleteOption.builder()
-                        .isPrefix(true).build())
-                .join();
-    }
-
-    public boolean delete(String key) {
-        long deleted = client.getKVClient().delete(ByteSequence.from(key.getBytes())).join().getDeleted();
-        return deleted > 0;
-    }
-
-    private List<String> queryAllNodes() {
-        return getWithPrefix("/cluster/node/");
-    }
-
-    public void registry() throws IOException {
-        context.checkDataDir();
-        if (tfsConfig.getUniqueId() == null) {
-            String normalized = tfsConfig.getConfig().replace("\\", "/");
-            String path = normalized.substring(0, normalized.lastIndexOf('/') + 1);
-            log.info("尝试读取 : {}", path + "uuid");
-            File uuidFile = new File(path + "uuid");
-            if (!uuidFile.exists()) {
-                String uuid = IdGenerator.getUniqueId();
-                try (FileOutputStream fos = new FileOutputStream(uuidFile)) {
-                    fos.write(uuid.getBytes());
-                }
-                context.uuid = uuid;
-            } else {
-                try (FileInputStream fis = new FileInputStream(uuidFile)) {
-                    context.uuid = new String(fis.readAllBytes());
-                }
-            }
-            this.put("/cluster/node/" + context.uuid, getServiceEndpoint());
-        } else {
-            this.put("/cluster/node/" + tfsConfig.getUniqueId(), getServiceEndpoint());
-            context.uuid = tfsConfig.getUniqueId();
-        }
-    }
-
-    private String getServiceEndpoint() {
-        return tfsConfig.getWebEntrypoint();
-    }
-
-    public void ping() {
-        client.getKVClient().get(ByteSequence.from("greeting".getBytes())).join().getKvs().stream()
-                .map(KeyValue::getValue).map(ByteSequence::toString).forEach(System.out::println);
-        nodes.addAll(queryAllNodes());
-    }
-
-    public List<String> getAllNodes() {
-        return this.nodes;
-    }
-
-    /**
-     * 获取集群所有节点的 UUID -> URL 映射
-     */
-    public Map<String, String> getNodesWithKeys() {
-        Map<String, String> result = new LinkedHashMap<>();
-        if (client == null) return result;
-        try {
-            client.getKVClient()
-                    .get(ByteSequence.from("/cluster/node/".getBytes()), GetOption.builder()
-                            .isPrefix(true).build())
-                    .join()
-                    .getKvs().forEach(kv -> {
-                        String key = kv.getKey().toString();
-                        String uuid = key.substring("/cluster/node/".length());
-                        String url = kv.getValue().toString();
-                        result.put(uuid, url);
-                    });
-        } catch (Exception e) {
-            log.warn("获取集群节点映射失败: {}", e.getMessage());
+    @EventListener @Order(10)
+    public void onRefresh(ContextRefreshedEvent event) { registry(); }
+    public boolean writable() { return !(store instanceof cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore) || ((cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore)store).available(); }
+    public void registry() { if (!writable()) return; put("/cluster/node/" + context.uuid, config.getWebEntrypoint()); }
+    public void put(String key, String value) { store.put(key, value); }
+    public String getOne(String key) { return store.get(key); }
+    public NavigableMap<String,String> scan(String prefix) { return store.scan(prefix); }
+    public void writeBatch(Map<String,String> puts, Set<String> deletes) { store.writeBatch(puts, deletes); }
+    public List<String> getWithPrefix(String prefix) { return new ArrayList<>(scan(prefix).values()); }
+    public void deleteWithPrefix(String prefix) { store.deletePrefix(prefix); }
+    public boolean delete(String key) { return store.delete(key); }
+    public boolean compareAndSet(String key, String expected, String replacement) { return store.compareAndSet(key,expected,replacement); }
+    public void ping() { store.revision(); }
+    public List<String> getAllNodes() { return new ArrayList<>(getNodesWithKeys().values()); }
+    public Map<String,String> getNodesWithKeys() {
+        Map<String,String> result = new LinkedHashMap<>();
+        scan("/cluster/node/").forEach((k,v) -> result.put(k.substring("/cluster/node/".length()),v));
+        if (store instanceof cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore) {
+            result.keySet().retainAll(((cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore)store).status().getJSONObject("peers").keySet());
         }
         return result;
     }
-
-    public void putFile(String fileId, String localNodeUrl,  String metaJson) {
-        this.put("/files/" + fileId, localNodeUrl);
-        this.put("/files/" + fileId + "/meta", metaJson);
+    public void putFile(String id, String url, String meta) {
+        store.writeBatch(Map.of("/files/"+id,url,"/files/"+id+"/meta",meta),Set.of());
     }
-
-    public void putFileReplica(String OriginFileId,String fileId, String localNodeUrl, String metaJson) {
-        this.put("/files/" + OriginFileId + "/replicas/" + fileId, localNodeUrl);
-        this.put("/files/" + OriginFileId + "/replicas/" + fileId + "/meta", metaJson);
-        this.put("/files/" + fileId, localNodeUrl);
-        this.put("/files/" + fileId + "/meta", metaJson);
+    public void putFileReplica(String origin, String id, String url, String meta) {
+        store.writeBatch(Map.of("/files/"+origin+"/replicas/"+id,url,
+            "/files/"+origin+"/replicas/"+id+"/meta",meta,
+            "/files/"+id,url,"/files/"+id+"/meta",meta),Set.of());
     }
-
-    public void delFileAndReplicas(String fileId) {
-        deleteWithPrefix("/files/" + fileId);
+    public void delFileAndReplicas(String id) {
+        Set<String> keys = new HashSet<>(scan("/files/"+id+"/").keySet());
+        keys.add("/files/"+id);
+        // Remove reverse references without deleting neighboring IDs with a common prefix.
+        scan("/files/").keySet().stream()
+            .filter(k -> k.endsWith("/replicas/"+id) || k.endsWith("/replicas/"+id+"/meta"))
+            .forEach(keys::add);
+        store.writeBatch(Map.of(),keys);
     }
-
     public int getMainResourceCount() {
-        String val = this.getOne("/properties/main-resources-count/" + this.context.uuid);
-        if (val == null) return 0;
-        try {
-            return Integer.parseInt(val);
-        } catch (Exception e) {
-            return 0;
-        }
+        String value = getOne("/properties/main-resources-count/"+context.uuid);
+        return value == null ? 0 : Integer.parseInt(value);
     }
-
-    public void updateMainResourceCount(int count) {
-        this.put("/properties/main-resources-count/" + this.context.uuid, String.valueOf(count));
-    }
-
-    // TODO 合并 registry 逻辑，作为生命周期对 Context 负责
-    public void online() throws IOException {
-        registry();
-    }
-
-    public void offline() {
-
-    }
+    public void updateMainResourceCount(int count) { put("/properties/main-resources-count/"+context.uuid,Integer.toString(count)); }
+    public void online() { registry(); }
+    public void offline() { delete("/cluster/node/"+context.uuid); }
 }

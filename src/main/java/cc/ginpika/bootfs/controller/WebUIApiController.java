@@ -2,8 +2,6 @@ package cc.ginpika.bootfs.controller;
 
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
 import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.core.IdGenerator;
 import cc.ginpika.bootfs.core.io.ContextIO;
@@ -17,7 +15,7 @@ import cc.ginpika.bootfs.service.etcd.EtcdService;
 import cc.ginpika.bootfs.service.meilisearch.ImageHostDocument;
 import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
 import cc.ginpika.bootfs.service.ai.AiMetadataService;
-import com.meilisearch.sdk.model.SearchResult;
+import cc.ginpika.bootfs.domain.result.SearchResult;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +49,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class WebUIApiController {
     private final Context context;
+    private final cc.ginpika.bootfs.service.FileService fileService;
     private final ContextIO contextIO;
     private final TfsConfig tfsConfig;
     private final EtcdService etcdService;
@@ -59,7 +58,7 @@ public class WebUIApiController {
     private final ReverseProxyService reverseProxyService;
     private final ClusterProxyService clusterProxyService;
 
-    private static final Cache<String, String> cache = CacheBuilder.newBuilder().build();
+
 
     private static final int CORE_POOL_SIZE = 8;
     private static final int MAXIMUM_POOL_SIZE = 16;
@@ -88,6 +87,7 @@ public class WebUIApiController {
                                            @RequestParam(value = "pageSize", defaultValue = "10") int pageSize,
                                            @RequestParam(value = "search", defaultValue = "") String search,
                                            @RequestParam(value = "tags", defaultValue = "") String tags) {
+        if (pageNumber < 0 || pageSize < 1 || pageSize > 1000) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,"Invalid pagination");
         // local 关键字 → 强制走本地内存查询，不走 MeiliSearch
         if (StringUtils.containsIgnoreCase(search, "meta:local")) {
             String localSearch = search.replaceAll("(?i)meta:local", "").trim();
@@ -112,45 +112,21 @@ public class WebUIApiController {
                         .collect(Collectors.toList())
                 : null;
 
-        // 按 uuid 去重，保留插入顺序；full-text 索引的数据更完整，后写入覆盖 image-host 的结果
-        LinkedHashMap<String, FileObject> fileMap = new LinkedHashMap<>();
-
-        SearchResult r2 = meiliSearchService.searchByTags(query, tagList, 0, 1000, "full-text");
-        if (r2 != null && r2.getHits() != null) {
-            for (Map<String, Object> hit : r2.getHits()) {
-                FileObject fo = reconstructFileObject(hit);
-                if (fo != null) {
-                    fileMap.put(fo.getUuid(), fo);
+        boolean includeAll = query != null && query.contains("meta:all");
+        String text = query == null ? "" : query.replace("meta:all", "").trim();
+        SearchResult result = meiliSearchService.searchResources(text,tagList,pageNumber,pageSize,includeAll);
+        List<FileObject> files = new ArrayList<>();
+        if (result != null && result.getHits() != null) {
+            for (Map<String,Object> hit : result.getHits()) {
+                FileObject file = reconstructFileObject(hit);
+                if (file != null) {
+                    file.setUrl(context.buildUrl(file.getUuid()));
+                    files.add(file);
                 }
             }
         }
-
-        if (fileMap.isEmpty()) return null;
-
-        List<FileObject> allFiles = new ArrayList<>(fileMap.values());
-        int total = allFiles.size();
-
-        // pageNumber 其实就是 offset，老旧设计没改
-        int offset = pageNumber;
-        int from = offset;
-        int to = Math.min(from + pageSize, allFiles.size());
-        // log.info("from: {}, to: {}", from, to);
-        if (from >= allFiles.size()) {
-            return FileObjectWebVO.builder()
-                    .pageNumber(pageNumber).pageSize(pageSize).total(total)
-                    .rows(Collections.emptyList()).build();
-        }
-
-        
-
-        List<FileObject> files = new ArrayList<>(allFiles.subList(from, to));
-        for (FileObject fo : files) {
-            fo.setUrl(context.buildUrl(fo.getUuid()));
-        }
-
-        return FileObjectWebVO.builder()
-                .pageNumber(pageNumber).pageSize(pageSize).total(total)
-                .rows(files).build();
+        return FileObjectWebVO.builder().total(result == null ? 0 : result.getEstimatedTotalHits())
+                .pageNumber(pageNumber).pageSize(pageSize).rows(files).build();
     }
 
     /**
@@ -210,81 +186,15 @@ public class WebUIApiController {
         String remoteIp = httpServletRequest.getHeader("X-forwarded-for");
         if (remoteIp == null) remoteIp = httpServletRequest.getRemoteAddr();
         log.info("remove: {} from {}", uuid, remoteIp);
-        deleteAtlasChildren(uuid);
-        meiliSearchService.deleteDocumentFromIndex("full-text", uuid);
-        meiliSearchService.deleteDocumentFromIndex("image-host", uuid);
-        context.remove(uuid);
-        etcdService.delFileAndReplicas(uuid);
-        return Boolean.TRUE;
+        return fileService.deleteResource(uuid);
     }
 
     @PostMapping("/removeFileBatch")
-    public Boolean removeFileBatch(HttpServletRequest httpServletRequest,
-                                   @RequestBody String uuids) {
-        String remoteIp = httpServletRequest.getHeader("X-forwarded-for");
-        if (remoteIp == null) remoteIp = httpServletRequest.getRemoteAddr();
+    public Boolean removeFileBatch(HttpServletRequest request, @RequestBody String uuids) {
         JSONArray array = JSONArray.parseArray(uuids);
-        log.info("batch remove: {} from {}", array.toJSONString(), remoteIp);
-
-        array.forEach(r -> {
-            CompletableFuture.runAsync(() -> {
-                try {
-                    String uuid = (String) r;
-                    deleteAtlasChildren(uuid);
-                    meiliSearchService.deleteDocumentFromIndex("full-text", uuid);
-                    meiliSearchService.deleteDocumentFromIndex("image-host", uuid);
-                    context.remove(uuid);
-                    etcdService.delFileAndReplicas(uuid);
-                } catch (Exception e) {
-                    log.error("uuid 不合法，删除失败: {}", r.toString(), e);
-                }
-            }, threadPoolExecutor);
-        });
+        // Return success only after all logical deletes are acknowledged.
+        for (Object id : array) fileService.deleteResource((String)id);
         return Boolean.TRUE;
-    }
-
-    /**
-     * 删除图集时，通过 MeiliSearch 索引找到该图集的子资源并一并删除
-     */
-    private void deleteAtlasChildren(String uuid) {
-        // 通过 MeiliSearch 的 full-text 索引查找该图集文档
-        Map<String, Object> docResult = meiliSearchService.getDocument("full-text", uuid);
-        if (!Boolean.TRUE.equals(docResult.get("succeed")) || docResult.get("data") == null) {
-            return;
-        }
-        JSONObject docData = (JSONObject) docResult.get("data");
-        JSONArray resources = docData.getJSONArray("resources");
-        if (resources == null || resources.isEmpty()) {
-            return;
-        }
-        log.info("从 MeiliSearch 找到图集 {} 的文档, resources 数量: {}", uuid, resources.size());
-
-        // 从 resources 的 url 列表中提取子图片 uuid（url 末尾即为 uuid）
-        List<String> childrenUuids = new ArrayList<>();
-        for (int i = 0; i < resources.size(); i++) {
-            String url = resources.getString(i);
-            if (url != null && url.contains("/")) {
-                String childUuid = url.substring(url.lastIndexOf("/") + 1);
-                childrenUuids.add(childUuid);
-            }
-        }
-
-        log.info("图集 {} 共有 {} 个子图片需要删除: {}", uuid, childrenUuids.size(), childrenUuids);
-        for (String childUuid : childrenUuids) {
-            try {
-                context.remove(childUuid);
-                etcdService.delFileAndReplicas(childUuid);
-                log.info("已删除图集子图片: {}", childUuid);
-            } catch (Exception e) {
-                log.error("删除图集子图片失败: {}", childUuid, e);
-            }
-        }
-
-        // 从 MeiliSearch 的 full-text 索引中删除该图集文档
-        meiliSearchService.deleteDocumentFromIndex("full-text", uuid);
-
-        // 同时清理 image-host 索引中可能存在的文档
-        meiliSearchService.deleteDocumentFromIndex("image-host", uuid);
     }
 
     @PostMapping("/downloadFileBatch")
@@ -317,7 +227,6 @@ public class WebUIApiController {
             });
             parallelScatterZipCreator.writeTo(zos);
             zos.close();
-            cache.put(uuid, zipPath);
             return new JSONObject().fluentPut("uuid", uuid).toJSONString();
         } catch (ExecutionException | InterruptedException e) {
             throw new RuntimeException(e);
@@ -343,35 +252,12 @@ public class WebUIApiController {
     }
 
     @PostMapping("/publicAccess/{uuid}")
-    public ResponseEntity<?> setPublicAccess(@PathVariable("uuid") String uuid) {
-        try {
-            FileObject fileObject =  context.query(uuid);
-            fileObject.setIsPublicAccess("1");
-            contextIO.update(uuid, fileObject);
-            LocalDateTime now = LocalDateTime.now();
-            meiliSearchService.addToImageHost(ImageHostDocument.builder()
-                    .poster(context.buildProxyUrl(uuid))
-                    .thumbUrl(context.buildThumbUrl(uuid))
-                    .uuid(uuid)
-                    .tags(new JSONArray())
-                    .createdAt(now)
-                    .updatedAt(now)
-                    .fileName(fileObject.getFileName())
-                    .size(fileObject.getSize())
-                    .copyOf(fileObject.getCopyOf())
-                    .hlsAvailable(fileObject.getHlsAvailable())
-                    .thumbAvailable(fileObject.getThumbAvailable())
-                    .parent(fileObject.getParent())
-                    .albumAvailable(fileObject.getAlbumAvailable())
-                    .nsfw(fileObject.getNsfw())
-                    .isPublicAccess(fileObject.getIsPublicAccess())
-                    .fileCreatedAt(fileObject.getCreatedAt())
-                    .build());
-            return ResponseEntity.ok().build();
-        } catch (Exception e) {
-            log.error("publicAccess setting failed", e);
-            return ResponseEntity.internalServerError().build();
-        }
+    public ResponseEntity<?> setPublicAccess(@PathVariable("uuid") String uuid,
+                                             @RequestParam(defaultValue = "true") boolean enabled) {
+        if (meiliSearchService.findDocument("full-text", uuid) == null) return ResponseEntity.notFound().build();
+        meiliSearchService.setResourcePublic(uuid, enabled, context.buildProxyUrl(uuid));
+        synchronizeLocalResourceMetadata(uuid);
+        return resourceMutationResponse();
     }
 
     @GetMapping("/setu")
@@ -404,117 +290,71 @@ public class WebUIApiController {
     public ResponseEntity<?> rename(@PathVariable("uuid") String uuid,
                                     @RequestBody Map<String, String> body,
                                     HttpServletRequest request) {
-        String newFileName = body.get("fileName");
-        if (newFileName == null || newFileName.trim().isEmpty()) {
-            return ResponseEntity.badRequest().body("文件名不能为空");
-        }
-        newFileName = newFileName.trim();
-        if (newFileName.contains("/") || newFileName.contains("\\") || newFileName.contains("\0")) {
+        String name = body.get("fileName");
+        if (name == null || name.isBlank()) return ResponseEntity.badRequest().body("文件名不能为空");
+        name = name.trim();
+        if (name.contains("/") || name.contains("\\") || name.indexOf(0) >= 0) {
             return ResponseEntity.badRequest().body("文件名包含非法字符");
         }
-        if (newFileName.length() > 255) {
-            return ResponseEntity.badRequest().body("文件名过长");
-        }
-        FileObject fileObject = context.query(uuid);
-        if (fileObject == null) {
-            String remoteUrl = clusterProxyService.getRemoteNodeUrl(uuid);
-            if (remoteUrl != null) {
-                return clusterProxyService.proxyRequest(remoteUrl, request, new JSONObject(body).toJSONString());
-            }
-            return ResponseEntity.notFound().build();
-        }
-        fileObject.setFileName(newFileName);
-        contextIO.update(uuid, fileObject);
-        meiliSearchService.updateDocumentTitle("full-text", uuid, newFileName);
-        return ResponseEntity.ok().build();
+        if (name.length() > 255) return ResponseEntity.badRequest().body("文件名过长");
+        if (meiliSearchService.findDocument("full-text", uuid) == null) return ResponseEntity.notFound().build();
+        // The shared resource source commits first, including when the object lives
+        // on a remote/offline owner. Local inventory is only a materialized view.
+        meiliSearchService.updateDocumentTitle("full-text", uuid, name);
+        synchronizeLocalResourceMetadata(uuid);
+        return resourceMutationResponse();
     }
 
-    /**
-     * 设置文件标签（覆盖）
-     */
     @PutMapping("/api/file/{uuid}/tags")
-    public ResponseEntity<?> setTags(@PathVariable("uuid") String uuid,
-                                     @RequestBody List<Tag> tags) {
-        FileObject fileObject = context.query(uuid);
-        if (fileObject == null) {
-            return ResponseEntity.notFound().build();
-        }
-        fileObject.setTags(tags);
-        contextIO.update(uuid, fileObject);
-        syncTagsToMeiliSearch(uuid, tags);
-        return ResponseEntity.ok().build();
+    public ResponseEntity<?> setTags(@PathVariable("uuid") String uuid, @RequestBody List<Tag> tags) {
+        if (meiliSearchService.findDocument("full-text", uuid) == null) return ResponseEntity.notFound().build();
+        meiliSearchService.mutateDocumentTags("full-text", uuid, tags, Collections.emptyList(), true);
+        synchronizeLocalResourceMetadata(uuid);
+        return resourceMutationResponse();
     }
 
-    /**
-     * 追加文件标签（合并，去重）
-     */
     @PostMapping("/api/file/{uuid}/tags")
-    public ResponseEntity<?> addTags(@PathVariable("uuid") String uuid,
-                                     @RequestBody List<Tag> tags) {
-        FileObject fileObject = context.query(uuid);
-        if (fileObject == null) {
-            return ResponseEntity.notFound().build();
-        }
-        List<Tag> existing = fileObject.getTags() != null ? fileObject.getTags() : new ArrayList<>();
-        Set<String> existingKeys = existing.stream()
-                .map(Tag::toIndexFormat)
-                .collect(Collectors.toSet());
-        for (Tag tag : tags) {
-            if (!existingKeys.contains(tag.toIndexFormat())) {
-                existing.add(tag);
-                existingKeys.add(tag.toIndexFormat());
-            }
-        }
-        fileObject.setTags(existing);
-        contextIO.update(uuid, fileObject);
-        syncTagsToMeiliSearch(uuid, existing);
-        return ResponseEntity.ok().build();
+    public ResponseEntity<?> addTags(@PathVariable("uuid") String uuid, @RequestBody List<Tag> tags) {
+        if (meiliSearchService.findDocument("full-text", uuid) == null) return ResponseEntity.notFound().build();
+        meiliSearchService.mutateDocumentTags("full-text", uuid, tags, Collections.emptyList(), false);
+        synchronizeLocalResourceMetadata(uuid);
+        return resourceMutationResponse();
     }
 
-    /**
-     * 删除文件的指定标签
-     */
     @DeleteMapping("/api/file/{uuid}/tags")
-    public ResponseEntity<?> removeTags(@PathVariable("uuid") String uuid,
-                                        @RequestBody List<String> tagNames) {
-        FileObject fileObject = context.query(uuid);
-        if (fileObject == null) {
-            return ResponseEntity.notFound().build();
-        }
-        if (fileObject.getTags() == null) {
-            return ResponseEntity.ok().build();
-        }
-        Set<String> toRemove = new HashSet<>(tagNames);
-        List<Tag> remaining = fileObject.getTags().stream()
-                .filter(tag -> !toRemove.contains(tag.toIndexFormat()))
-                .collect(Collectors.toList());
-        fileObject.setTags(remaining);
-        contextIO.update(uuid, fileObject);
-        syncTagsToMeiliSearch(uuid, remaining);
-        return ResponseEntity.ok().build();
+    public ResponseEntity<?> removeTags(@PathVariable("uuid") String uuid, @RequestBody List<String> tags) {
+        if (meiliSearchService.findDocument("full-text", uuid) == null) return ResponseEntity.notFound().build();
+        meiliSearchService.mutateDocumentTags("full-text", uuid, Collections.emptyList(), tags, false);
+        synchronizeLocalResourceMetadata(uuid);
+        return resourceMutationResponse();
     }
 
-    /**
-     * 获取文件的所有标签
-     */
     @GetMapping("/api/file/{uuid}/tags")
     public ResponseEntity<List<Tag>> getTags(@PathVariable("uuid") String uuid) {
-        FileObject fileObject = context.query(uuid);
-        if (fileObject == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok(fileObject.getTags() != null ? fileObject.getTags() : Collections.emptyList());
+        if (meiliSearchService.findDocument("full-text", uuid) == null) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok().body(meiliSearchService.getDocumentTags("full-text", uuid));
     }
 
-    private void syncTagsToMeiliSearch(String uuid, List<Tag> tags) {
-        CompletableFuture.runAsync(() -> {
-            try {
-                // 同步到 full-text 索引
-                meiliSearchService.updateDocumentTags("full-text", uuid, tags);
-            } catch (Exception e) {
-                log.warn("同步 tags 到 full-text 索引失败: {}", e.getMessage());
+    private ResponseEntity<?> resourceMutationResponse() {
+        return ResponseEntity.ok().header("X-BootFS-Revision", Long.toString(meiliSearchService.visibleRevision())).build();
+    }
+
+    private void synchronizeLocalResourceMetadata(String uuid) {
+        FileObject local = context.query(uuid);
+        if (local == null) return;
+        synchronized (local) {
+            JSONObject current = meiliSearchService.findDocument("full-text", uuid);
+            if (current == null) return;
+            String name = current.getString("fileName");
+            if (name == null) name = current.getString("title");
+            if (name != null) local.setFileName(name);
+            local.setTags(meiliSearchService.getDocumentTags("full-text", uuid));
+            local.setIsPublicAccess(current.getString("isPublicAccess"));
+            try { contextIO.update(uuid, local); }
+            catch (RuntimeException failure) {
+                log.warn("Authoritative resource metadata committed; local inventory update needs retry for {}", uuid, failure);
             }
-        }, threadPoolExecutor);
+        }
     }
 
     // ======================== 标签搜索 API ========================

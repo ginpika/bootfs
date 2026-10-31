@@ -15,7 +15,7 @@ import java.util.List;
 
 @Slf4j
 public class ComicArchiveProcessor {
-    public static List<Path> extraction(Path archive) {
+    public static List<Path> extraction(Path archive) throws IOException {
         List<Path> outputs = new ArrayList<>();
         try (ArchiveInputStream<?> ais = createArchiveStream(archive)) {
             ArchiveEntry entry;
@@ -35,11 +35,14 @@ public class ComicArchiveProcessor {
                 }
                 String ext = entry.getName().substring(pointIdx);
                 Path path = Files.createTempFile("tmp" + System.currentTimeMillis(), ext);
-                ais.transferTo(Files.newOutputStream(path));
                 outputs.add(path);
+                try (OutputStream output = Files.newOutputStream(path)) { ais.transferTo(output); }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            for (Path path : outputs) {
+                try { Files.deleteIfExists(path); } catch (IOException cleanup) { e.addSuppressed(cleanup); }
+            }
+            throw new IOException("Cannot extract archive", e);
         }
         return outputs;
     }
@@ -59,6 +62,7 @@ public class ComicArchiveProcessor {
         } else if (name.endsWith(".7z")) {
             return new ArchiveStreamFactory().createArchiveInputStream(in);
         }
-        return null;
+        in.close();
+        throw new IOException("Unsupported archive: " + name);
     }
 }

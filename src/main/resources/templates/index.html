@@ -82,12 +82,12 @@
                             <li><hr class="dropdown-divider"></li>
                             <li>
                                 <a class="dropdown-item" href="/etcd">
-                                    <i class="bi bi-database me-1"></i>Etcd 元数据
+                                    <i class="bi bi-database me-1"></i>元数据管理
                                 </a>
                             </li>
                             <li>
                                 <a class="dropdown-item" href="/meilisearch">
-                                    <i class="bi bi-search me-1"></i>MeiliSearch 元数据
+                                    <i class="bi bi-search me-1"></i>索引文档管理
                                 </a>
                             </li>
                             <li><hr class="dropdown-divider"></li>
@@ -117,7 +117,7 @@
                             <i class="bi bi-door-open me-1"></i>传送门
                         </button>
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" th:href="${meilisearchWebUi}" href="http://127.0.0.1:7700"><i class="bi bi-search me-2"></i>MeiliSearch</a></li>
+                            <li><a class="dropdown-item" href="/meilisearch"><i class="bi bi-search me-2"></i>索引文档管理</a></li>
                             <li><a class="dropdown-item" href="/gallery"><i class="bi bi-images me-2"></i>Gallery</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="#"><i class="bi bi-arrow-repeat me-2"></i>重建索引</a></li>
@@ -513,7 +513,7 @@
                         let selected = $table.bootstrapTable("getSelections");
                         if (selected.length == 0) return;
                         selected = selected[0];
-                        $.get("/hls/convert?uuid=" + selected.uuid).then(res => {
+                        $.post("/hls/convert?uuid=" + selected.uuid).then(res => {
                             removeSuccessToast.show();
                             setTimeout(function () {
                                 removeSuccessToast.hide()

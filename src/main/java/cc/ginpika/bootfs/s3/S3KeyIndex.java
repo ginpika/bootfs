@@ -2,45 +2,23 @@ package cc.ginpika.bootfs.s3;
 
 import cc.ginpika.bootfs.service.etcd.EtcdService;
 import com.alibaba.fastjson2.JSON;
-import io.etcd.jetcd.ByteSequence;
-import io.etcd.jetcd.KeyValue;
-import io.etcd.jetcd.KV;
-import io.etcd.jetcd.options.GetOption;
+import com.alibaba.fastjson2.JSONObject;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
-/**
- * S3 key <-> uuid 映射,存于 etcd /s3/{bucket}/{key}。
- * key 中的 / 保留不编码,与 S3 prefix 语义一致。
- */
-@Slf4j
+/** Protocol bindings only. Resource publication and deletion live in FileService. */
 @Component
 @ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class S3KeyIndex {
     private final EtcdService etcdService;
 
-    private String indexKey(String bucket, String key) {
-        return "/s3/" + bucket + "/" + key;
-    }
-
-    private String bucketPrefix(String bucket) {
-        return "/s3/" + bucket + "/";
-    }
-
-    /** rangeEnd:/s3/{bucket}0 (0x30 > / 0x2F),覆盖整个 bucket。 */
-    private String bucketRangeEnd(String bucket) {
-        return "/s3/" + bucket + "0";
-    }
+    private String indexKey(String bucket, String key) { return bucketPrefix(bucket) + key; }
+    private String bucketPrefix(String bucket) { return "/s3/" + bucket + "/"; }
 
     public void putIndex(String bucket, String key, S3ObjectMeta meta) {
         etcdService.put(indexKey(bucket, key), JSON.toJSONString(meta));
@@ -48,90 +26,88 @@ public class S3KeyIndex {
 
     public S3ObjectMeta getIndex(String bucket, String key) {
         String value = etcdService.getOne(indexKey(bucket, key));
-        if (value == null) return null;
-        return JSON.parseObject(value, S3ObjectMeta.class);
+        return value == null ? null : JSON.parseObject(value, S3ObjectMeta.class);
     }
 
-    public boolean deleteIndex(String bucket, String key) {
-        return etcdService.delete(indexKey(bucket, key));
+    public boolean deleteIndex(String bucket, String key) { return etcdService.delete(indexKey(bucket, key)); }
+
+    public String rawIndex(String bucket, String key) { return etcdService.getOne(indexKey(bucket, key)); }
+
+    public boolean compareAndSet(String bucket, String key, String expected, S3ObjectMeta replacement) {
+        return etcdService.compareAndSet(indexKey(bucket, key), expected,
+                replacement == null ? null : JSON.toJSONString(replacement));
     }
 
-    /**
-     * 列举 bucket 下匹配 prefix 的 key。
-     * MVP 取全部匹配 key 内存分组(单 bucket 小规模足够),MVP2 改 jetcd limit + cursor。
-     */
-    public S3ListPage listIndex(String bucket, String prefix, String delimiter,
-                                int maxKeys, String continuationToken) {
-        String startKey = continuationToken != null
-                ? continuationToken
-                : bucketPrefix(bucket) + (prefix == null ? "" : prefix);
-        String rangeEnd = bucketRangeEnd(bucket);
+    public void deleteBindingsForResource(String uuid) {
+        etcdService.scan("/s3/").forEach((key, value) -> {
+            S3ObjectMeta meta = JSON.parseObject(value, S3ObjectMeta.class);
+            if (uuid.equals(meta.getUuid())) etcdService.compareAndSet(key, value, null);
+        });
+    }
 
-        KV kv = etcdService.client.getKVClient();
-        List<KeyValue> kvs;
-        try {
-            GetOption opt = GetOption.builder()
-                    .withRange(ByteSequence.from(rangeEnd.getBytes(StandardCharsets.UTF_8)))
-                    .build();
-            kvs = kv.get(ByteSequence.from(startKey.getBytes(StandardCharsets.UTF_8)), opt)
-                    .join().getKvs();
-            kvs.sort(Comparator.comparing(kv2 -> kv2.getKey().toString()));
-        } finally {
-            kv.close();
-        }
+    public Set<String> boundResourceIds() {
+        Set<String> result = new HashSet<>();
+        etcdService.scan("/s3/").values().forEach(value -> result.add(JSON.parseObject(value, S3ObjectMeta.class).getUuid()));
+        return result;
+    }
 
-        List<S3ObjectMeta> contents = new ArrayList<>();
-        List<String> commonPrefixes = new ArrayList<>();
-        Set<String> seenPrefixes = new LinkedHashSet<>();
-        boolean truncated = false;
-        String nextToken = null;
-        boolean skipToken = continuationToken != null;
-        int emitted = 0;
-        int pfxLen = prefix == null ? 0 : prefix.length();
-        String bp = bucketPrefix(bucket);
-
-        for (KeyValue kv2 : kvs) {
-            String etcdKeyStr = kv2.getKey().toString();
-            if (skipToken && etcdKeyStr.equals(continuationToken)) {
-                skipToken = false;
-                continue;
-            }
-            skipToken = false;
-
-            if (emitted >= maxKeys) {
-                truncated = true;
-                nextToken = etcdKeyStr;
-                break;
-            }
-
-            String s3Key = etcdKeyStr.startsWith(bp) ? etcdKeyStr.substring(bp.length()) : etcdKeyStr;
-            String commonPrefix = null;
-            if (delimiter != null && !delimiter.isEmpty()) {
-                int delimIdx = s3Key.indexOf(delimiter, pfxLen);
-                if (delimIdx >= 0) {
-                    commonPrefix = s3Key.substring(0, delimIdx + delimiter.length());
-                }
-            }
-
-            if (commonPrefix != null) {
-                if (seenPrefixes.contains(commonPrefix)) {
-                    continue;
-                }
-                seenPrefixes.add(commonPrefix);
-                commonPrefixes.add(commonPrefix);
-                emitted++;
+    /** Filter before pagination; a delimiter group consumes one result, including across pages. */
+    public S3ListPage listIndex(String bucket, String prefix, String delimiter, int maxKeys, String continuationToken) {
+        String requestedPrefix = prefix == null ? "" : prefix;
+        String requestedDelimiter = delimiter == null ? "" : delimiter;
+        int limit = Math.max(0, Math.min(1000, maxKeys));
+        TreeMap<String, S3ObjectMeta> entries = new TreeMap<>();
+        String base = bucketPrefix(bucket);
+        Set<String> deleted = new HashSet<>();
+        etcdService.scan("/tombstones/").keySet().forEach(key -> deleted.add(key.substring("/tombstones/".length())));
+        etcdService.scan(base + requestedPrefix).forEach((storedKey, value) -> {
+            S3ObjectMeta object = JSON.parseObject(value, S3ObjectMeta.class);
+            if (deleted.contains(object.getUuid())) return;
+            String key = storedKey.substring(base.length());
+            int group = requestedDelimiter.isEmpty() ? -1 : key.indexOf(requestedDelimiter, requestedPrefix.length());
+            if (group >= 0) {
+                entries.put(key.substring(0, group + requestedDelimiter.length()), null);
             } else {
-                S3ObjectMeta meta = JSON.parseObject(kv2.getValue().toString(), S3ObjectMeta.class);
-                contents.add(meta);
-                emitted++;
+                entries.put(key, object);
             }
+        });
+        NavigableMap<String, S3ObjectMeta> pageEntries = entries;
+        if (continuationToken != null && !continuationToken.isEmpty()) {
+            String last = decodeToken(continuationToken, bucket, requestedPrefix, requestedDelimiter);
+            pageEntries = entries.tailMap(last, false);
         }
+        List<S3ObjectMeta> objects = new ArrayList<>();
+        List<String> prefixes = new ArrayList<>();
+        int emitted = 0;
+        String last = null;
+        for (Map.Entry<String, S3ObjectMeta> entry : pageEntries.entrySet()) {
+            if (emitted == limit) break;
+            if (entry.getValue() == null) prefixes.add(entry.getKey());
+            else objects.add(entry.getValue());
+            last = entry.getKey();
+            emitted++;
+        }
+        boolean truncated = limit > 0 && pageEntries.size() > emitted;
+        return S3ListPage.builder().contents(objects).commonPrefixes(prefixes).truncated(truncated)
+                .nextContinuationToken(truncated ? encodeToken(bucket, requestedPrefix, requestedDelimiter, last) : null).build();
+    }
 
-        return S3ListPage.builder()
-                .contents(contents)
-                .commonPrefixes(commonPrefixes)
-                .truncated(truncated)
-                .nextContinuationToken(nextToken)
-                .build();
+    private String encodeToken(String bucket, String prefix, String delimiter, String last) {
+        JSONObject token = new JSONObject();
+        token.put("bucket", bucket); token.put("prefix", prefix); token.put("delimiter", delimiter); token.put("last", last);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(token.toJSONString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String decodeToken(String raw, String bucket, String prefix, String delimiter) {
+        try {
+            JSONObject token = JSON.parseObject(new String(Base64.getUrlDecoder().decode(raw), StandardCharsets.UTF_8));
+            if (!bucket.equals(token.getString("bucket")) || !prefix.equals(token.getString("prefix"))
+                    || !delimiter.equals(token.getString("delimiter")) || token.getString("last") == null) {
+                throw new IllegalArgumentException("Continuation token does not match the listing");
+            }
+            return token.getString("last");
+        } catch (RuntimeException failure) {
+            throw new IllegalArgumentException("Invalid continuation token", failure);
+        }
     }
 }

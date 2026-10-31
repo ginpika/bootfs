@@ -66,21 +66,9 @@ public class TvService {
 
         log.info("TvService initializing...");
 
-        new Thread(() -> {
-            try {
-                int waitCount = 0;
-                while (context.STORAGE.isEmpty() && waitCount < 30) {
-                    Thread.sleep(1000);
-                    waitCount++;
-                    log.info("Waiting for Context to load... ({})", waitCount);
-                }
-
-                refreshAllTsList();
-                log.info("TvService initialized successfully");
-            } catch (Exception e) {
-                log.error("Failed to initialize TvService", e);
-            }
-        }, "TvService-Init").start();
+        // Context finishes its durable inventory load before this bean is initialized.
+        refreshAllTsList();
+        log.info("TvService initialized successfully");
     }
 
     public synchronized void reinitialize() {

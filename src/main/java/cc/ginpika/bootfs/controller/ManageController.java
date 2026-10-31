@@ -57,6 +57,8 @@ public class ManageController {
     private ThumbnailService thumbnailService;
     @Autowired
     private ClusterProxyService clusterProxyService;
+    @Autowired
+    private cc.ginpika.bootfs.kernel.cluster.ResourceVisibility visibility;
 
     public ManageController(FileService fileService,
         FileTransferService fileTransferService,
@@ -80,30 +82,36 @@ public class ManageController {
 
     // upload file
     @PutMapping("/f")
-    public ResponseEntity<?> upload(@RequestPart("file") MultipartFile file) {
+    public ResponseEntity<?> upload(@RequestPart("file") MultipartFile file,
+                                    @RequestHeader(value="X-BootFS-Request-Id", required=false) String requestId) {
         String url = "";
         try {
             log.info("Uploading file: {}", file.getOriginalFilename());
-            url = fileService.upload(file);
+            url = fileService.upload(file, requestId);
+        } catch (cc.ginpika.bootfs.kernel.object.PublicationPendingException pending) {
+            return ResponseEntity.status(503).header("X-BootFS-Upload-Id", pending.getUploadId()).body(pending.getMessage());
         } catch (Exception e) {
             log.error("文件上传失败", e);
             return ResponseEntity.internalServerError().build();
         }
-        return ResponseEntity.ok().body(url);
+        return ResponseEntity.ok().header("X-BootFS-Revision", Long.toString(meiliSearchService.visibleRevision())).body(url);
     }
 
     // upload comic/zip archive
     @PutMapping("/comic")
-    public ResponseEntity<?> uploadComic(@RequestPart("file") MultipartFile file) {
+    public ResponseEntity<?> uploadComic(@RequestPart("file") MultipartFile file,
+                                         @RequestHeader(value="X-BootFS-Request-Id", required=false) String requestId) {
         String url = "";
         try {
             log.info("Uploading comic archive: {}", file.getOriginalFilename());
-            url = fileService.uploadComic(file);
+            url = fileService.uploadComic(file, requestId);
+        } catch (cc.ginpika.bootfs.kernel.object.PublicationPendingException pending) {
+            return ResponseEntity.status(503).header("X-BootFS-Upload-Id", pending.getUploadId()).body(pending.getMessage());
         } catch (Exception e) {
             log.error("图包上传失败", e);
             return ResponseEntity.internalServerError().build();
         }
-        return ResponseEntity.ok().body(url);
+        return ResponseEntity.ok().header("X-BootFS-Revision", Long.toString(meiliSearchService.visibleRevision())).body(url);
     }
 
     // download file & cluster proxy based on this api
@@ -166,6 +174,7 @@ public class ManageController {
     // serve webp thumbnail - 不存在时返回原图/占位图并后台生成
     @GetMapping("/thumb/{uuid}")
     public ResponseEntity<?> thumbnail(@PathVariable String uuid) {
+        if (visibility.deleted(uuid)) return ResponseEntity.notFound().build();
         FileObject fileObject = context.query(uuid);
         if (fileObject == null) {
             return ResponseEntity.notFound().build();
@@ -210,6 +219,19 @@ public class ManageController {
         }
         
         return ResponseEntity.notFound().build();
+    }
+
+    @GetMapping("/api/file/{uuid}/publication")
+    public Map<String,String> publication(@PathVariable String uuid) {
+        return Map.of("uploadId", uuid, "resolvedUploadId", fileService.resolveUploadId(uuid), "state", fileService.publicationState(uuid));
+    }
+
+    @PutMapping("/t/prepare")
+    public com.alibaba.fastjson2.JSONObject prepareReplica(@RequestPart("file") MultipartFile file,
+                                    @RequestParam("originalFilename") String filename,
+                                    @RequestParam("originalFileId") String id,
+                                    @RequestParam("sha256") String sha256) throws IOException {
+        return fileTransferService.prepare(file, filename, id, sha256);
     }
 
     // get the replica from other nodes
@@ -288,7 +310,7 @@ public class ManageController {
             }
             
             String originalFilename = segment.getOriginalFilename();
-            if (originalFilename == null || !originalFilename.toLowerCase().endsWith(".ts")) {
+            if (!safeSegmentName(originalFilename) || sequence < 0 || !Double.isFinite(duration) || duration <= 0) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Only .ts files are allowed"));
             }
             
@@ -566,6 +588,7 @@ public class ManageController {
 
     @DeleteMapping("/hls/{uuid}/segments/{fileName}")
     public ResponseEntity<?> deleteHlsSegment(@PathVariable String uuid, @PathVariable String fileName) {
+        if (!safeSegmentName(fileName)) return ResponseEntity.badRequest().build();
         try {
             FileObject fileObject = context.query(uuid);
             if (fileObject == null) {
@@ -669,4 +692,9 @@ public class ManageController {
             log.warn("索引虚拟文件到 MeiliSearch full_text 失败, uuid={}: {}", fileObject.getUuid(), e.getMessage());
         }
     }
+    private boolean safeSegmentName(String name) {
+        return name != null && name.toLowerCase(java.util.Locale.ROOT).endsWith(".ts")
+                && !name.contains("/") && !name.contains("\\") && !name.contains("\n") && !name.contains("\r") && !name.contains("\0");
+    }
+
 }

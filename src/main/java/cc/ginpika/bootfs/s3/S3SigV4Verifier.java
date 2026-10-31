@@ -15,7 +15,7 @@ import java.util.TreeMap;
 
 /**
  * AWS Signature Version 4 验证。仅校验 Authorization 头形式签名,信任 x-amz-content-sha256,
- * 不重算 body hash(适配 UNSIGNED-PAYLOAD,避免大文件 OOM)。
+ * 此处验证签名中的 payload hash；S3StorageService/FileService 在流式落盘阶段校验实际 body。
  */
 @Component
 @ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")

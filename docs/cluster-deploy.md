@@ -1,142 +1,39 @@
-# 集群部署
+# 内置 mononode 集群部署
 
-如果你具备 Etcd & docker compose 的相关能力或是经验丰富的开发人员，那么你完全可以根据架构自行部署并跳过本章节。
+当前版本每个节点运行同一个 BootFS 程序，内置 Raft、KV 和完整本地索引。无需运行 etcd 或 MeiliSearch。历史外置部署参考保留在 [cluster-deploy-legacy.md](cluster-deploy-legacy.md)，旧数据迁移见 [mononode-kernel.md](mononode-kernel.md)。
 
-本章节提供了一个参考性的集群启动配置。
+## 动态组网（新增）
 
-## 部署
+需要独立节点相互发现、带数据合并、任意时期加入和安全下线时，使用 `bootfs.metadata.mode=dynamic`。不需要预配置 group-id/peers；相同配对密钥的节点默认进行局域网签名发现，也可在 `/cluster.html` 输入任一成员地址一键连接。冲突 key 保留递增版本，加入/退出不搬迁已有对象；失去多数时暂停权威读写。完整配置和实际边界见 [动态组网](mononode-dynamic-cluster.md)。
 
-基于 TailScale + Etcd Discovery （Recommended）
+既有 embedded/静态 Raft 目录请先 [备份并恢复到新 seed](mononode-backup.md)，不能就地改 mode。下面保留显式静态集群方式，便于既有部署及固定拓扑验证。
 
-由于 etcd 涉及到一些安全问题，所以我推荐使用 [Tailscale](https://tailscale.com/) 来构建网络。
+## 本机三个节点
 
-加上我们预期部署的节点为 2，访问 [点击这里在 discovery.etcd.io 请求一个 size 为 2 的 discovery token](https://discovery.etcd.io/new?size=2)，获取到一个 discovery token。
+先构建 JDK17 jar：`mvn package -DskipTests`。在三个终端分别运行以下命令，将 n0/8181/目录替换为 n1/8182、n2/8183。所有节点使用相同 group-id 和 peers，各自使用不同空目录。
 
-例如：https://discovery.etcd.io/a24d8b8054c829a6a4406ba3901cdce6
-
-我们以节点 A （100.105.106.92） 为例。
-
-A 节点的 docker-compose.yml 和默认的单机 compose 几乎完全一致。
-
-我们需要一个中心化的 MeiliSearch 实例。
-
-```yaml
-services:
-  etcd:
-    image: quay.io/coreos/etcd:v3.6.7
-    command: >
-      /usr/local/bin/etcd
-      --name etcd-node-a
-      --data-dir /etcd-data
-      --listen-client-urls http://0.0.0.0:2379
-      --advertise-client-urls http://100.105.106.92:2379
-      --listen-peer-urls http://0.0.0.0:2380
-      --initial-advertise-peer-urls http://100.105.106.92:2380
-      --discovery https://discovery.etcd.io/a24d8b8054c829a6a4406ba3901cdce6
-      --enable-pprof
-    networks:
-      - net
-    volumes:
-      - etcd_data:/etcd-data
-    ports:
-      - 127.0.0.1:2379:2379
-      - 127.0.0.1:2380:2380
-      - 100.105.106.92:2379:2379
-      - 100.105.106.92:2380:2380
-
-  meilisearch:
-    image: getmeili/meilisearch:v1.34.1
-    networks:
-      - net
-    volumes:
-      - meilisearch_data:/meili_data
-    ports:
-      - "7700:7700"
-    command: >
-      /meilisearch
-      --master-key ${MEILISEARCH_MASTER_KEY}
-
-  app:
-    image: ghcr.io/ginpika/bootfs:latest
-    env_file:
-      - .env
-    networks:
-      - net
-    volumes:
-      - data:/app
-    ports:
-      - "8181:8181"
-    environment:
-      - TFS_COPIES=${TFS_COPIES}
-      - TFS_WEB_ENTRYPOINT=${TFS_WEB_ENTRYPOINT}
-      - MEILISEARCH_MASTER_KEY=${MEILISEARCH_MASTER_KEY}
-      - MEILISEARCH_WEB_UI=${MEILISEARCH_WEB_UI}
-      - MEILISEARCH_URL=http://meilisearch:7700
-    depends_on:
-      - etcd
-      - meilisearch
-
-networks:
-  net:
-
-volumes:
-  etcd_data:
-  meilisearch_data:
-  data:
+```sh
+java -jar target/bootfs-v1.0.0-beta.1.jar \
+  --spring.profiles.active=dev \
+  --server.port=8181 \
+  --tfs.root-path=/absolute/path/to/cluster/n0 \
+  --tfs.unique-id=n0 \
+  --tfs.web-entrypoint=http://127.0.0.1:8181 \
+  --bootfs.metadata.mode=raft \
+  --bootfs.raft.node-id=n0 \
+  --bootfs.raft.group-id=2cc57355-f9b4-4a1b-a060-66bdc7dac31b \
+  --bootfs.raft.peers=n0=127.0.0.1:9191,n1=127.0.0.1:9192,n2=127.0.0.1:9193 \
+  --bootfs.raft.bootstrap=true
 ```
 
-节点 B (100.87.61.11) 以及其他节点，不需要再部署自己的 MeiliSearch 实例。
+首次初始化显式使用 bootstrap=true，重启时移除此参数。身份和成员列表持久保存；不要更换节点目录或 group-id 后冒充旧节点。成员间需要多数派才能启动业务读写，首次启动三个进程应接近同时进行。
 
-相对的，在节点 B 的 .env 文件中，我们应该将相关配置指向节点 A 的 MeiliSearch 实例。
+默认 `single-local` 策略下，`tfs.copies=2` 继续异步复制。需要上传成功前已有两份耐久内容时，设置 `--bootfs.objects.write-policy=replicated --bootfs.objects.required-copies=2`；确认不足返回 503，保留待恢复发布。未复制内容的节点通过位置记录和代理/重定向访问拥有者，复制状态不能从 Raft 元数据的存在直接推断。
 
+## 跨机部署边界
 
-```yaml
-services:
-  etcd:
-    image: quay.io/coreos/etcd:v3.6.7
-    command: >
-      /usr/local/bin/etcd
-      --name etcd-node-a
-      --data-dir /etcd-data
-      --listen-client-urls http://0.0.0.0:2379
-      --advertise-client-urls http://100.87.61.11:2379
-      --listen-peer-urls http://0.0.0.0:2380
-      --initial-advertise-peer-urls http://100.87.61.11:2380
-      --discovery https://discovery.etcd.io/a24d8b8054c829a6a4406ba3901cdce6
-      --enable-pprof
-    networks:
-      - net
-    volumes:
-      - etcd_data:/etcd-data
-    ports:
-      - 127.0.0.1:2379:2379
-      - 127.0.0.1:2380:2380
-      - 100.87.61.11:2379:2379
-      - 100.87.61.11:2380:2380
+替换 peers 为各机私网地址，同时显式设置 `--bootfs.raft.allow-insecure-network=true`；HTTP 入口也要能互相访问。当前 Raft 传输未提供应用级 mTLS，须通过受保护的网络承载，不应直接暴露到公网。
 
-  app:
-    image: ghcr.io/ginpika/bootfs:latest
-    env_file:
-      - .env
-    networks:
-      - net
-    volumes:
-      - data:/app
-    ports:
-      - "8181:8181"
-    environment:
-      - TFS_COPIES=${TFS_COPIES}
-      - TFS_WEB_ENTRYPOINT=${TFS_WEB_ENTRYPOINT}
-      - MEILISEARCH_MASTER_KEY=${MEILISEARCH_MASTER_KEY}
-      - MEILISEARCH_WEB_UI=${MEILISEARCH_WEB_UI}
-      - MEILISEARCH_URL=http://100.105.106.92:7700
-    depends_on:
-      - etcd
+启用 SSO 时，各节点还要配置相同的 `BOOTFS_CLUSTER_TOKEN` 以认证 `/t` 文件副本传输。Web 登录与 Raft 共识身份是不同职责。
 
-networks:
-  net:
-
-volumes:
-  etcd_data:
-  data:
-```
+静态模式固定 peers 必须保持一致，对现有磁盘随意改配置会被拒绝；动态加入/移除使用上面的独立 dynamic 模式。索引分片及数据自动再平衡尚未实现。

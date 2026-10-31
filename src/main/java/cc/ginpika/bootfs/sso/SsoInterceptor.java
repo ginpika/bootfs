@@ -15,6 +15,8 @@ import org.springframework.web.servlet.HandlerInterceptor;
 @Slf4j
 @Component
 public class SsoInterceptor implements HandlerInterceptor {
+    @org.springframework.beans.factory.annotation.Value("${bootfs.cluster.token:}")
+    private String clusterToken = "";
 
     @Autowired
     private SsoService ssoService;
@@ -29,6 +31,21 @@ public class SsoInterceptor implements HandlerInterceptor {
                              @NonNull Object handler) throws Exception {
 
         if (!ssoService.isEnabled()) {
+            return true;
+        }
+
+        // HLS playlists and segments remain shareable; every mutation requires authentication.
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        String supplied = request.getHeader("X-BootFS-Cluster-Token");
+        if (("/t".equals(path) || "/t/prepare".equals(path) || path.startsWith("/api/cluster/")) && !clusterToken.isBlank() && supplied != null &&
+                java.security.MessageDigest.isEqual(clusterToken.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                        supplied.getBytes(java.nio.charset.StandardCharsets.UTF_8))) {
+            return true;
+        }
+        boolean read = "GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod());
+        boolean publicTvRead = path.equals("/tv") || path.equals("/tv/") || path.equals("/tv/status")
+                || path.equals("/tv/playlist.m3u8") || path.startsWith("/tv/ts/");
+        if (read && (path.startsWith("/hls/") || publicTvRead)) {
             return true;
         }
 

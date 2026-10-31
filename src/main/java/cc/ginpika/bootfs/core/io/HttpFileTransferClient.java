@@ -24,9 +24,33 @@ import java.nio.charset.StandardCharsets;
 @Slf4j
 @NoArgsConstructor
 public class HttpFileTransferClient {
+    public JSONObject prepare(File file, String id, String name, String sha256, NodeObject node, String token, int timeoutMs) throws IOException {
+        try (CloseableHttpClient client = HttpClientBuilder.create().disableRedirectHandling().build()) {
+            HttpPut request = new HttpPut(node.getUrl().replaceAll("/+$", "") + "/t/prepare");
+            if (token != null && !token.isBlank()) request.setHeader("X-BootFS-Cluster-Token", token);
+            request.setConfig(org.apache.http.client.config.RequestConfig.custom().setConnectTimeout(timeoutMs)
+                    .setConnectionRequestTimeout(timeoutMs).setSocketTimeout(timeoutMs).build());
+            request.setEntity(MultipartEntityBuilder.create().setCharset(StandardCharsets.UTF_8)
+                    .addPart("file", new FileBody(file))
+                    .addTextBody("originalFilename", name, ContentType.create("text/plain", Consts.UTF_8))
+                    .addTextBody("originalFileId", id).addTextBody("sha256", sha256).build());
+            java.util.concurrent.ScheduledExecutorService timer = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+            var abort = timer.schedule(request::abort, timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+            try { return JSON.parseObject(client.execute(request, new BasicResponseHandler())); }
+            finally { abort.cancel(false); timer.shutdownNow(); }
+        }
+    }
+
     public void transfer(File file, String fileId, String originalFilename, NodeObject nodeObject) throws IOException {
+        transfer(file, fileId, originalFilename, nodeObject, null);
+    }
+
+    public void transfer(File file, String fileId, String originalFilename, NodeObject nodeObject, String clusterToken) throws IOException {
         try (CloseableHttpClient client = HttpClientBuilder.create().build()) {
-            HttpPut rq = new HttpPut(nodeObject.getUrl() + "/t");
+            HttpPut rq = new HttpPut(nodeObject.getUrl().replaceAll("/+$", "") + "/t");
+            if (clusterToken != null && !clusterToken.isBlank()) rq.setHeader("X-BootFS-Cluster-Token", clusterToken);
+            rq.setConfig(org.apache.http.client.config.RequestConfig.custom()
+                    .setConnectTimeout(10000).setSocketTimeout(1800000).build());
             FileBody fileBody = new FileBody(file);
             HttpEntity multipartEntity = MultipartEntityBuilder.create()
                     .setCharset(StandardCharsets.UTF_8)

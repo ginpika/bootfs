@@ -14,6 +14,17 @@
         tailwind.config = {
             theme: {
                 extend: {
+                    borderRadius: {
+                        none: '0px',
+                        sm: '4px',
+                        DEFAULT: '6px',
+                        md: '6px',
+                        lg: '6px',
+                        xl: '8px',
+                        '2xl': '8px',
+                        '3xl': '8px',
+                        full: '9999px',
+                    },
                     fontFamily: {
                         display: ['Space Grotesk', 'system-ui', 'sans-serif'],
                         body: ['Outfit', 'system-ui', 'sans-serif'],
@@ -63,7 +74,7 @@
         .checkbox {
             width: 20px;
             height: 20px;
-            border-radius: 4px;
+            border-radius: var(--radius-xs);
             border: 2px solid var(--color-border-secondary);
             display: flex;
             align-items: center;
@@ -91,7 +102,7 @@
 </head>
 <body class="font-body">
     <div class="fixed top-4 left-4 z-50">
-        <a href="/" class="flex items-center gap-2 px-4 py-2.5 rounded-lg transition-colors shadow-sm" style="background-color: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border-primary);">
+        <a href="/" class="theme-btn-secondary">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
@@ -102,7 +113,7 @@
     <div class="max-w-5xl mx-auto p-5">
         <div class="flex justify-between items-center mb-5 p-5 theme-rounded-xl" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
             <h1 class="text-xl font-bold font-display" style="color: var(--color-text-primary);">TV 节目单管理</h1>
-            <a href="/tv" class="flex items-center gap-1.5 px-4 py-2 text-sm font-medium theme-rounded-lg transition-colors theme-btn-primary">
+            <a href="/tv" class="theme-btn-primary">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M5 4l14 8-14 8V4z"/>
                 </svg>
@@ -129,7 +140,7 @@
             <div class="theme-rounded-xl p-5" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
                 <div class="flex justify-between items-center mb-4 pb-3" style="border-bottom: 1px solid var(--color-border-primary);">
                     <h2 class="text-base font-semibold" style="color: var(--color-text-primary);">可选视频</h2>
-                    <span class="px-3 py-1 text-xs rounded-full" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);" id="availableCount">0 个</span>
+                    <span class="px-2 py-0.5 text-xs theme-rounded-lg" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);" id="availableCount">0 个</span>
                 </div>
                 <div class="flex flex-col gap-2 min-h-[400px] max-h-[500px] overflow-y-auto" id="availableList">
                 </div>
@@ -138,7 +149,7 @@
             <div class="theme-rounded-xl p-5" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
                 <div class="flex justify-between items-center mb-4 pb-3" style="border-bottom: 1px solid var(--color-border-primary);">
                     <h2 class="text-base font-semibold" style="color: var(--color-text-primary);">播放列表 (拖拽排序)</h2>
-                    <span class="px-3 py-1 text-xs rounded-full" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);" id="playlistCount">0 个</span>
+                    <span class="px-2 py-0.5 text-xs theme-rounded-lg" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);" id="playlistCount">0 个</span>
                 </div>
                 <div class="flex flex-col gap-2 min-h-[400px] max-h-[500px] overflow-y-auto" id="playlistList">
                 </div>
@@ -146,9 +157,9 @@
         </div>
 
         <div class="flex gap-3 mt-5 justify-end">
-            <button class="px-4 py-2 text-sm theme-rounded-lg transition-colors theme-btn-secondary" onclick="selectAll()">全选</button>
-            <button class="px-4 py-2 text-sm theme-rounded-lg transition-colors theme-btn-secondary" onclick="clearAll()">清空</button>
-            <button class="px-4 py-2 text-sm text-white theme-rounded-lg transition-colors flex items-center gap-2" style="background-color: var(--color-success);" onclick="savePlaylist()">
+            <button class="theme-btn-secondary" onclick="selectAll()">全选</button>
+            <button class="theme-btn-secondary" onclick="clearAll()">清空</button>
+            <button class="theme-btn-success" onclick="savePlaylist()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
                     <polyline points="17,21 17,13 7,13 7,21"/>
@@ -159,7 +170,7 @@
         </div>
     </div>
 
-    <div class="fixed bottom-5 right-5 px-6 py-4 rounded-xl text-sm font-medium opacity-0 translate-y-5 transition-all duration-300 z-50" style="background-color: var(--color-success); color: white;" id="toast"></div>
+    <div class="fixed bottom-5 right-5 px-4 py-2.5 theme-rounded-xl text-sm font-medium opacity-0 translate-y-5 transition-all duration-300 z-50" style="background-color: var(--color-success); color: white;" id="toast"></div>
 
     <script>
         let allVideos = [];

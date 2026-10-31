@@ -18,7 +18,7 @@
         .custom-select-wrap { position: relative; min-width: 180px; }
         .custom-select-trigger {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 8px 12px; border-radius: 8px; cursor: pointer; user-select: none;
+            padding: 0 12px; min-height: 2rem; border-radius: var(--radius-control); cursor: pointer; user-select: none;
             border: 1px solid var(--color-border-primary);
             background-color: var(--color-bg-secondary);
             color: var(--color-text-primary); font-size: 14px;
@@ -30,7 +30,7 @@
         .custom-select-trigger.open .custom-select-chevron { transform: rotate(180deg); }
         .custom-select-dropdown {
             position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
-            border-radius: 8px; overflow: hidden;
+            border-radius: var(--radius-surface); overflow: hidden;
             border: 1px solid var(--color-border-primary);
             background-color: var(--color-bg-secondary);
             box-shadow: 0 8px 24px rgba(0,0,0,0.12);
@@ -49,7 +49,7 @@
         /* Toast */
         .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
         .toast {
-            padding: 12px 20px; border-radius: 10px; font-size: 14px; max-width: 420px;
+            padding: 10px 14px; border-radius: var(--radius-surface); font-size: 14px; max-width: 420px;
             pointer-events: auto;
             animation: toast-in 0.25s ease-out;
             box-shadow: 0 4px 16px rgba(0,0,0,0.15);
@@ -79,6 +79,17 @@
         tailwind.config = {
             theme: {
                 extend: {
+                    borderRadius: {
+                        none: '0px',
+                        sm: '4px',
+                        DEFAULT: '6px',
+                        md: '6px',
+                        lg: '6px',
+                        xl: '8px',
+                        '2xl': '8px',
+                        '3xl': '8px',
+                        full: '9999px',
+                    },
                     fontFamily: {
                         display: ['Space Grotesk', 'system-ui', 'sans-serif'],
                         body: ['Outfit', 'system-ui', 'sans-serif'],
@@ -108,15 +119,15 @@
                         </div>
                         <div class="flex items-center space-x-3">
                             <div class="relative">
-                                <button id="themeMenuBtn" class="p-2 rounded-lg" style="background-color: var(--color-bg-tertiary);" title="主题">
-                                    <svg style="color: var(--color-text-primary);" xmlns="http://www.w3.org/2000/svg"
+                                <button id="themeMenuBtn" class="theme-icon-btn" title="主题">
+                                    <svg xmlns="http://www.w3.org/2000/svg"
                                         fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
-                                        class="size-6">
+                                        class="w-5 h-5">
                                         <path stroke-linecap="round" stroke-linejoin="round"
                                             d="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.4 2.245 4.5 4.5 0 0 0 8.4-2.245c0-.399-.078-.78-.22-1.128Zm0 0a15.998 15.998 0 0 0 3.388-1.62m-5.043-.025a15.994 15.994 0 0 1 1.622-3.395m3.42 3.42a15.995 15.995 0 0 0 4.764-4.648l3.876-5.814a1.151 1.151 0 0 0-1.597-1.597L14.146 6.32a15.996 15.996 0 0 0-4.649 4.763m3.42 3.42a6.776 6.776 0 0 0-3.42-3.42" />
                                     </svg>
                                 </button>
-                                <div id="themeDropdown" class="hidden absolute right-0 mt-2 w-56 rounded-xl shadow-lg border py-2 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+                                <div id="themeDropdown" class="hidden absolute right-0 mt-2 w-56 theme-rounded-xl shadow-lg border py-2 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
                                     <div class="px-3 py-2 border-b" style="border-color: var(--color-border-primary);"><p class="text-sm font-medium" style="color: var(--color-text-primary);">选择主题</p></div>
                                     <div class="py-1">
                                         <button onclick="setTheme('light')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #0ea5e9;"></span>浅色模式</button>
@@ -148,13 +159,13 @@
                             </div>
                             <div class="custom-select-dropdown" id="indexSelectDropdown"></div>
                         </div>
-                        <button onclick="refreshIndexes()" class="px-3 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-bg-tertiary); color: var(--color-text-primary);">
+                        <button onclick="refreshIndexes()" class="theme-btn-secondary">
                             <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>刷新
                         </button>
-                        <button onclick="showAddModal()" class="px-3 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-accent-primary); color: #fff;">
+                        <button onclick="showAddModal()" class="theme-btn-primary">
                             <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>新增
                         </button>
-                        <button onclick="clearDocuments()" class="px-3 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-danger); color: #fff;">
+                        <button onclick="clearDocuments()" class="theme-btn-danger">
                             <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>清空索引
                         </button>
                         <span id="resultCount" class="text-sm" style="color: var(--color-text-muted);"></span>
@@ -166,13 +177,12 @@
                     <div class="flex items-center w-full max-w-2xl gap-2">
                         <div class="relative flex-1">
                             <input type="text" id="searchInput" placeholder="搜索索引文档..."
-                                   class="w-full pl-10 pr-4 py-3 border rounded-xl text-base focus:outline-none"
-                                   style="background-color: var(--color-bg-secondary); color: var(--color-text-primary); border-color: var(--color-border-primary);">
+                                   class="theme-input w-full pl-10 pr-4 py-2 text-sm focus:outline-none">
                             <svg class="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                             </svg>
                         </div>
-                        <button onclick="doSearch()" class="px-5 py-3 text-sm font-medium rounded-xl transition-colors flex-shrink-0" style="background-color: var(--color-accent-primary); color: #fff;">搜索</button>
+                        <button onclick="doSearch()" class="theme-btn-primary flex-shrink-0">搜索</button>
                     </div>
                 </div>
 
@@ -193,11 +203,11 @@
                             </div>
                             <!-- 分页 -->
                             <div class="flex items-center justify-between px-4 py-2 border-t" style="border-color: var(--color-border-primary);">
-                                <button onclick="prevPage()" id="prevBtn" class="px-2.5 py-1 text-xs rounded transition-colors" style="background-color: var(--color-bg-tertiary); color: var(--color-text-primary);" disabled>
+                                <button onclick="prevPage()" id="prevBtn" class="theme-icon-btn theme-btn-sm" disabled>
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
                                 </button>
                                 <span class="text-xs" style="color: var(--color-text-secondary);" id="pageInfo">-</span>
-                                <button onclick="nextPage()" id="nextBtn" class="px-2.5 py-1 text-xs rounded transition-colors" style="background-color: var(--color-bg-tertiary); color: var(--color-text-primary);" disabled>
+                                <button onclick="nextPage()" id="nextBtn" class="theme-icon-btn theme-btn-sm" disabled>
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                                 </button>
                             </div>
@@ -212,14 +222,14 @@
                                 <span id="detailDocId" class="text-xs font-mono" style="color: var(--color-accent-primary);"></span>
                             </div>
                             <div class="flex-1 flex flex-col min-h-0 p-4">
-                                <textarea id="detailContent" class="flex-1 min-h-0 w-full text-xs font-mono whitespace-pre-wrap break-all rounded-lg p-3 focus:outline-none resize-none overflow-y-auto" style="color: var(--color-text-primary); background-color: var(--color-bg-primary); border: 1px solid var(--color-border-primary); display:none;" placeholder="点击左侧 uuid 查看文档详情"></textarea>
+                                <textarea id="detailContent" class="theme-input flex-1 min-h-0 w-full text-xs font-mono whitespace-pre-wrap break-all p-3 focus:outline-none resize-none overflow-y-auto" style="background-color: var(--color-bg-primary); display:none;" placeholder="点击左侧 uuid 查看文档详情"></textarea>
                                 <pre id="detailPlaceholder" class="text-xs font-mono whitespace-pre-wrap break-all" style="color: var(--color-text-muted);">点击左侧 uuid 查看文档详情</pre>
                             </div>
                             <div id="detailActions" class="hidden items-center justify-end gap-2 px-4 py-2.5 border-t" style="border-color: var(--color-border-primary); background-color: var(--color-bg-tertiary);">
-                                <button onclick="formatDocJson()" class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors" style="background-color: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border-primary);">
+                                <button onclick="formatDocJson()" class="theme-btn-secondary theme-btn-sm">
                                     <svg class="w-3.5 h-3.5 inline mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>整理
                                 </button>
-                                <button id="saveDocBtn" onclick="saveDocument()" class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors" style="background-color: var(--color-accent-primary); color: #fff;">
+                                <button id="saveDocBtn" onclick="saveDocument()" class="theme-btn-primary theme-btn-sm">
                                     <svg class="w-3.5 h-3.5 inline mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>保存
                                 </button>
                             </div>
@@ -235,23 +245,23 @@
         <div class="theme-card theme-rounded-xl theme-shadow w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col fade-in">
             <div class="flex items-center justify-between p-4 border-b" style="border-color: var(--color-border-primary);">
                 <h2 class="text-lg font-semibold font-display" style="color: var(--color-text-primary);">新增文档</h2>
-                <button onclick="closeAddModal()" class="p-1 rounded-lg hover:opacity-70" style="color: var(--color-text-muted);">
+                <button onclick="closeAddModal()" class="theme-icon-btn" title="关闭">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
             <div class="overflow-y-auto p-4 flex-1">
                 <div class="flex items-center justify-between mb-2">
                     <p class="text-sm" style="color: var(--color-text-muted);">粘贴 JSON，支持单条对象或数组。uuid 字段为必填。</p>
-                    <button onclick="formatAddJson()" class="px-3 py-1 text-xs font-medium rounded-lg transition-colors" style="background-color: var(--color-bg-tertiary); color: var(--color-text-primary);">
+                    <button onclick="formatAddJson()" class="theme-btn-secondary theme-btn-sm">
                         <svg class="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>整理
                     </button>
                 </div>
-                <textarea id="addDocJson" rows="14" class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none resize-y font-mono"
+                <textarea id="addDocJson" rows="14" class="theme-input w-full px-3 py-2 text-sm focus:outline-none resize-y font-mono"
                           style="background-color: var(--color-bg-primary); color: var(--color-text-primary); border-color: var(--color-border-primary);"></textarea>
             </div>
             <div class="flex justify-end gap-3 p-4 border-t" style="border-color: var(--color-border-primary);">
-                <button onclick="closeAddModal()" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-bg-tertiary); color: var(--color-text-primary);">取消</button>
-                <button onclick="addDocument()" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-accent-primary); color: #fff;">提交</button>
+                <button onclick="closeAddModal()" class="theme-btn-secondary">取消</button>
+                <button onclick="addDocument()" class="theme-btn-primary">提交</button>
             </div>
         </div>
     </div>
@@ -262,8 +272,8 @@
             <h2 class="text-lg font-semibold mb-2 font-display" style="color: var(--color-text-primary);">确认删除</h2>
             <p class="text-sm mb-4" style="color: var(--color-text-muted);" id="confirmMsg"></p>
             <div class="flex justify-end gap-3">
-                <button onclick="closeConfirmModal()" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-bg-tertiary); color: var(--color-text-primary);">取消</button>
-                <button id="confirmDeleteBtn" class="px-4 py-2 text-sm font-medium rounded-lg transition-colors" style="background-color: var(--color-danger); color: #fff;">删除</button>
+                <button onclick="closeConfirmModal()" class="theme-btn-secondary">取消</button>
+                <button id="confirmDeleteBtn" class="theme-btn-danger">删除</button>
             </div>
         </div>
     </div>
@@ -620,8 +630,8 @@
             el.className = 'toast toast-warn';
             el.style.cssText = 'display:flex;align-items:center;gap:12px;';
             el.innerHTML = '<span style="flex:1;">' + escapeHtml(msg) + '</span>' +
-                '<button style="background:#92400e;color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:13px;cursor:pointer;">确认</button>' +
-                '<button style="background:transparent;color:#92400e;border:1px solid #92400e;border-radius:6px;padding:3px 11px;font-size:13px;cursor:pointer;">取消</button>';
+                '<button class="theme-btn-warning theme-btn-sm">确认</button>' +
+                '<button class="theme-btn-secondary theme-btn-sm">取消</button>';
             c.appendChild(el);
             var btns = el.querySelectorAll('button');
             btns[0].onclick = function () { el.classList.add('toast-out'); setTimeout(function () { el.remove(); }, 200); onConfirm(); };

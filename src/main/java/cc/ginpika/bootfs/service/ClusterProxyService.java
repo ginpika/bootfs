@@ -32,6 +32,7 @@ public class ClusterProxyService {
     private final MeiliSearchService meiliSearchService;
     private final EtcdService etcdService;
     private final Context context;
+    @org.springframework.beans.factory.annotation.Autowired private FederationService federation;
 
     // 转发请求时跳过的 hop-by-hop / 上下文相关 header
     private static final Set<String> SKIP_REQUEST_HEADERS = new HashSet<>(Arrays.asList(
@@ -51,6 +52,10 @@ public class ClusterProxyService {
      */
     @SuppressWarnings("unchecked")
     public String getRemoteNodeUrl(String uuid) {
+        if (context.query(uuid) != null) return null;
+        if (federation != null) {
+            JSONObject found=federation.locate(uuid); return found == null ? null : found.getString("url");
+        }
         try {
             Map<String, Object> docResult = meiliSearchService.getDocument("full-text", uuid);
             if (docResult == null || !Boolean.TRUE.equals(docResult.get("succeed")) || docResult.get("data") == null) {
@@ -94,14 +99,24 @@ public class ClusterProxyService {
 
         RequestBuilder requestBuilder = RequestBuilder.create(request.getMethod())
                 .setUri(targetUrl);
+        requestBuilder.setConfig(org.apache.http.client.config.RequestConfig.custom().setConnectTimeout(2000).setSocketTimeout(5000).build());
+        requestBuilder.setHeader("X-BootFS-Forwarded","1");
 
         Enumeration<String> headerNames = request.getHeaderNames();
         while (headerNames.hasMoreElements()) {
             String name = headerNames.nextElement();
-            if (!SKIP_REQUEST_HEADERS.contains(name.toLowerCase())) {
+            if (!SKIP_REQUEST_HEADERS.contains(name.toLowerCase()) && !Set.of("cookie","authorization","x-bootfs-cluster-token").contains(name.toLowerCase())) {
                 requestBuilder.addHeader(name, request.getHeader(name));
             }
         }
+        try {
+            if (federation != null) {
+                String token=federation.tokenFor(remoteNodeUrl); requestBuilder.setHeader("X-BootFS-Cluster-Token",token);
+                cc.ginpika.bootfs.kernel.cluster.ClusterHttp.signedHeaders(federation.identity(),request.getMethod(),java.net.URI.create(targetUrl),token,
+                        cc.ginpika.bootfs.kernel.cluster.ClusterHttp.digest(bodyJson==null ? new byte[0] : bodyJson.getBytes(StandardCharsets.UTF_8))).forEach(requestBuilder::setHeader);
+            }
+        }
+        catch(java.io.IOException unauthorized) { return ResponseEntity.status(503).body("Remote node is no longer authorized".getBytes(StandardCharsets.UTF_8)); }
 
         if (bodyJson != null && !bodyJson.isEmpty()) {
             StringEntity entity = new StringEntity(bodyJson, StandardCharsets.UTF_8);
@@ -109,7 +124,7 @@ public class ClusterProxyService {
             requestBuilder.setEntity(entity);
         }
 
-        try (CloseableHttpClient client = HttpClientBuilder.create().build()) {
+        try (CloseableHttpClient client = HttpClientBuilder.create().disableRedirectHandling().build()) {
             CloseableHttpResponse response = client.execute(requestBuilder.build());
             HttpEntity entity = response.getEntity();
             byte[] responseBody = entity != null ? EntityUtils.toByteArray(entity) : new byte[0];

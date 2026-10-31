@@ -76,6 +76,17 @@
         tailwind.config = {
             theme: {
                 extend: {
+                    borderRadius: {
+                        none: '0px',
+                        sm: '4px',
+                        DEFAULT: '6px',
+                        md: '6px',
+                        lg: '6px',
+                        xl: '8px',
+                        '2xl': '8px',
+                        '3xl': '8px',
+                        full: '9999px',
+                    },
                     fontFamily: {
                         display: ['Space Grotesk', 'system-ui', 'sans-serif'],
                         body: ['Outfit', 'system-ui', 'sans-serif'],
@@ -115,7 +126,7 @@
                             </a>
                             <h1 class="text-lg font-semibold font-display" style="color: var(--color-text-primary);">
                                 系统仪表盘</h1>
-                            <div class="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full"
+                            <div class="hidden sm:flex items-center gap-2 px-2.5 py-1 theme-rounded-lg"
                                 style="background-color: var(--color-bg-tertiary);">
                                 <span class="w-2 h-2 rounded-full animate-pulse"
                                     style="background-color: var(--color-success);"></span>
@@ -124,8 +135,7 @@
                             </div>
                         </div>
                         <div class="flex items-center space-x-3">
-                            <button onclick="loadStats()" class="p-2 rounded-lg"
-                                style="background-color: var(--color-bg-tertiary);" title="刷新">
+                            <button onclick="loadStats()" class="theme-icon-btn" title="刷新">
                                 <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2" style="color: var(--color-text-primary);">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -134,17 +144,16 @@
                                 </svg>
                             </button>
                             <div class="relative">
-                                <button id="themeMenuBtn" class="p-2 rounded-lg"
-                                    style="background-color: var(--color-bg-tertiary);" title="主题">
-                                    <svg style="color: var(--color-text-primary);" xmlns="http://www.w3.org/2000/svg"
+                                <button id="themeMenuBtn" class="theme-icon-btn" title="主题">
+                                    <svg xmlns="http://www.w3.org/2000/svg"
                                         fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
-                                        class="size-6">
+                                        class="w-5 h-5">
                                         <path stroke-linecap="round" stroke-linejoin="round"
                                             d="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.4 2.245 4.5 4.5 0 0 0 8.4-2.245c0-.399-.078-.78-.22-1.128Zm0 0a15.998 15.998 0 0 0 3.388-1.62m-5.043-.025a15.994 15.994 0 0 1 1.622-3.395m3.42 3.42a15.995 15.995 0 0 0 4.764-4.648l3.876-5.814a1.151 1.151 0 0 0-1.597-1.597L14.146 6.32a15.996 15.996 0 0 0-4.649 4.763m3.42 3.42a6.776 6.776 0 0 0-3.42-3.42" />
                                     </svg>
                                 </button>
                                 <div id="themeDropdown"
-                                    class="hidden absolute right-0 mt-2 w-56 rounded-xl shadow-lg border py-2 z-50"
+                                    class="hidden absolute right-0 mt-2 w-56 theme-rounded-xl shadow-lg border py-2 z-50"
                                     style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
                                     <div class="px-3 py-2 border-b" style="border-color: var(--color-border-primary);">
                                         <p class="text-sm font-medium" style="color: var(--color-text-primary);">选择主题
@@ -208,8 +217,13 @@
 
                 <!-- Section 1: 节点详情 -->
                 <section class="mb-5">
-                    <h2 class="text-xs font-semibold font-display uppercase tracking-wider mb-3"
-                        style="color: var(--color-text-muted);">节点详情</h2>
+                    <div class="flex items-center justify-between gap-3 mb-3">
+                        <h2 class="text-xs font-semibold font-display uppercase tracking-wider"
+                            style="color: var(--color-text-muted);">节点详情</h2>
+                        <button id="clusterLinkOpen" type="button" class="px-3 py-2 text-sm font-medium theme-rounded-lg theme-btn-primary"
+                            aria-haspopup="dialog" aria-controls="clusterLinkDialog">连接 BootFS 节点</button>
+                    </div>
+                    <p id="clusterSummary" role="status" aria-live="polite" class="text-sm mb-3" style="color: var(--color-text-secondary);">正在读取组网状态…</p>
                     <div id="nodesGrid" class="flex flex-wrap gap-4">
                         <p class="text-sm w-full" style="color: var(--color-text-muted);">加载中...</p>
                     </div>
@@ -313,7 +327,41 @@
         </div>
     </div>
 
+    <dialog id="clusterLinkDialog" aria-labelledby="clusterLinkTitle" class="theme-card theme-rounded-xl theme-shadow p-0 w-full max-w-md"
+        style="color: var(--color-text-primary); background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
+        <form id="clusterLinkForm" class="p-6 space-y-4">
+            <h2 id="clusterLinkTitle" class="text-lg font-semibold font-display">连接 BootFS 节点</h2>
+            <p class="text-sm" style="color: var(--color-text-secondary);">在另一台 BootFS 上生成验证码，然后输入它的地址和验证码即可连接。文件和元数据保留在各自节点，可随时退群继续独立使用。</p>
+            <div>
+                <label for="clusterLinkUrl" class="block text-sm font-medium mb-2">BootFS URL</label>
+                <input id="clusterLinkUrl" type="url" required placeholder="http://192.168.1.10:8181" autocomplete="url"
+                    aria-describedby="clusterLinkHelp clusterLinkMessage" class="w-full px-3 py-2 theme-rounded-lg border"
+                    style="background-color: var(--color-bg-primary); color: var(--color-text-primary); border-color: var(--color-border-primary);">
+                <p id="clusterLinkHelp" class="text-xs mt-2" style="color: var(--color-text-muted);">节点 HTTP 地址需互通，无需配置 Raft 端口。</p>
+            </div>
+            <div>
+                <label for="clusterLinkCode" class="block text-sm font-medium mb-2">对方的验证码</label>
+                <input id="clusterLinkCode" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{8}" maxlength="8" required placeholder="8 位数字"
+                    class="w-full px-3 py-2 theme-rounded-lg border" style="background-color: var(--color-bg-primary); color: var(--color-text-primary); border-color: var(--color-border-primary);">
+            </div>
+            <div class="p-3 theme-rounded-lg" style="background-color: var(--color-bg-tertiary);">
+                <div class="flex items-center justify-between gap-3">
+                    <span class="text-sm">让其他节点连接本机</span>
+                    <button id="clusterPairingGenerate" type="button" disabled class="text-sm px-3 py-2 theme-rounded-lg theme-btn-secondary disabled:opacity-50">生成本机验证码</button>
+                </div>
+                <p id="clusterPairingCode" role="status" aria-live="polite" class="text-sm mt-2" style="color: var(--color-text-secondary);"></p>
+            </div>
+            <p id="clusterLinkMessage" role="status" aria-live="polite" class="text-sm break-words" style="color: var(--color-text-secondary);"></p>
+            <button id="clusterLeave" type="button" hidden class="text-sm" style="color: var(--color-danger);">退出当前集群，继续独立使用本机资源</button>
+            <div class="flex justify-end gap-2 pt-2">
+                <button id="clusterLinkClose" type="button" class="px-4 py-2 text-sm theme-rounded-lg theme-btn-secondary">关闭</button>
+                <button id="clusterLinkSubmit" type="submit" disabled class="px-4 py-2 text-sm font-medium theme-rounded-lg theme-btn-primary disabled:opacity-50">连接</button>
+            </div>
+        </form>
+    </dialog>
+    <style>#clusterLinkDialog::backdrop { background: rgba(0, 0, 0, 0.5); }</style>
     <script src="/dashboard.js"></script>
+    <script src="/dashboard-cluster.js"></script>
 </body>
 
 </html>

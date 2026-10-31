@@ -1,8 +1,12 @@
 package cc.ginpika.bootfs.kernel.cluster;
 
 import cc.ginpika.bootfs.config.TfsConfig;
-import cc.ginpika.bootfs.kernel.backup.*;
-import cc.ginpika.bootfs.kernel.object.ContentHash;
+import cc.ginpika.bootfs.core.*;
+import cc.ginpika.bootfs.core.io.ContextIO;
+import cc.ginpika.bootfs.kernel.backup.KernelBackup;
+import cc.ginpika.bootfs.kernel.search.EmbeddedSearchEngine;
+import cc.ginpika.bootfs.service.FederationService;
+import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
 import com.alibaba.fastjson2.*;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.*;
@@ -15,177 +19,141 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DynamicClusterTest {
-    @TempDir Path temporary;
-    final List<Node> nodes = new ArrayList<>();
-    final String token = "test-pairing-secret";
-    final java.util.concurrent.atomic.AtomicBoolean failAdmission = new java.util.concurrent.atomic.AtomicBoolean();
-    final java.util.concurrent.atomic.AtomicBoolean loseMergeReply = new java.util.concurrent.atomic.AtomicBoolean();
+    @TempDir Path root;
+    final List<Node> nodes=new ArrayList<>();
     class Node implements AutoCloseable {
-        final TfsConfig config = new TfsConfig();
+        final TfsConfig config=new TfsConfig();
+        final ClusterCredentials credentials;
+        final java.util.concurrent.atomic.AtomicBoolean loseJoinReply=new java.util.concurrent.atomic.AtomicBoolean();
         final HttpServer http;
+        final java.util.concurrent.ExecutorService executor=java.util.concurrent.Executors.newCachedThreadPool();
         DynamicMetadataStore store;
-        Node(String name) throws Exception {
-            http = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-            config.setRootPath(temporary.resolve(name).toString()); config.setUniqueId(name);
-            config.setWebEntrypoint("http://127.0.0.1:" + http.getAddress().getPort());
-            store = new DynamicMetadataStore(config, "", token, false);
-            http.createContext("/api/cluster/", exchange -> {
+        EmbeddedSearchEngine index;
+        Context context;
+        ContextIO inventory;
+        FederationService federation;
+        ClusterCoordinator coordinator;
+        Node(String id) throws Exception {
+            http=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0); http.setExecutor(executor);
+            config.setRootPath(root.resolve(id).toString()); config.setUniqueId(id); config.setWebEntrypoint("http://127.0.0.1:"+http.getAddress().getPort());
+            credentials=new ClusterCredentials(config,""); open();
+            http.createContext("/api/cluster/",exchange -> {
                 try {
-                    if (!token.equals(exchange.getRequestHeaders().getFirst("X-BootFS-Cluster-Token"))) { exchange.sendResponseHeaders(403, -1); return; }
-                    JSONObject request = "POST".equals(exchange.getRequestMethod()) ? JSON.parseObject(exchange.getRequestBody().readAllBytes()) : null;
-                    JSONObject result = new JSONObject();
-                    switch (exchange.getRequestURI().getPath()) {
-                        case "/api/cluster/status" -> result = store.status();
-                        case "/api/cluster/ready" -> result = store.ready();
-                        case "/api/cluster/merge" -> {
-                            result = store.merge(request);
-                            if (loseMergeReply.getAndSet(false)) throw new IOException("merge committed but reply lost");
+                    String path=exchange.getRequestURI().getPath().substring("/api/cluster/".length());
+                    String token=exchange.getRequestHeaders().getFirst("X-BootFS-Cluster-Token");
+                    boolean bootstrap=Set.of("ready","status","join","connect").contains(path);
+                    String actor=store.actor(token,bootstrap);
+                    if (!"pairing/redeem".equals(path) && actor==null) { exchange.sendResponseHeaders(401,-1); return; }
+                    JSONObject request="POST".equals(exchange.getRequestMethod()) ? JSON.parseObject(exchange.getRequestBody().readAllBytes()) : null;
+                    JSONObject result=new JSONObject(Map.of("accepted",true));
+                    switch(path) {
+                        case "pairing/redeem" -> result=coordinator.redeemPairingCode(request);
+                        case "ready","status" -> result=store.status();
+                        case "join" -> { result=store.join(request,actor); if(loseJoinReply.getAndSet(false)) throw new IOException("Join reply was lost after commit"); }
+                        case "connect" -> store.connect(request.getString("url"));
+                        case "membership" -> store.membership(request,actor);
+                        case "departure" -> store.departure(request,actor);
+                        case "remove" -> store.remove(request.getString("nodeId"));
+                        case "data/search" -> result=federation.localSearch(request);
+                        default -> {
+                            if (path.startsWith("data/resource/")) result=federation.localResource(path.substring("data/resource/".length()));
+                            else throw new IOException("Unknown test endpoint");
                         }
-                        case "/api/cluster/admit" -> {
-                            if (failAdmission.getAndSet(false)) throw new IOException("admission unavailable before commit");
-                            store.admit(request.getString("nodeId"), request.getString("raftAddress"));
-                        }
-                        case "/api/cluster/remove" -> store.remove(request.getString("nodeId"));
-                        default -> throw new IOException("Unsupported test endpoint");
                     }
-                    byte[] body = result.toJSONString().getBytes(StandardCharsets.UTF_8);
-                    exchange.sendResponseHeaders(200, body.length); exchange.getResponseBody().write(body);
-                } catch (Exception failure) {
-                    byte[] body = failure.toString().getBytes(StandardCharsets.UTF_8); exchange.sendResponseHeaders(409, body.length); exchange.getResponseBody().write(body);
+                    byte[] body=result.toJSONString().getBytes(StandardCharsets.UTF_8); exchange.getResponseHeaders().set("Content-Type","application/json");
+                    exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body);
+                } catch(Exception failure) {
+                    byte[] body=new JSONObject(Map.of("error",Objects.toString(failure.getMessage(),"failure"))).toJSONString().getBytes(StandardCharsets.UTF_8);
+                    exchange.sendResponseHeaders(409,body.length); exchange.getResponseBody().write(body);
                 } finally { exchange.close(); }
-            });
-            http.start(); nodes.add(this);
-            store.put("/cluster/node/" + name, config.getWebEntrypoint());
+            }); http.start(); nodes.add(this);
         }
-        void resource(String id, String body, String key) throws Exception {
-            Files.createDirectories(Path.of(config.getPathPrefix())); Path file = Path.of(config.getPathPrefix(), id); Files.writeString(file, body);
-            JSONObject catalog = new JSONObject(); catalog.put("uuid", id); catalog.put("fileName", body + ".bin"); catalog.put("size", Files.size(file));
-            JSONObject meta = new JSONObject(); meta.put("sha256", ContentHash.sha256(file)); meta.put("size", Files.size(file));
-            store.writeBatch(Map.of("/nodes/" + config.getUniqueId() + "/catalog/" + id, catalog.toJSONString(),
-                    "/files/" + id, config.getWebEntrypoint() + "/f/" + id, "/files/" + id + "/meta", meta.toJSONString(),
-                    "/documents/full-text/" + id, catalog.toJSONString(), "/s3/bootfs/" + key, "{\"uuid\":\"" + id + "\",\"key\":\"" + key + "\"}"), Set.of());
+        void open() throws Exception {
+            store=new DynamicMetadataStore(config); NodeIdentity identity=new NodeIdentity(config); inventory=new ContextIO(store,config,identity);
+            context=new Context(config,inventory,identity); context.load(); index=new EmbeddedSearchEngine(store,root.resolve(config.getUniqueId()+"-index"));
+            MeiliSearchService search=new MeiliSearchService(index); federation=new FederationService(store,search,context);
+            coordinator=new ClusterCoordinator(store,context,false,credentials,55929);
         }
-        @Override public void close() { if (store != null) { store.close(); store = null; } http.stop(0); }
-    }
-    @AfterEach void close() { for (Node node : nodes) node.close(); }
-
-    @Test @Timeout(120) void independentDataMergePreservesConflictVersionsAndCanJoinLeaveAndReturn() throws Exception {
-        Node a = new Node("a"), b = new Node("b");
-        a.resource("same", "first", "shared"); b.resource("same", "second", "shared");
-        a.store.put("custom-key", "first custom"); b.store.put("custom-key", "second custom");
-        a.store.put("same", "raw key A"); b.store.put("same", "raw key B"); b.store.put("/custom/meta", "plain text");
-        long previousRevision = b.store.revision();
-        String oldGroup = b.store.status().getString("groupId");
-        b.store.connect(a.config.getWebEntrypoint());
-        assertFalse(b.store.available()); assertThrows(RuntimeException.class, () -> b.store.put("/bad", "write"));
-        assertTrue(b.store.advance()); assertTrue(b.store.available());
-        assertEquals(a.store.status().getString("groupId"), b.store.status().getString("groupId"));
-        assertNotEquals(oldGroup, b.store.status().getString("groupId")); assertTrue(b.store.revision() > previousRevision);
-        assertEquals(2, a.store.status().getJSONObject("peers").size());
-        String latest = JSON.parseObject(a.store.get("/s3/bootfs/shared")).getString("uuid");
-        assertNotEquals("same", latest); assertEquals("first", Files.readString(Path.of(a.config.getPathPrefix(), "same")));
-        assertEquals("second", Files.readString(Path.of(b.config.getPathPrefix(), latest)));
-        assertEquals("second", Files.readString(Path.of(b.config.getPathPrefix(), "same")), "Original donor bytes remain intact");
-        assertEquals("second custom", a.store.get("custom-key"));
-        assertEquals("raw key B", a.store.get("same")); assertEquals("plain text", a.store.get("/custom/meta"));
-        assertEquals(2, ClusterMerge.versions(a.store.scan("/versions/"), "metadata", "custom-key").size());
-        var versions = ClusterMerge.versions(a.store.scan("/versions/"), "s3", "/s3/bootfs/shared"); assertEquals(2, versions.size());
-        assertEquals("same", JSON.parseObject(JSON.parseObject(versions.firstEntry().getValue()).getString("value")).getString("uuid"));
-        assertEquals(latest, JSON.parseObject(JSON.parseObject(versions.lastEntry().getValue()).getString("value")).getString("uuid"));
-        // The initial leader leaves gracefully; the remaining member continues committing.
-        a.store.leave(); assertFalse(a.store.available()); b.store.put("/after-leave", "durable");
-        Node c = new Node("c"); c.resource("third", "third", "unconflicted");
-        c.store.connect(b.config.getWebEntrypoint()); assertTrue(c.store.advance());
-        a.store.close(); a.store = new DynamicMetadataStore(a.config, "", token, false);
-        assertEquals("durable", a.store.get("/after-leave")); assertEquals(3, a.store.status().getJSONObject("peers").size());
-        assertNotNull(a.store.get("/s3/bootfs/unconflicted"));
-        // A complete portable backup now reads the active dynamic generations, not old standalone logs.
-        for (Node node : List.of(a,b,c)) node.store.scan("");
-        for (Node node : List.of(c,b,a)) { node.store.close(); node.store = null; }
-        Path backup = temporary.resolve("backup");
-        KernelBackup.export(List.of(Path.of(a.config.getRootPath()),Path.of(b.config.getRootPath()),Path.of(c.config.getRootPath())), backup, true);
-        KernelBackup.verify(backup);
-        Path restored = temporary.resolve("restored");
-        Path plan = KernelBackup.restore(backup, restored, "seed", "http://restored");
-        assertEquals("first", Files.readString(restored.resolve("data/same")));
-        assertEquals("second", Files.readString(restored.resolve("data/" + latest)));
-        assertEquals("second", Files.readString(restored.resolve("data/.recovered/b/same")));
-        try (var recovered = new cc.ginpika.bootfs.kernel.metadata.RocksMetadataStore(restored.resolve("kernel/metadata"))) {
-            RestorePlan.apply(recovered, plan);
-            assertEquals(2, ClusterMerge.versions(recovered.scan("/versions/"), "s3", "/s3/bootfs/shared").size());
+        void restart() throws Exception { federation.close(); index.close(); store.close(); open(); }
+        void resource(String id,String body) throws Exception {
+            Path path=Path.of(config.getPathPrefix(),id); Files.createDirectories(path.getParent()); Files.writeString(path,body);
+            var file=new cc.ginpika.bootfs.domain.dto.FileObject(path.toString(),id,body+".txt",Files.size(path)); context.record(file,id);
+            store.put("/files/"+id,config.getWebEntrypoint()+"/f/"+id);
+            store.put("/files/"+id+"/meta",new JSONObject(Map.of("size",Files.size(path),"sha256",cc.ginpika.bootfs.kernel.object.ContentHash.sha256(path))).toJSONString());
+            index.upsert("full-text",new JSONObject(Map.of("uuid",id,"title",body,"fileName",body+".txt","size",Files.size(path),"contextUuid",config.getUniqueId())));
         }
+        @Override public void close() throws Exception { http.stop(0); executor.shutdownNow(); federation.close(); index.close(); store.close(); }
     }
+    void join(Node joining,Node target) throws Exception { joining.coordinator.link(target.config.getWebEntrypoint(),target.coordinator.issuePairingCode().getString("code")); flush(); }
+    void flush() throws Exception { for(int i=0;i<3;i++) for(Node n:nodes) n.store.advance(); }
+    @AfterEach void close() throws Exception { for(Node node:nodes) node.close(); }
 
-    @Test @Timeout(120) void allDynamicPeersRestartWithTheirHistoryAndMinorityCannotAcknowledgeWrites() throws Exception {
-        Node a = new Node("a"), b = new Node("b"), c = new Node("c");
-        b.store.connect(a.config.getWebEntrypoint()); b.store.advance();
-        c.store.connect(a.config.getWebEntrypoint()); c.store.advance();
-        b.store.put("/confirmed", "survives");
-        for (Node node : List.of(a,b,c)) node.store.scan("");
-        for (Node node : List.of(c,b,a)) { node.store.close(); node.store = null; }
-        for (Node node : List.of(a,b,c)) node.store = new DynamicMetadataStore(node.config, "", token, false);
-        assertEquals("survives", c.store.get("/confirmed"));
-        a.store.close(); a.store = null;
-        b.store.put("/majority", "accepted");
-        b.store.close(); b.store = null;
-        assertThrows(RuntimeException.class, () -> c.store.put("/minority", "unacknowledged"));
-        assertThrows(RuntimeException.class, () -> c.store.get("/confirmed"));
+    @Test @Timeout(30) void fullLifetimeStandaloneClusterAStandaloneClusterBPreservesLocalAuthority() throws Exception {
+        Node a=new Node("a"), x=new Node("x"), b=new Node("b"); x.resource("mine","private original"); a.resource("a-only","alpha"); b.resource("b-only","beta");
+        Map<String,String> original=new TreeMap<>(x.store.scan("")); String owner=x.store.nodeId(); String initial=x.store.status().getString("groupId");
+        join(x,a); assertEquals(a.store.status().getString("groupId"),x.store.status().getString("groupId"));
+        assertEquals(original,x.store.scan("")); assertNull(x.store.get("/documents/full-text/a-only")); assertNull(a.store.get("/documents/full-text/mine"));
+        assertEquals(2,x.federation.search("",List.of(),0,20,false).getIntValue("total"));
+        assertEquals(1,x.index.search("full-text","",List.of(),0,20,false,null,false).total);
+        String oldToken=a.store.tokenFor(x.store.endpoint());
+        x.store.leave(); flush(); assertTrue(x.store.status().getBooleanValue("independent"));
+        assertNotEquals(initial,x.store.status().getString("groupId")); assertNull(x.store.actor(oldToken,false)); assertFalse(a.store.peerEndpoints().containsKey(owner));
+        x.store.put("custom","third-year write"); x.restart(); assertTrue(x.store.status().getBooleanValue("independent"));
+        assertEquals("third-year write",x.store.get("custom")); assertEquals("private original",Files.readString(Path.of(x.config.getPathPrefix(),"mine")));
+        join(x,b); assertEquals(b.store.status().getString("groupId"),x.store.status().getString("groupId"));
+        assertEquals(owner,x.store.nodeId()); assertNull(x.store.get("/documents/full-text/b-only")); assertNull(b.store.get("/documents/full-text/mine"));
+        assertEquals(2,x.federation.search("",List.of(),0,20,false).getIntValue("total")); assertEquals("third-year write",x.store.get("custom"));
+        assertEquals(original.get("/documents/full-text/mine"),x.store.get("/documents/full-text/mine"));
+        x.federation.close(); x.index.close(); x.store.close();
+        Path backup=root.resolve("x-backup"); KernelBackup.export(List.of(Path.of(x.config.getRootPath())),backup,true); KernelBackup.verify(backup);
+        x.open();
     }
-
-    @Test @Timeout(90) void replicatedUploadPendingOnAnIndependentNodeCanJoinAndKeepItsPolicy() throws Exception {
-        Node a = new Node("a"), b = new Node("b"); a.resource("pending","older","existing");
-        Files.createDirectories(Path.of(b.config.getPathPrefix())); Path staged = Path.of(b.config.getPathPrefix(), ".upload-pending.part");
-        Files.writeString(staged, "pending bytes");
-        JSONObject pending = new JSONObject(); pending.put("file", JSON.parseObject("{\"uuid\":\"pending\",\"size\":13,\"fileName\":\"pending.txt\"}"));
-        pending.put("stage", staged.getFileName().toString()); pending.put("sha256",ContentHash.sha256(staged)); pending.put("requiredCopies",2); pending.put("receipts",new JSONObject());
-        b.store.put("/pending-publications/b/pending",pending.toJSONString());
-        b.store.put("/replication-jobs/b/pending","{\"uuid\":\"pending\",\"replicas\":1,\"attempts\":2,\"nextAttempt\":0}");
-        b.store.connect(a.config.getWebEntrypoint()); assertTrue(b.store.advance());
-        String mapped = b.store.get("/upload-aliases/b/pending"); assertNotNull(mapped); assertNotEquals("pending",mapped);
-        JSONObject imported = JSON.parseObject(b.store.get("/pending-publications/b/" + mapped));
-        assertEquals(2,imported.getIntValue("requiredCopies")); assertEquals(mapped,imported.getJSONObject("file").getString("uuid"));
-        assertNull(b.store.get("/files/" + mapped)); assertEquals("pending bytes",Files.readString(staged));
-        assertEquals(mapped,JSON.parseObject(b.store.get("/replication-jobs/b/" + mapped)).getString("uuid"));
+    @Test @Timeout(30) void anyMemberCanPairNewNodesAndOfflinePeersNeverBlockLocalSearchOrWrites() throws Exception {
+        Node a=new Node("a"),b=new Node("b"),c=new Node("c"); a.resource("aa","alpha"); b.resource("bb","beta"); c.resource("cc","gamma");
+        join(b,a); join(c,b); // Joining through a non-coordinator installs pairwise grants for the whole group.
+        assertEquals(3,c.store.status().getJSONObject("peers").size());
+        assertEquals(3,b.federation.search("",List.of(),0,10,false).getIntValue("total"));
+        String bOwner=b.credentials.token(); assertNull(a.store.actor(bOwner,false));
+        a.http.stop(0); c.http.stop(0);
+        b.store.put("offline","still writable"); b.resource("new","offline local");
+        assertEquals("still writable",b.store.get("offline")); assertEquals(2,b.index.search("full-text","",List.of(),0,10,false,null,false).total);
+        JSONObject result=b.federation.search("",List.of(),0,10,false); assertTrue(result.getBooleanValue("partial")); assertEquals(2,result.getIntValue("total"));
+        b.store.leave(); assertTrue(b.store.status().getBooleanValue("independent")); b.restart(); assertTrue(b.store.status().getBooleanValue("independent"));
+        assertEquals("still writable",b.store.get("offline")); assertFalse(b.federation.search("",List.of(),0,10,false).getBooleanValue("partial"));
     }
-
-    @Test @Timeout(90) void unadmittedEmptyRaftGenerationRestartsAndFinishesJoining() throws Exception {
-        Node a = new Node("a"), b = new Node("b"); a.resource("a", "A", "key"); b.resource("b", "B", "other");
-        b.store.connect(a.config.getWebEntrypoint()); failAdmission.set(true);
-        assertThrows(IOException.class, () -> b.store.advance()); assertEquals("ATTACHING", b.store.status().getString("phase"));
-        b.store.close(); b.store = new DynamicMetadataStore(b.config, "", token, false);
-        assertTrue(b.store.available()); assertNotNull(b.store.get("/s3/bootfs/key")); assertNotNull(b.store.get("/s3/bootfs/other"));
+    @Test @Timeout(30) void coordinatorCanLeaveAndRemainingNodesCanKeepServingAndAdmitNewMembers() throws Exception {
+        Node a=new Node("a"),b=new Node("b"),c=new Node("c"); join(b,a); join(c,a); a.store.leave(); flush();
+        assertTrue(a.store.status().getBooleanValue("independent")); assertEquals("b",b.store.status().getString("coordinatorId"));
+        Node d=new Node("d"); join(d,c); assertEquals(3,d.store.peerEndpoints().size()+1); assertFalse(d.store.peerEndpoints().containsKey("a"));
+        b.store.remove("c"); flush(); assertTrue(c.store.status().getBooleanValue("independent")); c.store.put("removed","usable");
+        assertEquals("usable",c.store.get("removed"));
     }
-
-    @Test @Timeout(90) void removedOfflinePeerReturnsThroughAdmissionInsteadOfReusingAStaleVote() throws Exception {
-        Node a = new Node("a"), b = new Node("b"), c = new Node("c");
-        b.store.connect(a.config.getWebEntrypoint()); b.store.advance(); c.store.connect(a.config.getWebEntrypoint()); c.store.advance();
-        b.store.advance(); // Persist reachable HTTP peers while the old configuration is still active.
-        a.store.remove("b");
-        long deadline = System.nanoTime() + java.time.Duration.ofSeconds(5).toNanos();
-        while (b.store.available() && System.nanoTime() < deadline) Thread.sleep(20);
-        assertFalse(b.store.available()); assertThrows(RuntimeException.class,() -> b.store.put("/removed-write","forbidden"));
-        b.store.close(); b.store = null;
-        c.store.put("/after-removal", "latest");
-        b.store = new DynamicMetadataStore(b.config, "", token, false);
-        assertEquals("latest", b.store.get("/after-removal")); assertEquals(3, b.store.status().getJSONObject("peers").size());
+    @Test void codesDoNotExportOwnerSecretsAndWrongOrUsedCodesCannotJoinOtherNodes() throws Exception {
+        Node a=new Node("a"),b=new Node("b"),c=new Node("c");
+        String code=a.coordinator.issuePairingCode().getString("code");
+        assertThrows(IOException.class,() -> b.coordinator.link(a.store.endpoint(),code.equals("00000000")?"00000001":"00000000"));
+        b.coordinator.link(a.store.endpoint(),code); flush();
+        assertNotEquals(a.credentials.token(),b.store.tokenFor(a.store.endpoint()));
+        assertThrows(IOException.class,() -> c.coordinator.link(a.store.endpoint(),code));
+        assertFalse(a.store.status().toJSONString().contains(a.credentials.token()));
+        assertThrows(IOException.class,() -> a.coordinator.link(a.store.endpoint(),code));
     }
-
-    @Test @Timeout(90) void lostMergeReplyResumesTheDurableResultRatherThanCreatingMoreVersions() throws Exception {
-        Node a = new Node("a"), b = new Node("b"); a.resource("a", "A", "key"); b.resource("b", "B", "key");
-        b.store.connect(a.config.getWebEntrypoint()); loseMergeReply.set(true);
-        assertThrows(IOException.class, () -> b.store.advance()); assertFalse(b.store.available());
-        assertEquals(2, ClusterMerge.versions(a.store.scan("/versions/"), "s3", "/s3/bootfs/key").size());
-        b.store.close(); b.store = new DynamicMetadataStore(b.config, "", token, false);
-        assertTrue(b.store.advance());
-        assertEquals(2, ClusterMerge.versions(b.store.scan("/versions/"), "s3", "/s3/bootfs/key").size());
+    @Test @Timeout(30) void lostJoinReplyCanBeRetriedWithoutImportingOrChangingLocalResources() throws Exception {
+        Node a=new Node("a"),b=new Node("b"); b.resource("local","unchanged");
+        Map<String,String> original=b.store.scan(""); String code=a.coordinator.issuePairingCode().getString("code");
+        a.loseJoinReply.set(true);
+        assertThrows(IOException.class,() -> b.coordinator.link(a.store.endpoint(),code));
+        assertTrue(b.store.status().getBooleanValue("independent")); assertEquals(2,a.store.status().getJSONObject("peers").size());
+        b.restart(); b.store.connect(a.store.endpoint()); flush();
+        assertEquals(a.store.status().getString("groupId"),b.store.status().getString("groupId")); assertEquals(original,b.store.scan(""));
     }
-
-    @Test @Timeout(90) void frozenDonorRestartsAndResumesTheSameMergeWithoutDuplicatingVersions() throws Exception {
-        Node a = new Node("a"), b = new Node("b"); a.resource("a-file", "A", "key"); b.resource("b-file", "B", "key");
-        b.store.connect(a.config.getWebEntrypoint());
-        b.store.close(); b.store = new DynamicMetadataStore(b.config, "", token, false);
-        assertEquals("FROZEN", b.store.status().getString("phase"));
-        assertTrue(b.store.advance()); assertFalse(b.store.advance());
-        assertEquals(2, ClusterMerge.versions(a.store.scan("/versions/"), "s3", "/s3/bootfs/key").size());
+    @Test void replicaSynchronizationVersionsAreResourceScopedRatherThanNodeWide() throws Exception {
+        Node a=new Node("a"); a.resource("original","source");
+        String version=a.store.get("/resource-revisions/original");
+        a.resource("another-copy","unrelated replica snapshot"); a.store.put("/replica-sources/another-copy","{}");
+        assertEquals(version,a.store.get("/resource-revisions/original"));
+        String key="/documents/full-text/original",raw=a.store.get(key); JSONObject edited=JSON.parseObject(raw); edited.put("author","local edit");
+        assertTrue(a.store.compareAndSet(key,raw,edited.toJSONString()));
+        assertTrue(Long.parseLong(a.store.get("/resource-revisions/original"))>Long.parseLong(version));
     }
 }

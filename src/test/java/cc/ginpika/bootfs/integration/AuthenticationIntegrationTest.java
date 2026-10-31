@@ -19,6 +19,7 @@ class AuthenticationIntegrationTest {
     static final Path ROOT=MononodeIntegrationTest.tempRoot();
     @DynamicPropertySource static void properties(DynamicPropertyRegistry registry) { registry.add("tfs.root-path",ROOT::toString); }
     @Autowired MockMvc mvc;
+    @Autowired cc.ginpika.bootfs.kernel.cluster.ClusterCredentials credentials;
     @Test void uploadsAndMetadataMutationsRequireLogin() throws Exception {
         mvc.perform(put("/f")).andExpect(status().is3xxRedirection());
         mvc.perform(put("/comic")).andExpect(status().is3xxRedirection());
@@ -31,13 +32,17 @@ class AuthenticationIntegrationTest {
         mvc.perform(put("/t").contentType("multipart/form-data").header("X-BootFS-Cluster-Token","test-cluster-token"))
                 .andExpect(status().isBadRequest());
         mvc.perform(put("/f").header("X-BootFS-Cluster-Token","test-cluster-token"))
-                .andExpect(status().is3xxRedirection());
+                .andExpect(status().isUnauthorized());
         mvc.perform(get("/hls/missing/stream.m3u8")).andExpect(status().isNotFound());
     }
     @Test void clusterManagementAndVersionHistoryRequireLoginOrThePairingToken() throws Exception {
-        mvc.perform(get("/cluster.html")).andExpect(status().is3xxRedirection());
+        mvc.perform(get("/dashboard")).andExpect(status().is3xxRedirection());
         mvc.perform(get("/api/cluster/status")).andExpect(status().is3xxRedirection());
         mvc.perform(post("/api/cluster/leave")).andExpect(status().is3xxRedirection());
+        mvc.perform(post("/api/cluster/link").contentType("application/json").content("{\"url\":\"http://localhost:8182\"}"))
+                .andExpect(status().is3xxRedirection());
+        mvc.perform(get("/api/cluster/link/status").param("url", "http://localhost:8182"))
+                .andExpect(status().is3xxRedirection());
         mvc.perform(get("/api/cluster/status").header("X-BootFS-Cluster-Token","test-cluster-token"))
                 .andExpect(status().isOk());
         mvc.perform(get("/api/cluster/versions").param("namespace","s3").param("key","/s3/bootfs/key")
@@ -47,6 +52,23 @@ class AuthenticationIntegrationTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test void invitationCreationRequiresAuthenticationButRedemptionUsesTheCode() throws Exception {
+        mvc.perform(post("/api/cluster/pairing/code")).andExpect(status().is3xxRedirection());
+        mvc.perform(post("/api/cluster/pairing/adopt").contentType("application/json").content("{}"))
+                .andExpect(status().isUnauthorized());
+        String body = mvc.perform(post("/api/cluster/pairing/code").header("X-BootFS-Cluster-Token", "test-cluster-token"))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.token").doesNotExist()).andReturn().getResponse().getContentAsString();
+        String code = com.alibaba.fastjson2.JSON.parseObject(body).getString("code");
+        mvc.perform(post("/api/cluster/pairing/redeem").contentType("application/json")
+                .content("{\"code\":\"" + code + "\",\"requestId\":\"" + "a".repeat(64) + "\",\"nodeId\":\"remote\",\"url\":\"http://127.0.0.1:9999\",\"returnToken\":\""+"b".repeat(64)+"\",\"publicKey\":\""+credentials.publicKey()+"\"}"))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.token").isString()).andExpect(jsonPath("$.nodeId").exists());
+        mvc.perform(post("/api/cluster/pairing/redeem").contentType("application/json")
+                .content("{\"code\":\"" + code + "\",\"requestId\":\"" + "b".repeat(64) + "\"}"))
+                .andExpect(status().isConflict());
+    }
+
     @Test void televisionManagementRequiresLoginWhilePlaybackRemainsPublic() throws Exception {
         mvc.perform(get("/tv/manage")).andExpect(status().is3xxRedirection());
         mvc.perform(get("/tv/api/playlist")).andExpect(status().is3xxRedirection());
@@ -54,7 +76,7 @@ class AuthenticationIntegrationTest {
         mvc.perform(post("/tv/api/playlist").contentType("application/json").content("[]"))
                 .andExpect(status().is3xxRedirection());
         mvc.perform(post("/tv/refresh").header("X-BootFS-Cluster-Token","test-cluster-token"))
-                .andExpect(status().is3xxRedirection());
+                .andExpect(status().isUnauthorized());
         mvc.perform(get("/tv")).andExpect(status().isOk());
         mvc.perform(get("/tv/status")).andExpect(status().isOk());
         mvc.perform(get("/tv/playlist.m3u8")).andExpect(status().isOk());

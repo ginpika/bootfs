@@ -298,6 +298,7 @@ public class FileService {
             if (!uuid.equals(previous.getUuid()) && !hasRetainedVersion(previous.getUuid())) deleteResource(previous.getUuid());
         }
         // Completion intent is cleared only after required metadata and projection sources are durable.
+        fileTransferService.publicationCommitted(uuid);
         etcdService.delete(publicationPrefix() + uuid);
         try { replication(target.toFile(), uuid, resource.getFileName()); }
         catch (RuntimeException optional) { log.warn("Replication scheduling needs retry for {}", uuid, optional); }
@@ -688,6 +689,7 @@ public class FileService {
 
     private Set<String> replicaNodes(String fileId) {
         Set<String> nodes = new HashSet<>();
+        etcdService.scan("/replication-receipts/"+context.uuid+"/"+fileId+"/").values().forEach(raw -> nodes.add(stripSlash(JSONObject.parseObject(raw).getString("url"))));
         etcdService.scan("/files/" + fileId + "/replicas/").forEach((key, value) -> {
             if (!key.endsWith("/meta")) {
                 int path = value.lastIndexOf("/f/");

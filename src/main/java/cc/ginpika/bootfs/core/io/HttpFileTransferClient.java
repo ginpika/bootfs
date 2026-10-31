@@ -25,15 +25,24 @@ import java.nio.charset.StandardCharsets;
 @NoArgsConstructor
 public class HttpFileTransferClient {
     public JSONObject prepare(File file, String id, String name, String sha256, NodeObject node, String token, int timeoutMs) throws IOException {
+        return prepare(file,id,name,sha256,node,token,timeoutMs,null);
+    }
+    public JSONObject prepare(File file,String id,String name,String sha256,NodeObject node,String token,int timeoutMs,JSONObject snapshot) throws IOException {
+        return prepare(file,id,name,sha256,node,token,timeoutMs,snapshot,null);
+    }
+    public JSONObject prepare(File file,String id,String name,String sha256,NodeObject node,String token,int timeoutMs,JSONObject snapshot,cc.ginpika.bootfs.kernel.cluster.ClusterCredentials identity) throws IOException {
         try (CloseableHttpClient client = HttpClientBuilder.create().disableRedirectHandling().build()) {
             HttpPut request = new HttpPut(node.getUrl().replaceAll("/+$", "") + "/t/prepare");
             if (token != null && !token.isBlank()) request.setHeader("X-BootFS-Cluster-Token", token);
+            if (identity!=null) cc.ginpika.bootfs.kernel.cluster.ClusterHttp.signedHeaders(identity,"PUT",request.getURI(),token,
+                    cc.ginpika.bootfs.kernel.cluster.ClusterHttp.digest(snapshot.toJSONString().getBytes(StandardCharsets.UTF_8))).forEach(request::setHeader);
             request.setConfig(org.apache.http.client.config.RequestConfig.custom().setConnectTimeout(timeoutMs)
                     .setConnectionRequestTimeout(timeoutMs).setSocketTimeout(timeoutMs).build());
             request.setEntity(MultipartEntityBuilder.create().setCharset(StandardCharsets.UTF_8)
                     .addPart("file", new FileBody(file))
                     .addTextBody("originalFilename", name, ContentType.create("text/plain", Consts.UTF_8))
-                    .addTextBody("originalFileId", id).addTextBody("sha256", sha256).build());
+                    .addTextBody("originalFileId", id).addTextBody("sha256", sha256)
+                    .addTextBody("snapshot", snapshot==null ? "" : snapshot.toJSONString(),ContentType.create("application/json",Consts.UTF_8)).build());
             java.util.concurrent.ScheduledExecutorService timer = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
             var abort = timer.schedule(request::abort, timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
             try { return JSON.parseObject(client.execute(request, new BasicResponseHandler())); }

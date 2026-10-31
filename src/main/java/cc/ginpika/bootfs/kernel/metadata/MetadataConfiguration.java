@@ -7,34 +7,32 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.util.*;
 
 @Configuration
 public class MetadataConfiguration {
     @Bean(destroyMethod = "close")
-    public MetadataStore metadataStore(TfsConfig files, Environment environment) {
+    public MetadataStore metadataStore(TfsConfig files, Environment environment, cc.ginpika.bootfs.kernel.cluster.ClusterCredentials credentials) {
         Path root = Path.of(Objects.requireNonNull(files.getRootPath(), "tfs.root-path is required"), "kernel");
-        String mode = environment.getProperty("bootfs.metadata.mode", "embedded");
+        String configuredMode = environment.getProperty("bootfs.metadata.mode", "auto");
+        String mode = resolveMode(root, configuredMode);
+        if ("auto".equals(configuredMode)) {
+            org.slf4j.LoggerFactory.getLogger(MetadataConfiguration.class).info("Using {} metadata mode for {} (automatic selection)", mode, root);
+        }
         if (java.nio.file.Files.exists(root.getParent().resolve("restore-plan.json"))
                 && environment.getProperty("bootfs.restore.plan", "").isBlank()
                 && !java.nio.file.Files.exists(root.resolve("metadata/CURRENT"))
                 && !java.nio.file.Files.exists(root.resolve("dynamic/node.json"))) {
             throw new MetadataException("A restored seed requires explicit bootfs.restore.plan on its first start");
         }
-        if ("dynamic".equals(mode)) {
+        if ("legacy-dynamic".equals(mode)) throw new MetadataException("Legacy global-Raft dynamic storage requires portable backup/restore into a local node; original data is unchanged");
+        if ("dynamic".equals(mode) || "embedded".equals(mode)) {
             try {
-                return restore(new cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore(files,
-                        environment.getProperty("bootfs.cluster.raft-address", ""), environment.getProperty("bootfs.cluster.token", ""),
-                        environment.getProperty("bootfs.raft.allow-insecure-network", Boolean.class, false)), environment, root);
+                return restore(new cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore(files), environment, root);
             } catch (java.io.IOException failure) { throw new MetadataException("Cannot start dynamic cluster", failure); }
         }
         if (java.nio.file.Files.exists(root.resolve("dynamic/node.json"))) throw new MetadataException("Dynamic storage cannot change modes in place; use portable backup/restore");
-        if ("embedded".equals(mode)) {
-            if (java.nio.file.Files.exists(root.resolve("raft-identity.json"))) {
-                throw new MetadataException("Raft storage cannot be opened as embedded; restore into a new directory");
-            }
-            return restore(new RocksMetadataStore(root.resolve("metadata")), environment, root);
-        }
         if (!"raft".equals(mode)) throw new IllegalArgumentException("Unknown bootfs.metadata.mode: " + mode);
         String nodeId = environment.getRequiredProperty("bootfs.raft.node-id");
         UUID groupId = UUID.fromString(environment.getRequiredProperty("bootfs.raft.group-id"));
@@ -42,6 +40,33 @@ public class MetadataConfiguration {
         boolean bootstrap = environment.getProperty("bootfs.raft.bootstrap", Boolean.class, false);
         boolean allowInsecure = environment.getProperty("bootfs.raft.allow-insecure-network", Boolean.class, false);
         return restore(new RaftMetadataStore(root, nodeId, groupId, peers, bootstrap, allowInsecure), environment, root);
+    }
+
+    /** New roots use dynamic; initialized roots keep their authority and consensus history. */
+    static String resolveMode(Path root, String configured) {
+        if (!"auto".equals(configured)) return configured;
+        boolean dynamic = Files.exists(root.resolve("dynamic/node.json")) || hasEntries(root.resolve("dynamic"));
+        boolean raft = Files.exists(root.resolve("raft-identity.json")) || Files.exists(root.resolve("raft-initialized"))
+                || hasEntries(root.resolve("raft"));
+        boolean embedded = Files.exists(root.resolve("metadata/CURRENT"));
+        boolean metadataPresent = hasEntries(root.resolve("metadata"));
+        if (dynamic && (raft || metadataPresent)) {
+            throw new MetadataException("Conflicting dynamic and legacy metadata states at " + root + "; explicit recovery is required");
+        }
+        if (dynamic) return "legacy-dynamic";
+        if (raft) return "raft";
+        if (embedded) return "dynamic";
+        if (metadataPresent) {
+            throw new MetadataException("Metadata directory exists without CURRENT at " + root + "; recover the original storage before starting");
+        }
+        return "dynamic";
+    }
+
+    private static boolean hasEntries(Path directory) {
+        if (!Files.exists(directory)) return false;
+        if (!Files.isDirectory(directory)) throw new MetadataException("Expected a storage directory at " + directory);
+        try (var entries = Files.list(directory)) { return entries.findAny().isPresent(); }
+        catch (java.io.IOException failure) { throw new MetadataException("Cannot inspect existing storage at " + directory, failure); }
     }
 
     private MetadataStore restore(MetadataStore store, Environment environment, Path root) {

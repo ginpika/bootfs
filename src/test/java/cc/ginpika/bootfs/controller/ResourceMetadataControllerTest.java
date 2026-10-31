@@ -20,11 +20,13 @@ import static org.mockito.Mockito.*;
 class ResourceMetadataControllerTest {
     @TempDir Path temp;
 
-    @Test void remoteResourceCanBeRenamedAndRetaggedWithoutContactingItsOwner() throws Exception {
+    @Test void localResourceEditsUpdateItsInventoryAndPreserveOriginalMetadata() throws Exception {
         try (RocksMetadataStore metadata = new RocksMetadataStore(temp.resolve("metadata"));
              EmbeddedSearchEngine search = new EmbeddedSearchEngine(metadata, temp.resolve("search"))) {
             Context context = mock(Context.class);
             ContextIO localInventory = mock(ContextIO.class);
+            cc.ginpika.bootfs.domain.dto.FileObject local=new cc.ginpika.bootfs.domain.dto.FileObject("/local/resource","remote","before",0L);
+            when(context.query("remote")).thenReturn(local);
             ClusterProxyService proxy = mock(ClusterProxyService.class);
             MeiliSearchService catalog = new MeiliSearchService(search);
             catalog.addToFullText("{\"uuid\":\"remote\",\"title\":\"before\",\"author\":\"kept\",\"contextUuid\":\"offline-owner\"}");
@@ -37,13 +39,14 @@ class ResourceMetadataControllerTest {
             assertEquals(200, controller.removeTags("remote", List.of("manual:first")).getStatusCodeValue());
             assertEquals("after.jpg", catalog.findDocument("full-text", "remote").getString("fileName"));
             assertEquals("kept", catalog.findDocument("full-text", "remote").getString("author"));
-            assertEquals(List.of("manual:second"), controller.getTags("remote").getBody().stream().map(Tag::toIndexFormat).toList());
+            assertEquals(List.of("manual:second"), ((List<Tag>)controller.getTags("remote").getBody()).stream().map(Tag::toIndexFormat).toList());
             when(context.buildProxyUrl("remote")).thenReturn("/p/remote");
             assertEquals(200, controller.setPublicAccess("remote", true).getStatusCodeValue());
             assertEquals("/p/remote", catalog.querySetu());
             assertEquals(200, controller.setPublicAccess("remote", false).getStatusCodeValue());
             assertNull(catalog.querySetu());
-            verifyNoInteractions(localInventory, proxy);
+            verify(localInventory,atLeastOnce()).update(eq("remote"),same(local));
+            verifyNoInteractions(proxy);
             assertEquals(404, controller.getTags("missing").getStatusCodeValue());
         }
     }

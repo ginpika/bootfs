@@ -57,6 +57,7 @@ public class WebUIApiController {
     private final AiMetadataService aiMetadataService;
     private final ReverseProxyService reverseProxyService;
     private final ClusterProxyService clusterProxyService;
+    @Autowired private cc.ginpika.bootfs.service.FederationService federation;
 
 
 
@@ -114,18 +115,22 @@ public class WebUIApiController {
 
         boolean includeAll = query != null && query.contains("meta:all");
         String text = query == null ? "" : query.replace("meta:all", "").trim();
-        SearchResult result = meiliSearchService.searchResources(text,tagList,pageNumber,pageSize,includeAll);
+        JSONObject federated = federation == null ? null : federation.search(text,tagList == null ? List.of() : tagList,pageNumber,pageSize,includeAll);
+        SearchResult result = federated == null ? meiliSearchService.searchResources(text,tagList,pageNumber,pageSize,includeAll) : null;
         List<FileObject> files = new ArrayList<>();
-        if (result != null && result.getHits() != null) {
-            for (Map<String,Object> hit : result.getHits()) {
+        List<Map<String,Object>> hits = federated == null ? result.getHits() : federated.getJSONArray("hits").stream().map(raw -> (Map<String,Object>)JSONObject.from(raw)).collect(Collectors.toList());
+        if (hits != null) {
+            for (Map<String,Object> hit : hits) {
                 FileObject file = reconstructFileObject(hit);
                 if (file != null) {
-                    file.setUrl(context.buildUrl(file.getUuid()));
+                    file.setUrl(hit.get("originEndpoint") == null ? context.buildUrl(file.getUuid()) : hit.get("originEndpoint") + "/f/" + file.getUuid());
                     files.add(file);
                 }
             }
         }
-        return FileObjectWebVO.builder().total(result == null ? 0 : result.getEstimatedTotalHits())
+        return FileObjectWebVO.builder().total(federated == null ? result.getEstimatedTotalHits() : federated.getIntValue("total"))
+                .partial(federated != null && federated.getBooleanValue("partial"))
+                .unavailableNodes(federated == null ? List.of() : federated.getJSONArray("unavailableNodes").toJavaList(String.class))
                 .pageNumber(pageNumber).pageSize(pageSize).rows(files).build();
     }
 
@@ -183,6 +188,11 @@ public class WebUIApiController {
     @PostMapping("/removeFileByUuid")
     public Boolean removeFileByUuid(HttpServletRequest httpServletRequest,
                             @RequestParam("uuid") String uuid) throws InterruptedException {
+        ResponseEntity<?> remote=remoteResource(uuid,null);
+        if (remote!=null) {
+            if (!remote.getStatusCode().is2xxSuccessful()) throw new org.springframework.web.server.ResponseStatusException(remote.getStatusCode());
+            return Boolean.TRUE.equals(com.alibaba.fastjson2.JSON.parseObject(new String((byte[])remote.getBody(),java.nio.charset.StandardCharsets.UTF_8),Boolean.class));
+        }
         String remoteIp = httpServletRequest.getHeader("X-forwarded-for");
         if (remoteIp == null) remoteIp = httpServletRequest.getRemoteAddr();
         log.info("remove: {} from {}", uuid, remoteIp);
@@ -193,8 +203,11 @@ public class WebUIApiController {
     public Boolean removeFileBatch(HttpServletRequest request, @RequestBody String uuids) {
         JSONArray array = JSONArray.parseArray(uuids);
         // Return success only after all logical deletes are acknowledged.
-        for (Object id : array) fileService.deleteResource((String)id);
+        for (Object id : array) removeFileByUuidUnchecked(request,(String)id);
         return Boolean.TRUE;
+    }
+    private void removeFileByUuidUnchecked(HttpServletRequest request,String id) {
+        try { removeFileByUuid(request,id); } catch(InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new IllegalStateException(interrupted); }
     }
 
     @PostMapping("/downloadFileBatch")
@@ -254,6 +267,8 @@ public class WebUIApiController {
     @PostMapping("/publicAccess/{uuid}")
     public ResponseEntity<?> setPublicAccess(@PathVariable("uuid") String uuid,
                                              @RequestParam(defaultValue = "true") boolean enabled) {
+        ResponseEntity<?> remote=remoteResource(uuid,null); if (remote!=null) return remote;
+        prepareLocalEdit(uuid);
         if (meiliSearchService.findDocument("full-text", uuid) == null) return ResponseEntity.notFound().build();
         meiliSearchService.setResourcePublic(uuid, enabled, context.buildProxyUrl(uuid));
         synchronizeLocalResourceMetadata(uuid);
@@ -297,9 +312,10 @@ public class WebUIApiController {
             return ResponseEntity.badRequest().body("文件名包含非法字符");
         }
         if (name.length() > 255) return ResponseEntity.badRequest().body("文件名过长");
+        ResponseEntity<?> remote=remoteResource(uuid,body); if (remote!=null) return remote;
+        prepareLocalEdit(uuid);
         if (meiliSearchService.findDocument("full-text", uuid) == null) return ResponseEntity.notFound().build();
-        // The shared resource source commits first, including when the object lives
-        // on a remote/offline owner. Local inventory is only a materialized view.
+        // Only the node holding the complete resource commits its metadata.
         meiliSearchService.updateDocumentTitle("full-text", uuid, name);
         synchronizeLocalResourceMetadata(uuid);
         return resourceMutationResponse();
@@ -307,6 +323,8 @@ public class WebUIApiController {
 
     @PutMapping("/api/file/{uuid}/tags")
     public ResponseEntity<?> setTags(@PathVariable("uuid") String uuid, @RequestBody List<Tag> tags) {
+        ResponseEntity<?> remote=remoteResource(uuid,tags); if (remote!=null) return remote;
+        prepareLocalEdit(uuid);
         if (meiliSearchService.findDocument("full-text", uuid) == null) return ResponseEntity.notFound().build();
         meiliSearchService.mutateDocumentTags("full-text", uuid, tags, Collections.emptyList(), true);
         synchronizeLocalResourceMetadata(uuid);
@@ -315,6 +333,8 @@ public class WebUIApiController {
 
     @PostMapping("/api/file/{uuid}/tags")
     public ResponseEntity<?> addTags(@PathVariable("uuid") String uuid, @RequestBody List<Tag> tags) {
+        ResponseEntity<?> remote=remoteResource(uuid,tags); if (remote!=null) return remote;
+        prepareLocalEdit(uuid);
         if (meiliSearchService.findDocument("full-text", uuid) == null) return ResponseEntity.notFound().build();
         meiliSearchService.mutateDocumentTags("full-text", uuid, tags, Collections.emptyList(), false);
         synchronizeLocalResourceMetadata(uuid);
@@ -323,6 +343,8 @@ public class WebUIApiController {
 
     @DeleteMapping("/api/file/{uuid}/tags")
     public ResponseEntity<?> removeTags(@PathVariable("uuid") String uuid, @RequestBody List<String> tags) {
+        ResponseEntity<?> remote=remoteResource(uuid,tags); if (remote!=null) return remote;
+        prepareLocalEdit(uuid);
         if (meiliSearchService.findDocument("full-text", uuid) == null) return ResponseEntity.notFound().build();
         meiliSearchService.mutateDocumentTags("full-text", uuid, Collections.emptyList(), tags, false);
         synchronizeLocalResourceMetadata(uuid);
@@ -330,13 +352,24 @@ public class WebUIApiController {
     }
 
     @GetMapping("/api/file/{uuid}/tags")
-    public ResponseEntity<List<Tag>> getTags(@PathVariable("uuid") String uuid) {
+    public ResponseEntity<?> getTags(@PathVariable("uuid") String uuid) {
+        ResponseEntity<?> remote=remoteResource(uuid,null); if (remote!=null) return remote;
         if (meiliSearchService.findDocument("full-text", uuid) == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok().body(meiliSearchService.getDocumentTags("full-text", uuid));
     }
 
     private ResponseEntity<?> resourceMutationResponse() {
         return ResponseEntity.ok().header("X-BootFS-Revision", Long.toString(meiliSearchService.visibleRevision())).build();
+    }
+    private ResponseEntity<?> remoteResource(String uuid,Object body) {
+        if (context.query(uuid)!=null) return null;
+        var attributes=org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+        if (!(attributes instanceof org.springframework.web.context.request.ServletRequestAttributes servlet)) return null;
+        HttpServletRequest request=servlet.getRequest();
+        if ("1".equals(request.getHeader("X-BootFS-Forwarded"))) return ResponseEntity.notFound().build();
+        String remote=clusterProxyService.getRemoteNodeUrl(uuid);
+        if (remote==null) return ResponseEntity.notFound().build();
+        return clusterProxyService.proxyRequest(remote,request,body==null ? null : JSONObject.toJSONString(body));
     }
 
     private void synchronizeLocalResourceMetadata(String uuid) {
@@ -356,6 +389,14 @@ public class WebUIApiController {
             }
         }
     }
+    private void prepareLocalEdit(String uuid) {
+        for (int attempt=0;attempt<8;attempt++) {
+            String raw=etcdService.getOne("/replica-sources/"+uuid); if (raw==null) return;
+            JSONObject branch=JSONObject.parseObject(raw); if (branch.getBooleanValue("forked")) return;
+            branch.put("forked",true); if (etcdService.compareAndSet("/replica-sources/"+uuid,raw,branch.toJSONString())) return;
+        }
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,"Replica is changing; retry the local edit");
+    }
 
     // ======================== 标签搜索 API ========================
 
@@ -373,6 +414,11 @@ public class WebUIApiController {
                                        @RequestParam(value = "page", defaultValue = "0") int page,
                                        @RequestParam(value = "size", defaultValue = "20") int size,
                                        @RequestParam(value = "index", defaultValue = "full-text") String index) {
+        if (page<0 || size<1 || size>1000 || (long)page*size>Integer.MAX_VALUE) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,"Invalid pagination");
+        if (federation!=null && "full-text".equals(index)) {
+            JSONObject response=federation.search(query,StringUtils.isBlank(tags)?List.of():Arrays.asList(tags.split(",")),Math.multiplyExact(page,size),size,true);
+            response.put("page",page); response.put("size",size); return ResponseEntity.ok(response);
+        }
         List<String> tagFilters = StringUtils.isNotBlank(tags)
                 ? Arrays.asList(tags.split(","))
                 : Collections.emptyList();

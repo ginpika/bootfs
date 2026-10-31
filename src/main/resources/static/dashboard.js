@@ -104,12 +104,12 @@ function renderNodes(nodes) {
 function renderNodeHeader(n) {
     var badge;
     if (n.isCurrent) {
-        badge = '<span class="px-2 py-0.5 rounded-full text-xs font-medium" style="background-color: var(--color-accent-muted); color: var(--color-accent-primary);">当前节点</span>';
+        badge = '<span class="shrink-0 whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium" style="background-color: var(--color-accent-muted); color: var(--color-accent-primary);">当前节点</span>';
     } else if (n.online) {
-        badge = '<span class="inline-flex items-center gap-1 text-xs font-medium" style="color: var(--color-success);">' +
+        badge = '<span class="inline-flex shrink-0 whitespace-nowrap items-center gap-1 text-xs font-medium" style="color: var(--color-success);">' +
             '<span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--color-success);"></span>在线</span>';
     } else {
-        badge = '<span class="inline-flex items-center gap-1 text-xs font-medium" style="color: var(--color-danger);">' +
+        badge = '<span class="inline-flex shrink-0 whitespace-nowrap items-center gap-1 text-xs font-medium" style="color: var(--color-danger);">' +
             '<span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--color-danger);"></span>离线</span>';
     }
 
@@ -117,11 +117,11 @@ function renderNodeHeader(n) {
     var host = extractHost(n.url);
 
     return '<div class="flex items-center justify-between mb-3 gap-2">' +
-        '<div class="flex items-center gap-2 min-w-0">' +
+        '<div class="flex flex-1 items-center gap-2 min-w-0">' +
             badge +
             '<span class="font-mono text-xs truncate" style="color: var(--color-text-primary);" title="' + escapeHtml(n.nodeId) + '">' + escapeHtml(shortId) + '</span>' +
         '</div>' +
-        '<span class="font-mono text-xs whitespace-nowrap" style="color: var(--color-text-muted);" title="' + escapeHtml(n.url || '') + '">' + escapeHtml(host) + '</span>' +
+        '<span class="font-mono text-xs shrink-0 max-w-[45%] truncate" style="color: var(--color-text-muted);" title="' + escapeHtml(n.url || '') + '">' + escapeHtml(host) + '</span>' +
     '</div>';
 }
 
@@ -286,6 +286,7 @@ function formatUptime(ms) {
 // ============ 数据加载 ============
 
 function loadStats() {
+    if (window.bootfsClusterAvailable === false) return;
     hideError();
     fetch('/api/dashboard/stats')
         .then(function (r) { return r.json(); })

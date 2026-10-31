@@ -14,6 +14,17 @@
         tailwind.config = {
             theme: {
                 extend: {
+                    borderRadius: {
+                        none: '0px',
+                        sm: '4px',
+                        DEFAULT: '6px',
+                        md: '6px',
+                        lg: '6px',
+                        xl: '8px',
+                        '2xl': '8px',
+                        '3xl': '8px',
+                        full: '9999px',
+                    },
                     fontFamily: {
                         display: ['Space Grotesk', 'system-ui', 'sans-serif'],
                         body: ['Outfit', 'system-ui', 'sans-serif'],
@@ -71,7 +82,7 @@
             flex: 1;
             overflow: hidden;
             position: relative;
-            border-radius: 12px;
+            border-radius: var(--radius-surface);
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
             background-color: var(--color-bg-secondary);
         }
@@ -88,7 +99,7 @@
 
         .image-container {
             width: 100%;
-            border-radius: 10px;
+            border-radius: var(--radius-control);
             overflow: hidden;
             box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
             transition: transform 0.3s ease, box-shadow 0.3s ease;
@@ -166,7 +177,7 @@
             justify-content: center;
             align-items: center;
             z-index: 10;
-            border-radius: 4px;
+            border-radius: var(--radius-surface);
         }
 
         .spinner {
@@ -211,7 +222,7 @@
         <h3 class="mt-6 text-xl font-semibold font-display tracking-tight" style="color: var(--color-text-primary);">暂无公开图片</h3>
         <p class="mt-3 text-sm max-w-md" style="color: var(--color-text-tertiary);">还没有公开的图片，快去管理页面上传并发布一些吧！</p>
         <div class="mt-8">
-            <a href="/" class="inline-flex items-center px-6 py-3 text-sm font-medium rounded-lg transition-colors shadow-sm theme-btn-primary">
+            <a href="/" class="theme-btn-primary">
                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
                 </svg>

@@ -3,6 +3,28 @@
     margin: 0;
 }
 
+/* 与管理页同一套圆角：按钮 6px，面板和输入框 8px / 6px */
+:root {
+    --bs-border-radius: 8px;
+    --bs-border-radius-sm: 6px;
+    --bs-border-radius-lg: 8px;
+    --bs-border-radius-xl: 8px;
+    --bs-border-radius-xxl: 8px;
+    --bs-btn-border-radius: 6px;
+    --bs-btn-border-radius-sm: 6px;
+    --bs-btn-border-radius-lg: 6px;
+    --bs-btn-font-weight: 500;
+    --bs-btn-box-shadow: none;
+    --bs-btn-focus-box-shadow: none;
+}
+
+.btn,
+.btn:hover,
+.btn:focus,
+.btn:active {
+    box-shadow: none;
+}
+
 .super-center-container {
   display: flex;
   justify-content: center;

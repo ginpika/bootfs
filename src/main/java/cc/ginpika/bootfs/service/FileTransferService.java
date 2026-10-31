@@ -14,7 +14,6 @@ import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -33,7 +32,10 @@ public class FileTransferService {
     @Resource TfsConfig tfsConfig;
     @Resource EtcdService etcdService;
     @Resource MeiliSearchService meiliSearchService;
-    @Value("${bootfs.cluster.token:}") private String clusterToken;
+    @Resource private cc.ginpika.bootfs.kernel.cluster.ClusterCredentials credentials;
+    @Resource private cc.ginpika.bootfs.kernel.metadata.MetadataStore metadata;
+    @Resource private FederationService federation;
+    private int commitCursor,sourceCursor;
 
     private String prefix() { return "/pending-replicas/" + context.uuid + "/"; }
 
@@ -83,6 +85,7 @@ public class FileTransferService {
         }
         if (etcdService.getOne("/tombstones/" + original) != null) throw new IOException("Resource is deleted");
         String id = UUID.nameUUIDFromBytes((context.uuid + ":" + original).getBytes(StandardCharsets.UTF_8)).toString();
+        if (etcdService.getOne("/tombstones/"+id)!=null) throw new IOException("This local replica was explicitly deleted");
         String key = "/prepared-replicas/" + context.uuid + "/" + id;
         Path directory = Path.of(tfsConfig.getPathPrefix()); Files.createDirectories(directory);
         Path target = directory.resolve(id);
@@ -121,11 +124,131 @@ public class FileTransferService {
         receipt.put("sha256", sha256); receipt.put("size", Files.size(target));
         return receipt;
     }
+    public synchronized JSONObject prepare(MultipartFile file,String name,String original,String sha256,JSONObject snapshot,String actor) throws IOException {
+        if (snapshot==null || !Objects.equals(actor,snapshot.getString("nodeId")) || !original.equals(snapshot.getString("objectId")) || !sha256.equals(snapshot.getString("sha256"))
+                || snapshot.getJSONObject("file")==null || snapshot.getJSONObject("file").getLongValue("size")!=file.getSize()) throw new IOException("Replica snapshot must come from the resource owner and match its bytes");
+        JSONObject receipt=prepare(file,name,original,sha256);
+        String key="/prepared-replicas/"+context.uuid+"/"+receipt.getString("replicaId");
+        JSONObject prepared=JSONObject.parseObject(etcdService.getOne(key)); prepared.put("snapshot",snapshot); prepared.put("owner",actor);
+        etcdService.put(key,prepared.toJSONString()); return receipt;
+    }
+    public JSONObject snapshot(String id) {
+        Map<String,String> state=null; long revision=0;
+        for (int attempt=0;attempt<8;attempt++) {
+            long before=metadata==null ? 0 : metadata.revision(); Map<String,String> scanned=etcdService.scan("");
+            if (metadata==null || before==metadata.revision()) { state=scanned; revision=before; break; }
+        }
+        if (state==null) throw new IllegalStateException("Local metadata is changing; retry the resource snapshot");
+        String document=state.get("/documents/full-text/"+id), meta=state.get("/files/"+id+"/meta");
+        String file=state.get("/nodes/"+context.uuid+"/catalog/"+id);
+        if (file==null) {
+            String pending=state.get("/pending-publications/"+context.uuid+"/"+id);
+            if (pending!=null) file=JSONObject.parseObject(pending).getJSONObject("file").toJSONString();
+        }
+        JSONObject result=new JSONObject(); result.put("nodeId",context.uuid); result.put("objectId",id);
+        result.put("revision",state.containsKey("/resource-revisions/"+id) ? Long.parseLong(state.get("/resource-revisions/"+id)) : revision); result.put("file",file==null ? null : JSONObject.parseObject(file));
+        result.put("document",document==null ? null : JSONObject.parseObject(document)); result.put("metadata",meta==null ? null : JSONObject.parseObject(meta));
+        JSONObject bindings=new JSONObject(); state.forEach((key,value) -> { if (key.startsWith("/s3/") && id.equals(JSONObject.parseObject(value).getString("uuid"))) bindings.put(key,JSONObject.parseObject(value)); });
+        result.put("bindings",bindings); return result;
+    }
+    public synchronized JSONObject commitReplica(JSONObject snapshot,String actor) throws IOException {
+        if (!Objects.equals(actor,snapshot.getString("nodeId"))) throw new IOException("Replica publication must come from its owner");
+        String original=snapshot.getString("objectId");
+        if (original==null || !original.matches("[A-Za-z0-9_-]+")) throw new IOException("Invalid replica object");
+        String id=UUID.nameUUIDFromBytes((context.uuid+":"+original).getBytes(StandardCharsets.UTF_8)).toString();
+        String key="/prepared-replicas/"+context.uuid+"/"+id;
+        String raw=etcdService.getOne(key);
+        if (raw==null) {
+            String saved=etcdService.getOne("/replica-sources/"+id);
+            if (saved!=null && actor.equals(JSONObject.parseObject(saved).getString("nodeId"))) {
+                JSONObject previous=JSONObject.parseObject(saved);
+                if (previous.getBooleanValue("forked")) throw new IOException("Replica has independent local changes");
+                if (previous.getLongValue("revision")>=snapshot.getLongValue("revision")) return new JSONObject(Map.of("accepted",true,"replicaId",id));
+                FileObject local=context.query(id);
+                if (local==null) throw new IOException("Replica is no longer present");
+                JSONObject prepared=new JSONObject(Map.of("file",JSONObject.from(local),"sha256",previous.getJSONObject("metadata").getString("sha256")));
+                publishSnapshot(prepared,snapshot,id); return new JSONObject(Map.of("accepted",true,"replicaId",id));
+            }
+            throw new IOException("Replica bytes have not been prepared");
+        }
+        JSONObject prepared=JSONObject.parseObject(raw);
+        if (!actor.equals(prepared.getString("owner"))) throw new IOException("Prepared replica belongs to another owner");
+        publishSnapshot(prepared,snapshot,id); etcdService.delete(key);
+        return new JSONObject(Map.of("accepted",true,"replicaId",id));
+    }
+    private void publishSnapshot(JSONObject prepared,JSONObject snapshot,String id) throws IOException {
+        JSONObject sourceMeta=snapshot.getJSONObject("metadata"),doc=snapshot.getJSONObject("document"),sourceFile=snapshot.getJSONObject("file");
+        if (sourceMeta==null || doc==null || sourceFile==null || !prepared.getString("sha256").equals(sourceMeta.getString("sha256"))) throw new IOException("Complete replica metadata does not match prepared bytes");
+        FileObject resource=prepared.getJSONObject("file").toJavaObject(FileObject.class);
+        Path path=Path.of(tfsConfig.getPathPrefix(),id);
+        if (!Files.isRegularFile(path) || Files.size(path)!=resource.getSize() || !prepared.getString("sha256").equals(cc.ginpika.bootfs.kernel.object.ContentHash.sha256(path))) throw new IOException("Replica bytes are missing or corrupt");
+        JSONObject localFile=JSONObject.parseObject(sourceFile.toJSONString()); localFile.put("uuid",id); localFile.put("copyOf",snapshot.getString("objectId"));
+        localFile.remove("path"); localFile.remove("url");
+        localFile.remove("parent"); localFile.remove("hlsAvailable"); localFile.remove("thumbAvailable"); localFile.remove("albumAvailable");
+        resource=localFile.toJavaObject(FileObject.class); resource.setPath(path.toString());
+        JSONObject localDoc=JSONObject.parseObject(doc.toJSONString()); localDoc.put("uuid",id); localDoc.put("copyOf",snapshot.getString("objectId")); localDoc.put("contextUuid",context.uuid);
+        for (String field:List.of("parent","hlsAvailable","thumbAvailable","albumAvailable","resources","publicUrl")) localDoc.remove(field);
+        localDoc.put("thumbUrl",context.buildThumbUrl(id)); localDoc.put("poster",context.buildThumbUrl(id));
+        JSONObject localMeta=JSONObject.parseObject(sourceMeta.toJSONString()); localMeta.put("copyOf",snapshot.getString("objectId")); localMeta.put("requiredCopies",1); localMeta.put("durableNodes",Map.of(context.uuid,prepared.getString("sha256")));
+        String current=etcdService.getOne("/replica-sources/"+id);
+        if (current!=null && JSONObject.parseObject(current).getBooleanValue("forked")) throw new IOException("Replica has independent local changes");
+        if (etcdService.getOne("/tombstones/"+id)!=null) throw new IOException("Replica was deleted");
+        Map<String,String> expected=new HashMap<>(); expected.put("/replica-sources/"+id,current); expected.put("/tombstones/"+id,null);
+        if (!etcdService.compareAndWrite(expected,Map.of("/files/"+id,context.buildUrl(id),"/files/"+id+"/meta",localMeta.toJSONString(),
+                "/nodes/"+context.uuid+"/catalog/"+id,localFile.toJSONString(),"/documents/full-text/"+id,localDoc.toJSONString(),"/replica-sources/"+id,snapshot.toJSONString()),Set.of())) throw new IOException("Replica changed locally; retry publication");
+        context.STORAGE.put(id,resource);
+    }
+    public void publicationCommitted(String id) {
+        if (!(metadata instanceof cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore)) return;
+        String raw=etcdService.getOne("/files/"+id+"/meta"); if (raw==null) return;
+        JSONObject confirmation=JSONObject.parseObject(raw).getJSONObject("durableNodes"); if (confirmation==null) return;
+        Map<String,String> nodes=etcdService.getNodesWithKeys();
+        for (String node:confirmation.keySet()) if (!context.uuid.equals(node) && nodes.containsKey(node)) {
+            JSONObject job=new JSONObject(Map.of("nodeId",node,"url",nodes.get(node),"snapshot",snapshot(id)));
+            etcdService.put("/replica-commits/"+context.uuid+"/"+id+"/"+node,job.toJSONString());
+        }
+    }
+    private void resumeReplicaCommits() {
+        if (federation==null) return;
+        var entries=new ArrayList<>(etcdService.scan("/replica-commits/"+context.uuid+"/").entrySet());
+        if (entries.isEmpty()) return;
+        int start=Math.floorMod(commitCursor,entries.size()); commitCursor=(start+Math.min(16,entries.size()))%entries.size();
+        for (int step=0;step<Math.min(16,entries.size());step++) {
+            var entry=entries.get((start+step)%entries.size());
+            JSONObject job=JSONObject.parseObject(entry.getValue());
+            if (!Objects.equals(federation.peers().get(job.getString("nodeId")),job.getString("url"))) continue;
+            try { federation.call(job.getString("url"),"data/replica/commit",job.getJSONObject("snapshot")); etcdService.compareAndSet(entry.getKey(),entry.getValue(),null); }
+            catch(Exception unavailable) { log.debug("Replica metadata publication will retry"); }
+        }
+    }
+    private void refreshReplicaMetadata() {
+        if (federation==null || !(metadata instanceof cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore)) return;
+        var entries=new ArrayList<>(etcdService.scan("/replica-sources/").entrySet());
+        if (entries.isEmpty()) return;
+        int start=Math.floorMod(sourceCursor,entries.size()); sourceCursor=(start+Math.min(16,entries.size()))%entries.size();
+        for (int step=0;step<Math.min(16,entries.size());step++) {
+            var entry=entries.get((start+step)%entries.size());
+            JSONObject previous=JSONObject.parseObject(entry.getValue()); if (previous.getBooleanValue("forked")) continue;
+            String owner=previous.getString("nodeId"),url=federation.peers().get(owner);
+            if (url==null) continue;
+            String id=entry.getKey().substring("/replica-sources/".length());
+            if (etcdService.getOne("/tombstones/"+id)!=null) continue;
+            try {
+                JSONObject response=federation.call(url,"data/replica-source/"+previous.getString("objectId"),null);
+                if (response.getBooleanValue("deleted")) {
+                    // Only an authenticated current owner can propagate deletion. Detached copies remain local.
+                    Map<String,String> expected=new HashMap<>(); expected.put(entry.getKey(),entry.getValue()); expected.put("/tombstones/"+id,null);
+                    etcdService.compareAndWrite(expected,Map.of("/tombstones/"+id,Long.toString(System.currentTimeMillis())),Set.of());
+                } else if (response.getJSONObject("snapshot")!=null) commitReplica(response.getJSONObject("snapshot"),owner);
+            } catch(Exception unavailable) { /* The last complete local snapshot remains readable. */ }
+        }
+    }
 
     public void resumePreparedReplicas() {
         String prefix = "/prepared-replicas/" + context.uuid + "/";
         etcdService.scan(prefix).forEach((key, raw) -> {
             try {
+                if (metadata instanceof cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore) return; // Owner commit arrives explicitly; no shared metadata lookup.
                 JSONObject prepared = JSONObject.parseObject(raw);
                 FileObject resource = prepared.getJSONObject("file").toJavaObject(FileObject.class);
                 String id = resource.getUuid();
@@ -149,7 +272,11 @@ public class FileTransferService {
     }
 
     public JSONObject prepareRemote(File file, String id, String name, String sha256, NodeObject node, int timeoutMs) throws IOException {
-        return new HttpFileTransferClient().prepare(file, id, name, sha256, node, clusterToken, timeoutMs);
+        if (metadata instanceof cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore) {
+            JSONObject snapshot=snapshot(id); snapshot.put("sha256",sha256);
+            return new HttpFileTransferClient().prepare(file,id,name,sha256,node,federation.tokenFor(node.getUrl()),timeoutMs,snapshot,federation.identity());
+        }
+        return new HttpFileTransferClient().prepare(file, id, name, sha256, node, credentials==null ? null : credentials.token(), timeoutMs);
     }
 
     private SimpleTransferResult receipt(FileObject resource) {
@@ -211,6 +338,8 @@ public class FileTransferService {
     }
 
     public void resumePendingReplicas() {
+        resumeReplicaCommits();
+        refreshReplicaMetadata();
         resumePreparedReplicas();
         for (String raw : etcdService.scan(prefix()).values()) {
             try { finishReplica(JSONObject.parseObject(raw)); }
@@ -219,6 +348,12 @@ public class FileTransferService {
     }
 
     public void put(File rawFile, String fileId, String originFileName, NodeObject server) throws IOException {
-        new HttpFileTransferClient().transfer(rawFile, fileId, originFileName, server, clusterToken);
+        if (metadata instanceof cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore) {
+            JSONObject receipt=prepareRemote(rawFile,fileId,originFileName,cc.ginpika.bootfs.kernel.object.ContentHash.sha256(rawFile.toPath()),server,30000);
+            federation.call(server.getUrl(),"data/replica/commit",snapshot(fileId));
+            etcdService.put("/replication-receipts/"+context.uuid+"/"+fileId+"/"+receipt.getString("nodeId"),new JSONObject(Map.of("url",server.getUrl(),"receipt",receipt)).toJSONString());
+            return;
+        }
+        new HttpFileTransferClient().transfer(rawFile, fileId, originFileName, server, credentials.token());
     }
 }

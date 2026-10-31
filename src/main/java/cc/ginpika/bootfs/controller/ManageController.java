@@ -177,6 +177,8 @@ public class ManageController {
         if (visibility.deleted(uuid)) return ResponseEntity.notFound().build();
         FileObject fileObject = context.query(uuid);
         if (fileObject == null) {
+            String remote=clusterProxyService.getRemoteNodeUrl(uuid);
+            if (remote!=null) return ResponseEntity.status(302).header(HttpHeaders.LOCATION,remote+"/thumb/"+uuid).build();
             return ResponseEntity.notFound().build();
         }
         Path thumbFile = thumbnailService.thumbPath(uuid);
@@ -230,8 +232,20 @@ public class ManageController {
     public com.alibaba.fastjson2.JSONObject prepareReplica(@RequestPart("file") MultipartFile file,
                                     @RequestParam("originalFilename") String filename,
                                     @RequestParam("originalFileId") String id,
-                                    @RequestParam("sha256") String sha256) throws IOException {
+                                    @RequestParam("sha256") String sha256,
+                                    @RequestParam(value="snapshot",required=false) String snapshot,
+                                    HttpServletRequest request) throws IOException {
+        if (snapshot!=null && !snapshot.isBlank()) {
+            if (!cc.ginpika.bootfs.kernel.cluster.ClusterHttp.digest(snapshot.getBytes(java.nio.charset.StandardCharsets.UTF_8)).equals(request.getHeader("X-BootFS-Digest"))) throw new IOException("Replica snapshot signature does not match its metadata");
+            String actor=localPeer(request.getHeader("X-BootFS-Cluster-Token"));
+            return fileTransferService.prepare(file,filename,id,sha256,com.alibaba.fastjson2.JSON.parseObject(snapshot),actor);
+        }
         return fileTransferService.prepare(file, filename, id, sha256);
+    }
+    @org.springframework.beans.factory.annotation.Autowired private cc.ginpika.bootfs.kernel.metadata.MetadataStore localMetadata;
+    private String localPeer(String token) throws IOException {
+        String actor=localMetadata instanceof cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore d ? d.actor(token,false) : null;
+        if (actor==null) throw new IOException("Active peer authorization is required"); return actor;
     }
 
     // get the replica from other nodes
@@ -639,7 +653,8 @@ public class ManageController {
 
     // 获取相册（comic）的 poster 和 resources，封装 MeiliSearch 查询避免前端 mixed content
     @GetMapping("/api/album/{uuid}")
-    public ResponseEntity<?> getAlbumDocument(@PathVariable String uuid) {
+    public ResponseEntity<?> getAlbumDocument(@PathVariable String uuid,HttpServletRequest request) {
+        if (context.query(uuid)==null) return proxyMissingResource(uuid,request);
         Map<String, Object> result = meiliSearchService.getDocument("full-text", uuid);
         if (Boolean.TRUE.equals(result.get("succeed"))) {
             return ResponseEntity.ok(result.get("data"));
@@ -648,7 +663,8 @@ public class ManageController {
     }
 
     @GetMapping("/file/{uuid}")
-    public ResponseEntity<?> getFileInfo(@PathVariable String uuid) {
+    public ResponseEntity<?> getFileInfo(@PathVariable String uuid,HttpServletRequest request) {
+        if (context.query(uuid)==null) return proxyMissingResource(uuid,request);
         try {
             FileObject fileObject = context.query(uuid);
             if (fileObject == null) {
@@ -662,6 +678,11 @@ public class ManageController {
             log.error("获取文件信息失败", e);
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
         }
+    }
+    private ResponseEntity<?> proxyMissingResource(String uuid,HttpServletRequest request) {
+        if ("1".equals(request.getHeader("X-BootFS-Forwarded"))) return ResponseEntity.notFound().build();
+        String remote=clusterProxyService.getRemoteNodeUrl(uuid);
+        return remote==null ? ResponseEntity.notFound().build() : clusterProxyService.proxyRequest(remote,request,null);
     }
 
     private void indexVirtualFileToMeiliSearch(FileObject fileObject) {

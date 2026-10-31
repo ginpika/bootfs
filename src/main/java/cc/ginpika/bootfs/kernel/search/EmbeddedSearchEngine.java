@@ -375,6 +375,11 @@ public class EmbeddedSearchEngine implements AutoCloseable {
         if (revisionBeforeScan == visibleRevision) return;
         adoptLegacyGalleryDocuments();
         NavigableMap<String, String> sources = new TreeMap<>(metadata.scan(SOURCE_PREFIX));
+        if (metadata instanceof cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore local) {
+            String prefix="/nodes/"+local.nodeId()+"/catalog/";
+            Set<String> inventory=new HashSet<>(); metadata.scan(prefix).keySet().forEach(key -> inventory.add(key.substring(prefix.length())));
+            sources.keySet().removeIf(key -> !inventory.contains(key.substring(key.lastIndexOf('/')+1)));
+        }
         // The historic gallery namespace is an archival input. Its live view is
         // generated exclusively from canonical resource policy and metadata.
         sources.keySet().removeIf(key -> key.startsWith(SOURCE_PREFIX + "image-host/"));

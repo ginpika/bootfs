@@ -4,16 +4,16 @@
 
 ## 导出
 
-先停止所有写入者和 BootFS 进程；Raft 节点应在停机前追上同一状态。需要全部库存所属节点的根目录。工具会锁住各 RocksDB，要求各节点的用户元数据和 revision 完全相同，并拒绝未完成的发布、漫画组装及旧副本接收任务。`--writes-stopped` 是操作员对停写的显式声明，不能把在线 follower 的文件复制当成一致备份。
+先停止待备份节点的写入者和 BootFS 进程。新自治节点只需提供自己的根目录，其他成员无需停机或提供元数据库；每台节点可分别导出。旧共享 Raft 的整组导出仍需在停机前追上同一状态，提供全部库存所属节点根目录，并校验各数据库的用户元数据和 revision 相同。工具锁住各 RocksDB，拒绝未完成的发布、漫画组装及旧副本接收任务。`--writes-stopped` 是操作员对停写的显式声明，不能把在线复制文件当成一致备份。
 
 ```sh
 java -jar target/bootfs-v1.0.0-beta.1.jar \
   --bootfs-maintenance=backup --writes-stopped \
-  --source=/backup-copy/n0 --source=/backup-copy/n1 --source=/backup-copy/n2 \
+  --source=/backup-copy/node-a \
   --output=/backups/bootfs-2026-10-31
 ```
 
-单机只提供一个 `--source`。embedded、静态 Raft 和 dynamic 的活动数据代都支持导出。工具在 Spring 启动前运行，不启动 HTTP、清理、媒体处理或迁移任务；不会对源数据进行逻辑修改。目的目录必须不存在且位于所有源根目录外。先写临时目录并同步，完成后原子发布目的目录；失败不会留下一个冒充成功的备份目录。
+自治节点提供一个 `--source`；旧共享 Raft 整组导出时可重复传入各根目录。原 embedded、新本地 dynamic、旧静态 Raft 及旧 dynamic 的活动代都支持导出。工具在 Spring 启动前运行，不启动 HTTP、清理、媒体处理或迁移任务；不会对源数据进行逻辑修改。目的目录必须不存在且位于所有源根目录外。先写临时目录并同步，完成后原子发布目的目录；失败不会留下一个冒充成功的备份目录。
 
 导出会核对每份存活库存中的对象长度和已有的权威 SHA-256；缺失对象、S3/全文文档缺少库存、库存所属节点未提供、节点版本不一致或符号链接都会阻止导出。已有虚拟 HLS 资源允许没有原始零字节对象，但必须有播放列表。原来没有权威 SHA-256 的历史对象也会在备份中计算摘要；这能检查此后的备份损坏，不能证明历史对象从未损坏。
 
@@ -46,17 +46,18 @@ java -jar target/bootfs-v1.0.0-beta.1.jar \
 java -jar target/bootfs-v1.0.0-beta.1.jar \
   --spring.profiles.active=dev --tfs.root-path=/new/seed \
   --tfs.web-entrypoint=http://127.0.0.1:8181 \
+  --bootfs.metadata.mode=embedded \
   --bootfs.restore.plan=/new/seed/restore-plan.json
 ```
 
-此例恢复为 embedded。计划只允许导入空权威状态，使用持久认领和原子批次；丢失提交响应可用同一计划重试。完成标记已存在时不会再次覆盖后续业务写入。不要删除标记来强制重放，也不要将旧目录就地切换 metadata mode。
+此例恢复为自治本地内核，embedded 为本地模式的兼容配置值。计划只允许导入空权威状态，使用持久认领和原子批次；丢失提交响应可用同一计划重试。完成标记已存在时不会再次覆盖后续业务写入。不要删除标记来强制重放，旧共享 Raft 目录仍通过恢复转换为本地权威。
 
-## 单机转新 Raft 集群
+## 恢复后组网及旧静态 Raft 兼容
 
 两条通路都不复制旧 Raft 身份：
 
-- **动态集群**：以 `--bootfs.metadata.mode=dynamic` 和共享 `BOOTFS_CLUSTER_TOKEN` 启动上述恢复 seed，并显式传入计划。随后让新的空 dynamic 节点发现/连接 seed；它们通过新集群的快照和日志追赶。对象内容留在 seed，之后的新上传按配置满足同步副本策略。见 [动态组网](mononode-dynamic-cluster.md)。
-- **静态集群**：创建新的 group-id 和空 peers 根目录。所有成员第一次启动时均传入**同一份** `bootfs.restore.plan`（可复制计划文件，内容必须完全相同），让每个进程在导入完成前不暴露业务存储。只有恢复 seed 带有对象字节，其他成员从 Raft 同步元数据。不要混入未携带计划、已经对外接受写入的节点。
+- **自治组网（当前默认）**：启动恢复后的本地 seed 并显式传入计划。之后可以用验证码加入其他组网，或让其他独立节点加入它。文件和元数据保留在持有节点，不向其他成员导入；需要副本时复制完整文件及其必要元数据。见 [动态组网](mononode-dynamic-cluster.md)。
+- **旧静态 Raft 兼容**：保留原维护工具的静态恢复路径，仅用于旧模型兼容。需创建新的 group-id 和空 peers 根目录，所有成员第一次启动均传入同一份恢复计划。这个模型使用全局共识，不具备当前自治节点的退群独立语义，不作为新部署方案。
 
 导入后核对资源数量、内容、S3、作者/描述、标签、漫画顺序和检索，再开放写入。删除 `kernel/search` 后重启可重建索引；在生产操作前先在恢复副本演练。
 

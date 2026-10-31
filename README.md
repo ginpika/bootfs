@@ -43,7 +43,7 @@
 - 内置了一个 hls 流个人放送平台，并且可以碎片化的上传 hls 流文件，在线上与朋友共同欣赏大片
 - 内置了一个酷炫的瀑布流随机画廊
 - 通过 FFmpeg 实现了 webp 编解码以及 hls 转码能力
-- 内嵌 RocksDB 元数据、Apache Ratis 共识和 Lucene 检索，单程序部署，支持显式静态 Raft 集群
+- 内嵌本机 RocksDB 元数据和 Lucene 索引，完整文件与元数据同节点保存；验证码组网，退群后继续独立使用
 
 Build with：Spring Boot + RocksDB + Apache Ratis + Lucene + FFmpeg
 
@@ -100,7 +100,7 @@ docker compose up --build -d
 
 ### 动态组网、内容耐久性与恢复
 
-独立节点相互发现、带数据合并、运行中加入/安全退出使用新的 `dynamic` 模式；冲突 key 按版本保留，组网不搬迁旧对象。上传可选择 `single-local` 或 `replicated(k)`，后者在发布普通/S3 资源前等待 k 个不同节点的耐久确认。内置维护命令可离线导出、校验并恢复到新单机或新 Raft 集群。
+新节点和已有本地 embedded 数据默认使用自治本地内核。在目标节点的系统仪表盘生成验证码，在另一端填写 URL 和验证码即可组网，无需手动配置密钥。组网不合并文件元数据库，不改写资源 UUID；联合查询和远端修改访问实际持有节点。退出后本机文件、元数据、索引继续读写，之后可加入其他集群。上传可选择 `single-local` 或 `replicated(k)`；完整副本携带必要元数据，原节点离线后仍可读取。旧共享 Raft 数据保留备份恢复路径。
 
 - [动态组网与版本](docs/mononode-dynamic-cluster.md)
 - [完整内核备份恢复](docs/mononode-backup.md)

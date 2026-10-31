@@ -55,6 +55,17 @@
         tailwind.config = {
             theme: {
                 extend: {
+                    borderRadius: {
+                        none: '0px',
+                        sm: '4px',
+                        DEFAULT: '6px',
+                        md: '6px',
+                        lg: '6px',
+                        xl: '8px',
+                        '2xl': '8px',
+                        '3xl': '8px',
+                        full: '9999px',
+                    },
                     fontFamily: {
                         display: ['Space Grotesk', 'system-ui', 'sans-serif'],
                         body: ['Outfit', 'system-ui', 'sans-serif'],
@@ -117,7 +128,7 @@
                     <div class="flex items-center justify-between h-16">
                         <!-- Left: Search + Filter -->
                         <div class="flex-1 flex items-center gap-2 max-w-2xl">
-                            <button id="homeBtn" class="flex-shrink-0 p-2 theme-rounded-lg transition-colors theme-btn-secondary" title="回到首页">
+                            <button id="homeBtn" class="flex-shrink-0 theme-icon-btn" title="回到首页">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
                                 </svg>
@@ -128,17 +139,17 @@
                                 <svg class="w-5 h-5 absolute left-3 top-2.5" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                                 </svg>
-                                <button id="searchBtn" class="absolute right-2 top-1.5 p-1.5 rounded-md transition-colors theme-btn-primary">
+                                <button id="searchBtn" class="absolute right-1 top-1/2 -translate-y-1/2 theme-icon-btn theme-btn-primary">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                                     </svg>
                                 </button>
-                                <div id="searchSuggestions" class="hidden absolute top-full left-0 right-0 mt-1 rounded-lg shadow-lg border overflow-hidden z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+                                <div id="searchSuggestions" class="hidden absolute top-full left-0 right-0 mt-1 theme-rounded-xl shadow-lg border overflow-hidden z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
                                     <div id="suggestionList" class="max-h-64 overflow-y-auto">
                                     </div>
                                 </div>
                             </div>
-                            <button id="showAllBtn" class="flex-shrink-0 px-3 py-2 text-sm font-medium theme-rounded-lg transition-colors theme-btn-secondary whitespace-nowrap" title="显示副本">
+                            <button id="showAllBtn" class="flex-shrink-0 theme-btn-secondary whitespace-nowrap" title="显示副本">
                                 <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
                                 </svg>
@@ -150,7 +161,7 @@
                         <div class="flex items-center space-x-3">
                             <!-- List mode buttons group -->
                             <div id="listModeActions" class="flex items-center space-x-3">
-                                <button id="openLocalFolderBtn" class="theme-icon-btn p-2 rounded-lg" title="打开本地文件夹" style="background-color: var(--color-bg-tertiary);">
+                                <button id="openLocalFolderBtn" class="theme-icon-btn" title="打开本地文件夹">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
                                     </svg>
@@ -159,7 +170,7 @@
 
                             <!-- Grid mode buttons group -->
                             <div id="gridModeActions" class="flex items-center space-x-3 view-hidden">
-                                <button id="nsfwToggleBtn" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors" title="NSFW 模糊开关" style="background-color: var(--color-bg-tertiary); color: var(--color-text-primary);">
+                                <button id="nsfwToggleBtn" class="theme-btn-secondary" title="NSFW 模糊开关">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path>
                                     </svg>
@@ -182,7 +193,7 @@
                             </div>
 
                             <!-- Refresh -->
-                            <button onclick="refreshFileList()" class="theme-icon-btn p-2 rounded-lg" title="刷新">
+                            <button onclick="refreshFileList()" class="theme-icon-btn" title="刷新">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                                 </svg>
@@ -190,15 +201,15 @@
 
                             <!-- Theme Selector -->
                             <div class="relative">
-                                <button id="themeMenuBtn" class="theme-icon-btn p-2 rounded-lg" style="background-color: var(--color-bg-tertiary);" title="主题">
-                                    <svg style="color: var(--color-text-primary);" xmlns="http://www.w3.org/2000/svg"
+                                <button id="themeMenuBtn" class="theme-icon-btn" title="主题">
+                                    <svg xmlns="http://www.w3.org/2000/svg"
                                         fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
-                                        class="size-6">
+                                        class="w-5 h-5">
                                         <path stroke-linecap="round" stroke-linejoin="round"
                                             d="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.4 2.245 4.5 4.5 0 0 0 8.4-2.245c0-.399-.078-.78-.22-1.128Zm0 0a15.998 15.998 0 0 0 3.388-1.62m-5.043-.025a15.994 15.994 0 0 1 1.622-3.395m3.42 3.42a15.995 15.995 0 0 0 4.764-4.648l3.876-5.814a1.151 1.151 0 0 0-1.597-1.597L14.146 6.32a15.996 15.996 0 0 0-4.649 4.763m3.42 3.42a6.776 6.776 0 0 0-3.42-3.42" />
                                     </svg>
                                 </button>
-                                <div id="themeDropdown" class="hidden absolute right-0 mt-2 w-56 rounded-xl shadow-lg border py-2 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+                                <div id="themeDropdown" class="hidden absolute right-0 mt-2 w-56 theme-rounded-xl shadow-lg border py-2 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
                                     <div class="px-3 py-2 border-b" style="border-color: var(--color-border-primary);">
                                         <p class="text-sm font-medium" style="color: var(--color-text-primary);">选择主题</p>
                                     </div>
@@ -240,7 +251,7 @@
                             </div>
 
                             <!-- Upload Split Button：主按钮普通上传，右侧下拉含 TS 切片上传 -->
-                            <div class="flex items-stretch rounded-lg shadow-sm">
+                            <div class="flex items-stretch theme-rounded-lg">
                                 <label class="flex items-center px-4 py-2 cursor-pointer transition-colors theme-btn-primary rounded-l-lg">
                                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
@@ -254,7 +265,7 @@
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                                         </svg>
                                     </button>
-                                    <div id="uploadDropdown" class="hidden absolute right-0 mt-2 w-48 rounded-lg shadow-lg border py-1 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+                                    <div id="uploadDropdown" class="hidden absolute right-0 mt-2 w-48 theme-rounded-lg shadow-lg border py-1 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
                                         <button id="tsUploadBtn" class="theme-dropdown-item w-full flex items-center px-4 py-2 text-sm">
                                             <svg class="w-4 h-4 mr-2" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"></path>
@@ -288,7 +299,7 @@
                                 </button>
                                 
                                 <!-- Dropdown Menu -->
-                                <div id="userDropdown" class="hidden absolute right-0 mt-2 w-48 theme-rounded-lg shadow-lg border py-1 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+                                <div id="userDropdown" class="hidden absolute right-0 mt-2 w-48 theme-rounded-xl shadow-lg border py-1 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
                                     <div class="px-4 py-3 border-b" style="border-color: var(--color-border-primary);">
                                         <p class="text-sm font-medium" style="color: var(--color-text-primary);" th:text="${ssoUser?.nickname ?: ssoUser?.username ?: 'admin'}">admin</p>
                                         <p class="text-xs" style="color: var(--color-text-muted);" th:text="${ssoUser?.email ?: 'admin@bootfs'}">admin@bootfs</p>
@@ -334,7 +345,6 @@
                                         SSO 信息
                                     </a>
                                     <div class="border-t" style="border-color: var(--color-border-primary);"></div>
-                                    <a href="/cluster.html" class="theme-dropdown-item flex items-center px-4 py-2 text-sm">节点组网与版本</a>
                                     <a href="/etcd" class="theme-dropdown-item flex items-center px-4 py-2 text-sm">
                                         <svg class="w-4 h-4 mr-2" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7M4 7c0-2 1-3 3-3h10c2 0 3 1 3 3M4 7h16M9 11h6"></path>
@@ -385,7 +395,7 @@
                             没有更多内容了
                         </div>
                         <div id="loadMoreBtn" class="text-center py-8">
-                            <button id="loadMoreButton" onclick="loadGridView(false)" class="px-6 py-3 rounded-lg transition-colors font-medium shadow-sm inline-flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed min-w-[140px] theme-btn-primary">
+                            <button id="loadMoreButton" onclick="loadGridView(false)" class="theme-btn-primary disabled:opacity-50 disabled:cursor-not-allowed min-w-[140px]">
                                 <svg id="loadMoreSpinner" class="hidden animate-spin h-5 w-5 mr-2" style="color: var(--color-accent-text);" fill="none" viewBox="0 0 24 24">
                                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -464,7 +474,7 @@
         <div class="theme-card theme-rounded-xl shadow-2xl p-6 w-full max-w-md mx-4">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-semibold theme-page-text-primary">上传进度</h3>
-                <button onclick="closeUploadModal()" class="theme-page-text-muted hover:opacity-70 transition-colors">
+                <button onclick="closeUploadModal()" class="theme-icon-btn" title="关闭">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                     </svg>
@@ -561,7 +571,7 @@
                     </svg>
                     <span id="audioPreviewName" class="text-sm font-medium theme-page-text-primary truncate"></span>
                 </div>
-                <button onclick="closeAudioPreview()" class="theme-page-text-muted hover:theme-page-text-primary transition-colors shrink-0 ml-3">
+                <button onclick="closeAudioPreview()" class="theme-icon-btn shrink-0 ml-3" title="关闭">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                     </svg>
@@ -582,8 +592,8 @@
             </div>
             <p class="theme-page-text-secondary mb-6">确定要删除选中的文件吗？此操作不可恢复。</p>
             <div class="flex justify-end space-x-3">
-                <button onclick="closeDeleteModal()" class="px-4 py-2 theme-rounded-lg transition-colors theme-btn-secondary">取消</button>
-                <button id="confirmDeleteBtn" class="px-4 py-2 text-white theme-rounded-lg transition-colors" style="background-color: var(--color-danger);">删除</button>
+                <button onclick="closeDeleteModal()" class="theme-btn-secondary">取消</button>
+                <button id="confirmDeleteBtn" class="theme-btn-danger">删除</button>
             </div>
         </div>
     </div>
@@ -600,8 +610,8 @@
             <p class="theme-page-text-secondary mb-3 text-sm">请输入新的文件名：</p>
             <input id="renameInput" type="text" maxlength="255" class="w-full px-3 py-2 mb-4 theme-input theme-rounded-lg" style="color: var(--color-text-primary);">
             <div class="flex justify-end space-x-3">
-                <button onclick="closeRenameModal()" class="px-4 py-2 theme-rounded-lg transition-colors theme-btn-secondary">取消</button>
-                <button id="confirmRenameBtn" class="px-4 py-2 text-white theme-rounded-lg transition-colors" style="background-color: var(--color-accent-primary);">确认</button>
+                <button onclick="closeRenameModal()" class="theme-btn-secondary">取消</button>
+                <button id="confirmRenameBtn" class="theme-btn-primary">确认</button>
             </div>
         </div>
     </div>
@@ -611,7 +621,7 @@
         <div class="theme-card theme-rounded-xl shadow-2xl p-6 w-full max-w-5xl mx-4">
             <div class="flex items-center justify-between mb-4">
                 <h3 id="tsUploadModalTitle" class="text-lg font-semibold theme-page-text-primary">TS 切片上传</h3>
-                <button onclick="closeTsUploadModal()" class="theme-page-text-muted hover:opacity-70 transition-colors">
+                <button onclick="closeTsUploadModal()" class="theme-icon-btn" title="关闭">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                     </svg>
@@ -706,15 +716,15 @@
             </div>
             
             <div class="flex justify-end space-x-3 mt-6">
-                <button onclick="closeTsUploadModal()" class="px-4 py-2 theme-rounded-lg transition-colors theme-btn-secondary">取消</button>
-                <button id="startTsUploadBtn" class="px-4 py-2 theme-rounded-lg transition-colors theme-btn-primary">开始上传</button>
+                <button onclick="closeTsUploadModal()" class="theme-btn-secondary">取消</button>
+                <button id="startTsUploadBtn" class="theme-btn-primary">开始上传</button>
             </div>
         </div>
     </div>
 
     <!-- Floating Selection Action Bar：选中文件时从底部滑入，聚合所有批量操作 -->
     <div class="fixed bottom-6 inset-x-0 z-50 flex justify-center px-4 pointer-events-none">
-    <div id="selectedToolbar" class="hidden theme-rounded-xl theme-shadow border max-w-[calc(100vw-2rem)] pointer-events-auto" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.18), 0 8px 10px -6px rgba(0,0,0,0.1);">
+    <div id="selectedToolbar" class="hidden theme-rounded-xl border max-w-[calc(100vw-2rem)] pointer-events-auto" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary); box-shadow: 0 8px 24px rgba(0,0,0,0.12);">
         <div class="flex items-center gap-2 px-4 py-3">
             <span class="text-sm font-medium whitespace-nowrap" style="color: var(--color-accent-primary);" id="selectedCount">已选择 0 项</span>
             <div class="w-px h-6 flex-shrink-0" style="background-color: var(--color-border-primary);"></div>
@@ -744,7 +754,7 @@
                 批量删除
             </button>
             <div class="w-px h-6 flex-shrink-0" style="background-color: var(--color-border-primary);"></div>
-            <button id="cancelSelection" class="text-sm transition-colors px-2 py-1.5 whitespace-nowrap" style="color: var(--color-accent-secondary);">取消选择</button>
+            <button id="cancelSelection" class="theme-text-btn whitespace-nowrap" style="color: var(--color-text-secondary);">取消选择</button>
         </div>
     </div>
     </div>
@@ -754,7 +764,7 @@
         <div class="theme-card theme-rounded-xl shadow-2xl w-full max-w-xl mx-4 max-h-[90vh] flex flex-col" onclick="event.stopPropagation()">
             <div class="flex items-center justify-between p-5 pb-3 border-b" style="border-color: var(--color-border-primary);">
                 <h3 class="text-lg font-semibold theme-page-text-primary">文件详情</h3>
-                <button onclick="closeFileDetailModal()" class="theme-page-text-muted hover:opacity-70 transition-colors">
+                <button onclick="closeFileDetailModal()" class="theme-icon-btn" title="关闭">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                     </svg>
@@ -903,13 +913,13 @@
                 </div>
             </div>
             <div class="flex justify-end p-5 pt-3 border-t" style="border-color: var(--color-border-primary);">
-                <button onclick="closeFileDetailModal()" class="px-4 py-2 theme-rounded-lg transition-colors theme-btn-secondary">关闭</button>
+                <button onclick="closeFileDetailModal()" class="theme-btn-secondary">关闭</button>
             </div>
         </div>
     </div>
 
     <!-- Toast Notification -->
-    <div id="toast" class="hidden fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 translate-y-2 opacity-0 z-50">
+    <div id="toast" class="hidden fixed bottom-4 right-4 px-4 py-2.5 theme-rounded-xl shadow-lg translate-y-2 opacity-0 z-50">
         <div class="flex items-center space-x-3">
             <svg id="toastIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"></svg>
             <span id="toastMessage" class="font-medium"></span>
@@ -951,10 +961,10 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                             </svg>
                             </button>
-                            <div id="bookmarksDropdown" class="hidden absolute right-0 mt-2 w-64 max-h-96 overflow-y-auto rounded-lg shadow-lg border py-2 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+                            <div id="bookmarksDropdown" class="hidden absolute right-0 mt-2 w-64 max-h-96 overflow-y-auto theme-rounded-xl shadow-lg border py-2 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
                             </div>
                         </div>
-                        <button id="localFolderChange" class="theme-icon-btn p-1.5 rounded-md" title="更换文件夹" style="background-color: var(--color-bg-tertiary);">
+                        <button id="localFolderChange" class="theme-icon-btn" title="更换文件夹">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776"></path>
                             </svg>

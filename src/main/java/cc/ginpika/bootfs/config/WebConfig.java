@@ -12,7 +12,7 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addInterceptor(sso).addPathPatterns(
             "/", "/queryPageOffset", "/removeFileByUuid", "/removeFileBatch", "/downloadFileBatch",
             "/publicAccess/**", "/old-admin", "/index-old", "/f", "/comic", "/t", "/t/prepare",
-            "/virtual-file", "/file/*", "/hls/**", "/api/file/**", "/api/cluster/**", "/cluster.html", "/api/tags/**",
+            "/virtual-file", "/file/*", "/hls/**", "/api/file/**", "/api/album/**", "/api/cluster/**", "/api/tags/**",
             "/etcd", "/api/etcd/**", "/meilisearch", "/api/meilisearch/**", "/dashboard", "/api/dashboard/**",
             "/tv", "/tv/**");
     }

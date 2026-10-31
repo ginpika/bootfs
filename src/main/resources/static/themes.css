@@ -2,6 +2,10 @@
   --transition-fast: 150ms;
   --transition-normal: 200ms;
   --transition-slow: 300ms;
+  /* 控件（按钮、输入框）与面板（卡片、弹层）分开，避免到处用大圆角 */
+  --radius-xs: 4px;
+  --radius-control: 6px;
+  --radius-surface: 8px;
 }
 
 :root,
@@ -225,21 +229,83 @@
 .theme-btn-primary {
   background-color: var(--color-accent-primary);
   color: var(--color-accent-text);
-  transition: background-color var(--transition-normal);
+  border-color: var(--color-accent-primary);
+  transition: background-color var(--transition-normal), border-color var(--transition-normal), color var(--transition-normal);
 }
 
 .theme-btn-primary:hover {
   background-color: var(--color-accent-secondary);
+  border-color: var(--color-accent-secondary);
 }
 
-.theme-icon-btn {
+.theme-btn-secondary {
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-secondary);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.theme-btn-secondary:hover {
+  background-color: var(--color-bg-tertiary);
+}
+
+button.theme-icon-btn,
+a.theme-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  flex-shrink: 0;
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  background-color: transparent;
   color: var(--color-text-secondary);
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  box-shadow: none;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
-.theme-icon-btn:hover {
+button.theme-icon-btn:hover,
+a.theme-icon-btn:hover {
   background-color: var(--color-bg-hover);
   color: var(--color-text-primary);
+}
+
+button.theme-icon-btn.theme-btn-primary {
+  background-color: var(--color-accent-primary);
+  color: var(--color-accent-text);
+  border-color: var(--color-accent-primary);
+}
+
+button.theme-icon-btn.theme-btn-primary:hover {
+  background-color: var(--color-accent-secondary);
+  border-color: var(--color-accent-secondary);
+  color: var(--color-accent-text);
+}
+
+button.theme-icon-btn.theme-btn-danger {
+  background-color: var(--color-danger);
+  color: #fff;
+  border-color: var(--color-danger);
+}
+
+button.theme-icon-btn.theme-btn-danger:hover {
+  background-color: color-mix(in srgb, var(--color-danger) 86%, #000);
+  border-color: color-mix(in srgb, var(--color-danger) 86%, #000);
+  color: #fff;
+}
+
+button.theme-icon-btn.theme-btn-sm {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+button.theme-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .theme-option {
@@ -282,12 +348,17 @@
 .theme-card {
   background-color: var(--color-bg-secondary);
   border: 1px solid var(--color-border-primary);
+  border-radius: var(--radius-surface);
 }
 
-.theme-input {
+.theme-input,
+input.theme-input,
+textarea.theme-input,
+select.theme-input {
   background-color: var(--color-bg-secondary);
   border: 1px solid var(--color-border-secondary);
   color: var(--color-text-primary);
+  border-radius: var(--radius-control);
 }
 
 .theme-input:focus {
@@ -328,7 +399,7 @@ input[type="checkbox"] {
   width: 1rem;
   height: 1rem;
   border: 2px solid var(--color-border-secondary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background-color: var(--color-bg-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -381,32 +452,140 @@ input[type="checkbox"]:focus {
 
 .theme-btn-success {
   background-color: var(--color-success);
-  color: white;
-  transition: opacity var(--transition-normal);
+  color: #fff;
+  border-color: var(--color-success);
+  transition: background-color var(--transition-normal), border-color var(--transition-normal);
 }
 
 .theme-btn-success:hover {
-  opacity: 0.85;
+  background-color: color-mix(in srgb, var(--color-success) 86%, #000);
+  border-color: color-mix(in srgb, var(--color-success) 86%, #000);
 }
 
 .theme-btn-danger {
   background-color: var(--color-danger);
-  color: white;
-  transition: opacity var(--transition-normal);
+  color: #fff;
+  border-color: var(--color-danger);
+  transition: background-color var(--transition-normal), border-color var(--transition-normal);
 }
 
 .theme-btn-danger:hover {
-  opacity: 0.85;
+  background-color: color-mix(in srgb, var(--color-danger) 86%, #000);
+  border-color: color-mix(in srgb, var(--color-danger) 86%, #000);
 }
 
 .theme-btn-warning {
   background-color: var(--color-warning);
-  color: white;
-  transition: opacity var(--transition-normal);
+  color: #fff;
+  border-color: var(--color-warning);
+  transition: background-color var(--transition-normal), border-color var(--transition-normal);
 }
 
 .theme-btn-warning:hover {
-  opacity: 0.85;
+  background-color: color-mix(in srgb, var(--color-warning) 86%, #000);
+  border-color: color-mix(in srgb, var(--color-warning) 86%, #000);
+}
+
+/* 文字按钮：同一高度、字号和圆角；颜色仍由 theme-btn-* 决定 */
+:is(button, a, label):is(.theme-btn-primary, .theme-btn-secondary, .theme-btn-danger, .theme-btn-success, .theme-btn-warning):not(.theme-icon-btn) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  box-sizing: border-box;
+  height: 2rem;
+  min-height: 2rem;
+  padding: 0 0.75rem;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: var(--radius-control);
+  box-shadow: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+  letter-spacing: 0;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+:is(button, a, label):is(.theme-btn-primary, .theme-btn-secondary, .theme-btn-danger, .theme-btn-success, .theme-btn-warning).theme-btn-sm:not(.theme-icon-btn) {
+  box-sizing: border-box;
+  height: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0 0.625rem;
+  font-size: 0.75rem;
+}
+
+/* 分段按钮只圆外侧 */
+label.theme-btn-primary.rounded-l-lg,
+button.theme-btn-primary.rounded-l-lg {
+  border-radius: var(--radius-control) 0 0 var(--radius-control);
+}
+
+button.theme-btn-primary.rounded-r-lg,
+label.theme-btn-primary.rounded-r-lg {
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+}
+
+:is(button, a, label):is(.theme-btn-primary, .theme-btn-secondary, .theme-btn-danger, .theme-btn-success, .theme-btn-warning):disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.theme-text-btn,
+a.theme-text-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+button.theme-text-btn:hover,
+a.theme-text-btn:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+button.theme-btn-quiet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.5rem;
+  padding: 0.125rem 0.5rem;
+  border: none;
+  border-radius: var(--radius-control);
+  box-shadow: none;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+  cursor: pointer;
+}
+
+.theme-rounded,
+.theme-rounded-lg {
+  border-radius: var(--radius-control);
+}
+
+.theme-rounded-md {
+  border-radius: var(--radius-xs);
+}
+
+.theme-rounded-xl {
+  border-radius: var(--radius-surface);
+}
+
+.theme-rounded-full {
+  border-radius: 9999px;
+}
+
+.theme-card.shadow-2xl {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
 }
 
 .search-suggestion-item {

@@ -13,4 +13,6 @@ public class FileObjectWebVO {
     private int pageSize;
     private int total;
     private List<FileObject> rows;
+    private boolean partial;
+    private List<String> unavailableNodes;
 }

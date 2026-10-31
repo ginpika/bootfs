@@ -74,4 +74,4 @@ docker compose up -d
 
 See [Cluster Deployment](./docs/cluster-deploy-en.md)
 
-Dynamic node discovery, conflict versions, online membership and graceful leave are described in [dynamic networking](docs/mononode-dynamic-cluster.md). Object write policies and failure semantics are in the [kernel guide](docs/mononode-kernel.md); complete offline kernel export and new-cluster recovery are in [backup/restore](docs/mononode-backup.md).
+Each node keeps complete local files, authoritative metadata and a local index. New and existing local embedded roots use the autonomous kernel by default. Pair through a target URL and short-lived verification code; joining does not merge resource databases. Federated queries and remote mutations contact the owning node. Leaving preserves local service across restarts, and the same node can later join another group. See [dynamic networking](docs/mononode-dynamic-cluster.md), the [kernel guide](docs/mononode-kernel.md), and [backup/restore](docs/mononode-backup.md), which also covers legacy shared-Raft data.

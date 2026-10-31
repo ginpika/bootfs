@@ -2,287 +2,352 @@ package cc.ginpika.bootfs.kernel.cluster;
 
 import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.core.io.DurableFiles;
-import cc.ginpika.bootfs.kernel.consensus.RaftMetadataStore;
 import cc.ginpika.bootfs.kernel.metadata.*;
 import com.alibaba.fastjson2.*;
 import java.io.*;
-import java.net.*;
 import java.nio.file.*;
+import java.security.SecureRandom;
 import java.util.*;
 
-/** Stable API across a durable, explicitly fenced independent-node join. Old consensus directories are retained. */
+/** Autonomous local authority. Federation membership never enters the resource database. */
 public final class DynamicMetadataStore implements MetadataStore {
-    private final Path root, manifestFile, data;
-    private final String token, endpoint, nodeId;
-    private final boolean allowInsecure;
+    private final RocksMetadataStore local;
+    private final Path manifestFile;
+    private final String nodeId, endpoint;
+    private final ClusterCredentials identity;
+    private final Map<String,Long> nonces=new HashMap<>();
+    private final SecureRandom random = new SecureRandom();
     private JSONObject manifest;
-    private RaftMetadataStore active;
-    private Runnable attached = () -> {};
-    public synchronized void onAttached(Runnable callback) { attached = callback; }
 
-    public DynamicMetadataStore(TfsConfig config, String raftAddress, String token, boolean allowInsecure) throws IOException {
-        if (token == null || token.isBlank()) throw new IOException("Dynamic clustering requires a shared BOOTFS_CLUSTER_TOKEN");
-        this.token = token; this.endpoint = config.getWebEntrypoint().replaceAll("/+$", "");
-        this.allowInsecure = allowInsecure; this.nodeId = new NodeIdentity(config).id();
-        root = Path.of(config.getRootPath(), "kernel", "dynamic"); data = Path.of(config.getPathPrefix()); manifestFile = root.resolve("node.json");
-        Files.createDirectories(root);
-        if (Files.exists(manifestFile)) manifest = JSON.parseObject(Files.readString(manifestFile));
-        else {
-            try (var existing = Files.list(root)) {
-                if (existing.findAny().isPresent()) throw new IOException("Dynamic identity is missing but previous state remains; explicit recovery is required");
-            }
-            Path old = Path.of(config.getRootPath(), "kernel");
-            if (Files.exists(old.resolve("metadata/CURRENT")) || Files.exists(old.resolve("raft-identity.json"))) throw new IOException("Use a portable backup and new directory to enter dynamic mode");
-            if (raftAddress == null || raftAddress.isBlank()) {
-                try (ServerSocket reservation = new ServerSocket(0)) { raftAddress = URI.create(endpoint).getHost() + ":" + reservation.getLocalPort(); }
-            }
-            manifest = new JSONObject(); manifest.put("nodeId", nodeId); manifest.put("groupId", UUID.randomUUID().toString());
-            manifest.put("generation", UUID.randomUUID().toString()); manifest.put("phase", "ACTIVE");
-            manifest.put("raftAddress", raftAddress); manifest.put("endpoint", endpoint);
-            JSONObject peers = new JSONObject(); peers.put(nodeId, raftAddress); manifest.put("peers", peers); persist();
-        }
-        if (!nodeId.equals(manifest.getString("nodeId")) || !endpoint.equals(manifest.getString("endpoint"))) throw new IOException("Dynamic node identity or advertised HTTP endpoint differs from persisted identity");
-        if (raftAddress != null && !raftAddress.isBlank() && !raftAddress.equals(manifest.getString("raftAddress"))) throw new IOException("Dynamic Raft endpoint differs from persisted identity");
-        if ("LEAVING".equals(phase())) {
-            JSONObject request = new JSONObject(); request.put("nodeId", nodeId); request.put("groupId",manifest.getString("groupId"));
-            ClusterHttp.call(manifest.getString("target"), "remove", request, token);
-            manifest.put("phase", "OFFLINE"); persist();
-        }
-        if ("OFFLINE".equals(phase()) && manifest.getJSONObject("peers").size() > 1) prepareReturning();
-        else if ("OFFLINE".equals(phase())) { manifest.put("phase", "ACTIVE"); persist(); }
-        if ("ACTIVE".equals(phase()) && manifest.getBooleanValue("everClustered")) {
-            JSONObject known = manifest.getJSONObject("httpPeers");
-            if (known != null) for (String peer : known.keySet()) {
-                if (peer.equals(nodeId)) continue;
-                try {
-                    JSONObject remote = ClusterHttp.call(known.getString(peer), "status", null, token, 1000);
-                    if (!manifest.getString("groupId").equals(remote.getString("groupId")) || !"ACTIVE".equals(remote.getString("phase"))) continue;
-                    if (!remote.getJSONObject("peers").containsKey(nodeId)) {
-                        manifest.put("target", known.getString(peer)); prepareReturning();
-                    }
-                    break;
-                } catch (IOException unavailable) { /* Recover the existing history when no live peer can confirm removal. */ }
-            }
-        }
-        open("ATTACHING".equals(phase()));
-        if ("ATTACHING".equals(phase())) finishAttach();
+    public DynamicMetadataStore(TfsConfig config, String unusedAddress, String unusedToken, boolean unusedNetworkFlag) throws IOException {
+        this(config);
     }
-    private String phase() { return manifest.getString("phase"); }
-    public synchronized boolean available() {
-        if (active == null || !"ACTIVE".equals(phase())) return false;
-        try { return active.currentPeers().containsKey(nodeId); }
-        catch (MetadataException removed) { return false; }
+    public DynamicMetadataStore(TfsConfig config, String unusedAddress, java.util.function.Supplier<String> unusedToken, boolean unusedNetworkFlag) throws IOException {
+        this(config);
     }
-    private void writable() { if (!available()) throw new MetadataException("Node transition is " + phase() + "; writes are fenced"); }
-    private RaftMetadataStore store() { if (active == null) throw new MetadataException("Node is offline"); return active; }
+    public DynamicMetadataStore(TfsConfig config) throws IOException {
+        identity=new ClusterCredentials(config,"");
+        Path kernel = Path.of(config.getRootPath(), "kernel");
+        if (Files.exists(kernel.resolve("raft-identity.json")) || Files.exists(kernel.resolve("dynamic/node.json"))) {
+            throw new IOException("Legacy shared-Raft storage requires portable backup/restore into a new local node; original storage has not been changed");
+        }
+        nodeId = new NodeIdentity(config).id(); endpoint = normalizeEndpoint(config.getWebEntrypoint());
+        manifestFile = kernel.resolve("cluster/node.json");
+        if (Files.exists(manifestFile)) {
+            manifest = JSON.parseObject(Files.readString(manifestFile));
+            if (manifest.getIntValue("formatVersion") != 2 || !nodeId.equals(manifest.getString("nodeId"))
+                    || !endpoint.equals(manifest.getString("endpoint"))) throw new IOException("Federation node identity/endpoint differs from stored identity");
+            if (!identity.publicKey().equals(manifest.getJSONObject("members").getJSONObject(nodeId).getString("publicKey"))) throw new IOException("Node signing identity differs from its persisted membership identity");
+        } else {
+            Path directory = manifestFile.getParent();
+            if (Files.exists(directory)) try (var entries = Files.list(directory)) {
+                if (entries.findAny().isPresent()) throw new IOException("Federation identity is missing while previous state remains; restore the node state");
+            }
+            manifest = new JSONObject(); manifest.put("formatVersion", 2); manifest.put("nodeId", nodeId); manifest.put("endpoint", endpoint);
+            manifest.put("pending", new JSONObject()); manifest.put("outbox", new JSONArray());
+            resetMembership(); persist();
+        }
+        local = new RocksMetadataStore(kernel.resolve("metadata"));
+        // Never reinterpret a replicated state-machine copy as an autonomous local authority.
+        if (local.appliedIndex() >= 0) { local.close(); throw new IOException("Replicated metadata requires portable backup/restore before opening as local authority"); }
+        Map<String,String> versions=new TreeMap<>();
+        for (String key:local.scan("/documents/full-text/").keySet()) {
+            String id=key.substring("/documents/full-text/".length());
+            if (local.get("/resource-revisions/"+id)==null) versions.put("/resource-revisions/"+id,Long.toString(local.revision()));
+        }
+        if (!versions.isEmpty()) local.writeBatch(versions,Set.of());
+    }
+    public static String normalizeEndpoint(String input) throws IOException {
+        try {
+            var uri = java.net.URI.create(input == null ? "" : input.trim());
+            if (!("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) || uri.getHost() == null
+                    || uri.getUserInfo() != null || uri.getQuery() != null || uri.getFragment() != null
+                    || (uri.getPort() != -1 && (uri.getPort() < 1 || uri.getPort() > 65535))) throw new IllegalArgumentException();
+            return uri.toString().replaceAll("/+$", "");
+        } catch (IllegalArgumentException invalid) { throw new IOException("请输入有效的 http:// 或 https:// BootFS 地址，不含账号、查询参数或片段"); }
+    }
+    private JSONObject object(String key) { return manifest.getJSONObject(key); }
+    private JSONObject members() { return object("members"); }
+    private JSONObject links() { return object("links"); }
+    private static JSONObject copy(JSONObject value) { return JSON.parseObject(value.toJSONString()); }
+    private String secret() { byte[] bytes = new byte[32]; random.nextBytes(bytes); return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes); }
+    private JSONObject descriptor(String url, String incarnation) { return descriptor(url,incarnation,identity.publicKey()); }
+    private JSONObject descriptor(String url,String incarnation,String publicKey) { return new JSONObject(Map.of("url",url,"incarnation",incarnation,"publicKey",publicKey)); }
+    private JSONObject link(String inbound, String outbound) { return new JSONObject(Map.of("inbound", inbound, "outbound", outbound)); }
+    private void resetMembership() {
+        if (object("revoked")==null) manifest.put("revoked",new JSONObject());
+        if (members()!=null) for (String peer:new ArrayList<>(members().keySet())) if (!nodeId.equals(peer)) retire(peer);
+        manifest.put("groupId", UUID.randomUUID().toString()); manifest.put("coordinatorId", nodeId); manifest.put("version", 0L);
+        manifest.put("members", new JSONObject(Map.of(nodeId, descriptor(endpoint, UUID.randomUUID().toString()))));
+        manifest.put("links", new JSONObject()); manifest.put("pending", new JSONObject());
+        manifest.put("departed", new JSONObject()); manifest.put("admissions", new JSONObject()); manifest.remove("lastError");
+    }
     private void persist() throws IOException {
-        Path temporary = root.resolve("node.json.tmp");
-        Files.writeString(temporary, manifest.toJSONString(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
-        Files.move(temporary, manifestFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); DurableFiles.syncDirectory(root);
+        Files.createDirectories(manifestFile.getParent());
+        Path stage = Files.createTempFile(manifestFile.getParent(), ".node-", ".tmp");
+        try {
+            Files.setPosixFilePermissions(stage, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+            Files.writeString(stage, manifest.toJSONString(), StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
+            Files.move(stage, manifestFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            DurableFiles.syncDirectory(manifestFile.getParent());
+        } finally { Files.deleteIfExists(stage); }
     }
-    private Map<String,String> seeds() {
-        Map<String,String> peers = new TreeMap<>(); manifest.getJSONObject("peers").forEach((id,address) -> peers.put(id, (String)address));
-        peers.put(nodeId, manifest.getString("raftAddress")); return peers;
-    }
-    private void open(boolean joining) {
-        active = new RaftMetadataStore(root.resolve(manifest.getString("generation")), nodeId,
-                UUID.fromString(manifest.getString("groupId")), seeds(), true, allowInsecure, true, joining);
-    }
+    public String nodeId() { return nodeId; }
+    public String endpoint() { return endpoint; }
+    public ClusterCredentials transportIdentity() { return identity; }
+    private JSONObject call(String url,String path,JSONObject body,String token,int timeout) throws IOException { return ClusterHttp.call(url,path,body,token,timeout,identity); }
+    public boolean available() { return true; }
     public synchronized JSONObject status() {
-        JSONObject status = new JSONObject(); status.put("nodeId", nodeId); status.put("groupId", manifest.getString("groupId"));
-        status.put("phase", phase()); status.put("endpoint", endpoint); status.put("raftAddress", manifest.getString("raftAddress"));
-        Map<String,String> peers = seeds();
-        if (active != null) {
-            try { peers = active.currentPeers(); }
-            catch (MetadataException removed) { if ("ACTIVE".equals(phase())) status.put("phase","REMOVED"); }
-            if ("ACTIVE".equals(phase()) && !peers.containsKey(nodeId)) status.put("phase","REMOVED");
-        }
-        status.put("peers",peers);
-        status.put("independent", !manifest.getBooleanValue("everClustered"));
-        status.put("lastError", manifest.getString("lastError")); return status;
+        JSONObject peers = new JSONObject(); members().forEach((id, raw) -> peers.put(id, ((JSONObject)raw).getString("url")));
+        JSONObject status = new JSONObject(Map.of("nodeId", nodeId, "endpoint", endpoint, "groupId", manifest.getString("groupId"),
+                "phase", "ACTIVE", "metadataMode", "local", "independent", members().size() == 1,
+                "coordinatorId", manifest.getString("coordinatorId"), "version", manifest.getLongValue("version"), "peers", peers));
+        status.put("lastError", manifest.getString("lastError")); status.put("pendingNotifications", manifest.getJSONArray("outbox").size()); return status;
     }
-    public synchronized JSONObject ready() {
-        writable(); JSONObject ready = status();
-        ready.put("knownNodes", store().scan("/cluster/node/").keySet().stream().map(key -> key.substring("/cluster/node/".length())).toList());
-        return ready;
+    public JSONObject ready() { return status(); }
+    public synchronized Map<String,String> peerEndpoints() {
+        Map<String,String> peers = new TreeMap<>(); members().forEach((id, raw) -> { if (!nodeId.equals(id)) peers.put(id, ((JSONObject)raw).getString("url")); }); return peers;
+    }
+    public synchronized String actor(String token, boolean allowPending) {
+        if (token == null) return null;
+        for (String peer : links().keySet()) if (members().containsKey(peer) && same(links().getJSONObject(peer).getString("inbound"), token)) return peer;
+        if (allowPending) for (String peer : object("pending").keySet()) {
+            JSONObject entry = object("pending").getJSONObject(peer);
+            if (entry.getLongValue("expiresAt") > System.currentTimeMillis() && same(entry.getString("inbound"), token)) return peer;
+        }
+        return null;
+    }
+    public synchronized boolean verifyPeerRequest(javax.servlet.http.HttpServletRequest request,String token,boolean pending) {
+        String actor=actor(token,pending); if (actor==null) return false;
+        JSONObject peer=members().getJSONObject(actor); if (peer==null) peer=object("pending").getJSONObject(actor);
+        return verifySignature(request,token,peer.getString("publicKey"),true);
+    }
+    private void retire(String peer) {
+        JSONObject grant=links()==null ? null : links().getJSONObject(peer), descriptor=members().getJSONObject(peer);
+        if (grant!=null && descriptor!=null) object("revoked").put(ClusterHttp.digest(grant.getString("inbound").getBytes(java.nio.charset.StandardCharsets.UTF_8)),descriptor.getString("publicKey"));
+    }
+    public synchronized boolean verifyRevokedRequest(javax.servlet.http.HttpServletRequest request,String token) {
+        if (token==null || object("revoked")==null) return false;
+        String key=object("revoked").getString(ClusterHttp.digest(token.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        return key!=null && verifySignature(request,token,key,false);
+    }
+    private boolean verifySignature(javax.servlet.http.HttpServletRequest request,String token,String publicKey,boolean consume) {
+        String time=request.getHeader("X-BootFS-Time"),nonce=request.getHeader("X-BootFS-Nonce"),digest=request.getHeader("X-BootFS-Digest");
+        long now=System.currentTimeMillis();
+        try { if (Math.abs(now-Long.parseLong(time))>60_000 || nonce==null || !nonce.matches("[A-Za-z0-9-]{36}") || digest==null || !digest.matches("[a-f0-9]{64}")) return false; }
+        catch(NumberFormatException invalid) { return false; }
+        if (request.getContentType()!=null && request.getContentType().toLowerCase(Locale.ROOT).startsWith("application/json") && !Boolean.TRUE.equals(request.getAttribute("bootfs.peerBodyVerified"))) return false;
+        if (("GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod())) && !ClusterHttp.digest(new byte[0]).equals(digest)) return false;
+        String target=request.getRequestURI()+(request.getQueryString()==null ? "" : "?"+request.getQueryString());
+        if (!ClusterCredentials.verify(publicKey,ClusterHttp.signingInput(request.getMethod(),target,token,time,nonce,digest),request.getHeader("X-BootFS-Signature"))) return false;
+        if (!consume) return true;
+        nonces.entrySet().removeIf(entry -> entry.getValue()<now);
+        if (nonces.size()>=100000 || nonces.putIfAbsent(nonce,now+120000)!=null) return false;
+        return true;
+    }
+    private static boolean same(String left, String right) {
+        return left != null && right != null && java.security.MessageDigest.isEqual(left.getBytes(java.nio.charset.StandardCharsets.UTF_8), right.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+    public synchronized String tokenFor(String url) throws IOException {
+        url = normalizeEndpoint(url);
+        for (String peer : members().keySet()) if (!peer.equals(nodeId) && url.equals(members().getJSONObject(peer).getString("url")) && links().containsKey(peer)) return links().getJSONObject(peer).getString("outbound");
+        for (String peer : object("pending").keySet()) {
+            JSONObject grant = object("pending").getJSONObject(peer);
+            if (url.equals(grant.getString("url")) && grant.getLongValue("expiresAt") > System.currentTimeMillis()) return grant.getString("outbound");
+        }
+        throw new IOException("尚未配对，或该节点已经离开当前集群");
+    }
+    public synchronized String endpointFor(String actor) {
+        JSONObject peer=members().getJSONObject(actor); if (peer==null) peer=object("pending").getJSONObject(actor);
+        return peer==null ? null : peer.getString("url");
+    }
+    public synchronized void paired(String peer, String url, String inbound, String outbound,String publicKey) throws IOException {
+        if (peer == null || !peer.matches("[A-Za-z0-9_-]+") || nodeId.equals(peer)) throw new IOException("请输入其他 BootFS 节点的地址");
+        url = normalizeEndpoint(url);
+        if (members().containsKey(peer) && !url.equals(members().getJSONObject(peer).getString("url"))) throw new IOException("Node identity is already registered at another endpoint");
+        if (inbound == null || outbound == null || inbound.length() < 32 || outbound.length() < 32 || publicKey==null) throw new IOException("Invalid peer authorization");
+        object("pending").put(peer, new JSONObject(Map.of("url", url, "inbound", inbound, "outbound", outbound,"publicKey",publicKey, "expiresAt", System.currentTimeMillis()+300_000)));
+        persist();
     }
     public synchronized void connect(String target) throws IOException {
-        if (target == null || target.isBlank()) throw new IOException("Supply a target node URL");
-        if (!available()) throw new IOException("A durable node transition is already in progress");
-        if (manifest.getBooleanValue("everClustered") || store().currentPeers().size() != 1) throw new IOException("Connect is for an independent node; use a standalone/new node to join an existing cluster");
-        JSONObject remote = ClusterHttp.call(target, "ready", null, token);
+        target = normalizeEndpoint(target);
+        JSONObject remote = call(target, "ready", null, tokenFor(target), 5000);
         if (manifest.getString("groupId").equals(remote.getString("groupId"))) return;
-        if (!"ACTIVE".equals(remote.getString("phase"))) throw new IOException("Target is not ready");
-        if (remote.getJSONObject("peers").containsKey(nodeId) || (remote.getJSONArray("knownNodes") != null && remote.getJSONArray("knownNodes").contains(nodeId))) throw new IOException("Node identity is already registered in target membership");
-        // Validate and freeze locally before sending any import request. The donor snapshot is stable thereafter.
-        Map<String,String> snapshot = store().scan("");
-        ClusterMerge.plan(Map.of(), snapshot, manifest.getString("groupId"), "preflight");
-        for (Map.Entry<String,String> record : snapshot.entrySet()) {
-            if (!record.getKey().startsWith("/nodes/") || !record.getKey().contains("/catalog/")) continue;
-            JSONObject file = JSON.parseObject(record.getValue()); String id = file.getString("uuid");
-            if (!record.getKey().startsWith("/nodes/" + nodeId + "/catalog/")) throw new IOException("Independent donor contains another node's inventory; reconnect it to its original cluster");
-            if (snapshot.containsKey("/tombstones/" + id)) continue;
-            Path content = data.resolve(id);
-            if (!Files.isRegularFile(content) && file.getLongValue("size") == 0 && "1".equals(file.getString("hlsAvailable"))) continue;
-            if (!Files.isRegularFile(content) || Files.size(content) != file.getLongValue("size")) throw new IOException("Missing donor object: " + id);
-            String raw = snapshot.get("/files/" + id + "/meta");
-            String hash = raw == null ? null : JSON.parseObject(raw).getString("sha256");
-            if (hash != null && !hash.equals(cc.ginpika.bootfs.kernel.object.ContentHash.sha256(content))) throw new IOException("Corrupt donor object: " + id);
+        if (members().size() != 1) throw new IOException("请先退出当前集群，再加入另一个集群");
+        JSONObject self = members().getJSONObject(nodeId);
+        JSONObject request = new JSONObject(Map.of("nodeId", nodeId, "url", endpoint, "incarnation", self.getString("incarnation"),"publicKey",identity.publicKey()));
+        JSONObject joined = call(target, "join", request, tokenFor(target), 10000);
+        if (!joined.getJSONObject("members").containsKey(nodeId)) throw new IOException("Join response omitted this node");
+        manifest.put("groupId", joined.getString("groupId")); manifest.put("coordinatorId", joined.getString("coordinatorId"));
+        manifest.put("version", joined.getLongValue("version")); manifest.put("members", joined.getJSONObject("members"));
+        manifest.put("links", joined.getJSONObject("links")); manifest.put("pending", new JSONObject());
+        manifest.put("departed", new JSONObject()); manifest.put("admissions", new JSONObject()); persist();
+    }
+    public synchronized JSONObject join(JSONObject request, String caller) throws IOException {
+        String joining = request.getString("nodeId"), url = normalizeEndpoint(request.getString("url"));
+        String incarnation = request.getString("incarnation");
+        if (joining == null || !joining.matches("[A-Za-z0-9_-]+") || incarnation == null || !incarnation.matches("[A-Za-z0-9_-]+") || nodeId.equals(joining)) throw new IOException("Invalid joining identity");
+        if (!Objects.equals(caller, joining) && !members().containsKey(caller)) throw new IOException("Pairing authorization required");
+        if (nodeId.equals(manifest.getString("coordinatorId")) && members().containsKey(joining)) {
+            JSONObject saved=object("admissions").getJSONObject(joining),member=members().getJSONObject(joining);
+            if (saved!=null && url.equals(member.getString("url")) && incarnation.equals(member.getString("incarnation")) && Objects.equals(request.getString("publicKey"),member.getString("publicKey"))) return copy(saved);
+            throw new IOException("Node identity is already registered; detach the old instance first");
         }
-        for (Map.Entry<String,String> record : snapshot.entrySet()) {
-            if (!record.getKey().startsWith("/pending-publications/")) continue;
-            if (!record.getKey().startsWith("/pending-publications/" + nodeId + "/")) throw new IOException("Donor contains another node's pending upload");
-            JSONObject intent = JSON.parseObject(record.getValue()); JSONObject file = intent.getJSONObject("file");
-            String id = file.getString("uuid"), stage = intent.getString("stage");
-            if (id == null || !id.matches("[A-Za-z0-9_-]+") || stage == null || !stage.matches("\\.upload-[A-Za-z0-9_-]+\\.part")) throw new IOException("Invalid pending content identity");
-            Path bytes = Files.isRegularFile(data.resolve(id)) ? data.resolve(id) : data.resolve(stage);
-            if (!Files.isRegularFile(bytes) || Files.size(bytes) != file.getLongValue("size")
-                    || !Objects.equals(intent.getString("sha256"),cc.ginpika.bootfs.kernel.object.ContentHash.sha256(bytes))) throw new IOException("Pending donor bytes are missing or corrupt");
+        if (Objects.equals(caller, joining)) {
+            JSONObject pending = object("pending").getJSONObject(joining);
+            if (pending == null || !url.equals(pending.getString("url")) || !Objects.equals(pending.getString("publicKey"),request.getString("publicKey"))) throw new IOException("Joining endpoint/key differs from the paired identity");
+            request = copy(request); request.put("bootstrap", new JSONObject(Map.of("nodeId", nodeId, "inbound", pending.getString("inbound"), "outbound", pending.getString("outbound"))));
+        } else if (request.getJSONObject("bootstrap") == null || !caller.equals(request.getJSONObject("bootstrap").getString("nodeId"))) throw new IOException("Invalid delegated pairing");
+        String coordinator = manifest.getString("coordinatorId");
+        if (!nodeId.equals(coordinator)) {
+            String destination = members().getJSONObject(coordinator).getString("url");
+            return call(destination, "join", request, tokenFor(destination), 10000);
         }
-        manifest.put("target", target.replaceAll("/+$", "")); manifest.put("mergeId", UUID.randomUUID().toString());
-        manifest.put("phase", "FROZEN"); persist();
-    }
-    public synchronized boolean advance() throws IOException {
-        try {
-            if ("FROZEN".equals(phase())) {
-                JSONObject request = new JSONObject(); request.put("mergeId", manifest.getString("mergeId"));
-                request.put("sourceCluster", manifest.getString("groupId")); request.put("nodeId", nodeId);
-                request.put("raftAddress", manifest.getString("raftAddress")); request.put("entries", store().scan(""));
-                JSONObject imported = ClusterHttp.call(manifest.getString("target"), "merge", request, token);
-                JSONObject renames = imported.getJSONObject("renamedObjects");
-                if (renames != null) for (String old : renames.keySet()) cloneLocalIdentity(old, renames.getString(old));
-                manifest.put("previousGeneration", manifest.getString("generation")); manifest.put("generation", UUID.randomUUID().toString());
-                manifest.put("groupId", imported.getString("groupId")); manifest.put("peers", imported.getJSONObject("peers"));
-                manifest.put("phase", "ATTACHING"); persist();
-                active.close(); active = null; open(true);
-            }
-            if ("ATTACHING".equals(phase())) { finishAttach(); return true; }
-            if (available()) refreshSeeds();
-            return false;
-        } catch (IOException | RuntimeException failure) {
-            manifest.put("lastError", failure.getMessage()); persist();
-            if (failure instanceof IOException) throw (IOException)failure;
-            throw new IOException("Cluster transition will retry", failure);
+        if (members().containsKey(joining)) {
+            JSONObject saved = object("admissions").getJSONObject(joining);
+            if (saved != null && url.equals(members().getJSONObject(joining).getString("url")) && incarnation.equals(members().getJSONObject(joining).getString("incarnation"))) return copy(saved);
+            throw new IOException("Node identity is already registered; detach the old instance first");
         }
-    }
-    private void cloneLocalIdentity(String old, String replacement) throws IOException {
-        if (!old.matches("[A-Za-z0-9_-]+") || !replacement.matches("[A-Za-z0-9_-]+")) throw new IOException("Invalid renamed identity");
-        clonePath(data.resolve(old), data.resolve(replacement));
-        clonePath(data.resolve("thumb/" + old + ".webp"), data.resolve("thumb/" + replacement + ".webp"));
-        clonePath(data.resolve("hls/" + old), data.resolve("hls/" + replacement));
-    }
-    private static void clonePath(Path source, Path destination) throws IOException {
-        if (!Files.exists(source, LinkOption.NOFOLLOW_LINKS)) return;
-        if (Files.isSymbolicLink(source)) throw new IOException("Cannot merge symlinked object data");
-        if (Files.isDirectory(source)) {
-            Files.createDirectories(destination);
-            try (var paths = Files.list(source)) { for (Path child : paths.toList()) clonePath(child, destination.resolve(child.getFileName())); }
-            DurableFiles.syncDirectory(destination);
-        } else if (!Files.exists(destination)) {
-            Files.copy(source, destination); DurableFiles.syncFile(destination); DurableFiles.syncDirectory(destination.getParent());
-        } else if (Files.mismatch(source, destination) != -1) throw new IOException("Conflicting immutable bytes at " + destination);
-    }
-    private void prepareReturning() throws IOException {
-        manifest.put("previousGeneration", manifest.getString("generation")); manifest.put("generation", UUID.randomUUID().toString());
-        manifest.put("phase", "ATTACHING"); persist();
-    }
-    private void finishAttach() throws IOException {
-        JSONObject request = new JSONObject(); request.put("nodeId", nodeId); request.put("groupId",manifest.getString("groupId")); request.put("raftAddress", manifest.getString("raftAddress"));
-        request.put("groupId", manifest.getString("groupId"));
-        JSONObject remote = ClusterHttp.call(manifest.getString("target"), "status", null, token);
-        if (!manifest.getString("groupId").equals(remote.getString("groupId"))) throw new IOException("Target now belongs to a different cluster; refusing to fork or attach");
-        ClusterHttp.call(manifest.getString("target"), "admit", request, token);
-        store().scan(""); // Wait for the local snapshot/log before exposing inventory and search.
-        attached.run(); // Refresh local paths and inventory before admitting any application request.
-        manifest.put("phase", "ACTIVE"); manifest.put("everClustered", true); manifest.remove("lastError"); refreshSeeds(); persist();
-    }
-    public synchronized JSONObject merge(JSONObject request) throws IOException {
-        writable();
-        String mergeId = request.getString("mergeId");
-        if (mergeId == null || !mergeId.matches("[A-Za-z0-9_-]+")) throw new IOException("Invalid merge identity");
-        String marker = "/cluster/imports/" + mergeId;
-        String existing = store().get(marker);
-        if (existing != null) return JSON.parseObject(existing);
-        String donor = request.getString("nodeId");
-        if (donor == null || !donor.matches("[A-Za-z0-9_-]+") || store().currentPeers().containsKey(donor)) throw new IOException("Node identity is already in this cluster");
-        Map<String,String> source = strings(request.getJSONObject("entries"));
-        for (int attempt = 0; attempt < 8; attempt++) {
-            Map<String,String> target = store().scan("");
-            if (target.containsKey(marker)) return JSON.parseObject(target.get(marker));
-            ClusterMerge.Plan plan = ClusterMerge.plan(target, source, request.getString("sourceCluster"), mergeId);
-            JSONObject response = new JSONObject(); response.put("groupId", manifest.getString("groupId"));
-            response.put("peers", store().currentPeers()); response.put("renamedObjects", plan.renamedObjects());
-            Map<String,String> puts = new TreeMap<>(plan.puts()), expected = new TreeMap<>(plan.expected());
-            long era = Math.max(number(target.get("/cluster/revision-era")), number(source.get("/cluster/revision-era"))) + 1;
-            puts.put("/cluster/revision-era", Long.toString(era)); expected.put("/cluster/revision-era", target.get("/cluster/revision-era"));
-            puts.put(marker, response.toJSONString()); expected.put(marker, null);
-            if (store().compareAndWrite(expected, puts, Set.of())) return response;
+        JSONObject oldMembers = copy(members()); JSONObject next = copy(oldMembers); next.put(joining, descriptor(url, incarnation,request.getString("publicKey")));
+        long version = manifest.getLongValue("version")+1;
+        JSONObject joiningLinks = new JSONObject(); JSONObject bootstrap = request.getJSONObject("bootstrap");
+        for (String peer : oldMembers.keySet()) {
+            String incoming = secret(), outgoing = secret();
+            if (peer.equals(bootstrap.getString("nodeId"))) { incoming=bootstrap.getString("inbound"); outgoing=bootstrap.getString("outbound"); }
+            joiningLinks.put(peer, link(outgoing, incoming));
+            JSONObject event = membershipEvent(next, version, coordinator, "ADD", joining); event.put("link", link(incoming, outgoing));
+            if (peer.equals(nodeId)) links().put(joining, link(incoming, outgoing));
+            else queue(oldMembers.getJSONObject(peer).getString("url"), tokenFor(oldMembers.getJSONObject(peer).getString("url")), "membership", event);
         }
-        throw new IOException("Destination is changing too quickly; retry this same merge");
+        manifest.put("members", next); manifest.put("version", version); object("pending").remove(joining);
+        JSONObject response = new JSONObject(Map.of("groupId", manifest.getString("groupId"), "coordinatorId", coordinator,
+                "version", version, "members", next, "links", joiningLinks));
+        object("admissions").put(joining, copy(response)); persist(); return response;
     }
-    private static long number(String value) { return value == null ? 0 : Long.parseLong(value); }
-    private static Map<String,String> strings(JSONObject values) throws IOException {
-        Map<String,String> entries = new TreeMap<>();
-        for (String key : values.keySet()) {
-            if (key.indexOf(0) >= 0 || !(values.get(key) instanceof String)) throw new IOException("Invalid imported metadata");
-            entries.put(key, values.getString(key));
+    private JSONObject membershipEvent(JSONObject members, long version, String coordinator, String operation, String subject) {
+        return new JSONObject(Map.of("groupId", manifest.getString("groupId"), "members", members, "version", version,
+                "coordinatorId", coordinator, "operation", operation, "subject", subject));
+    }
+    private void queue(String url, String token, String path, JSONObject body) {
+        manifest.getJSONArray("outbox").add(new JSONObject(Map.of("id", UUID.randomUUID().toString(), "url", url, "token", token, "path", path, "body", copy(body))));
+    }
+    public synchronized void membership(JSONObject event, String caller) throws IOException {
+        if (!Objects.equals(manifest.getString("groupId"), event.getString("groupId")) || !Objects.equals(manifest.getString("coordinatorId"), caller)) throw new IOException("Membership update is not from this group's coordinator");
+        if (event.getLongValue("version") <= manifest.getLongValue("version")) return;
+        JSONObject next = copy(event.getJSONObject("members"));
+        for (String peer : object("departed").keySet()) {
+            if (next.containsKey(peer) && Objects.equals(next.getJSONObject(peer).getString("incarnation"), object("departed").getString(peer))) next.remove(peer);
         }
-        return entries;
-    }
-    public synchronized void admit(String id, String address) throws IOException {
-        writable();
-        if (id == null || !id.matches("[A-Za-z0-9_-]+") || address == null || address.isBlank()) throw new IOException("Invalid joining node");
-        Map<String,String> peers = store().currentPeers();
-        if (peers.containsKey(id)) { if (!peers.get(id).equals(address)) throw new IOException("Node endpoint changed"); return; }
-        Map<String,String> next = new TreeMap<>(peers); next.put(id, address);
-        store().changePeers(peers, next); manifest.put("everClustered", true); refreshSeeds(); persist();
+        if (!next.containsKey(nodeId)) { resetMembership(); persist(); return; }
+        if (!identity.publicKey().equals(next.getJSONObject(nodeId).getString("publicKey"))) throw new IOException("Membership cannot replace this node's signing identity");
+        String subject = event.getString("subject");
+        if ("ADD".equals(event.getString("operation")) && next.containsKey(subject)) links().put(subject, event.getJSONObject("link"));
+        for (String peer:new ArrayList<>(links().keySet())) if (!next.containsKey(peer)) { retire(peer); links().remove(peer); }
+        manifest.put("members", next); manifest.put("version", event.getLongValue("version")); manifest.put("coordinatorId", event.getString("coordinatorId"));
+        object("pending").remove(subject); persist();
     }
     public synchronized void remove(String id) throws IOException {
-        writable(); Map<String,String> peers = store().currentPeers();
-        if (!peers.containsKey(id)) return;
-        if (peers.size() == 1) throw new IOException("The last member may stop, but cannot be removed");
-        if (nodeId.equals(id)) throw new IOException("Ask another member to remove this node");
-        Map<String,String> next = new TreeMap<>(peers); next.remove(id); store().changePeers(peers, next); refreshSeeds();
+        if (nodeId.equals(id)) { leave(); return; }
+        if (!members().containsKey(id)) return;
+        String coordinator = manifest.getString("coordinatorId");
+        if (!nodeId.equals(coordinator)) {
+            String target = members().getJSONObject(coordinator).getString("url");
+            call(target, "remove", new JSONObject(Map.of("nodeId", id)), tokenFor(target), 5000); return;
+        }
+        publishRemoval(id);
+    }
+    private void publishRemoval(String id) throws IOException {
+        JSONObject old = copy(members()), next = copy(members()); next.remove(id);
+        if (next.isEmpty()) { resetMembership(); persist(); return; }
+        String coordinator = nodeId.equals(id) ? new TreeSet<>(next.keySet()).first() : manifest.getString("coordinatorId");
+        long version = manifest.getLongValue("version")+1;
+        JSONObject event = membershipEvent(next, version, coordinator, "REMOVE", id);
+        for (String peer : old.keySet()) if (!peer.equals(nodeId)) {
+            String url = old.getJSONObject(peer).getString("url"); queue(url, tokenFor(url), "membership", event);
+        }
+        object("departed").put(id, old.getJSONObject(id).getString("incarnation"));
+        if (nodeId.equals(id)) resetMembership();
+        else { retire(id); manifest.put("members", next); manifest.put("version", version); manifest.put("coordinatorId", coordinator); links().remove(id); object("admissions").remove(id); object("pending").remove(id); }
+        persist();
     }
     public synchronized void leave() throws IOException {
-        writable(); Map<String,String> peers = store().currentPeers();
-        if (peers.size() > 1) {
-            String remote = null;
-            for (String peer : peers.keySet()) if (!peer.equals(nodeId)) {
-                remote = store().get("/cluster/node/" + peer); if (remote != null) break;
-            }
-            if (remote == null) throw new IOException("No remaining HTTP peer is known");
-            // Persist intent first: an uncertain removal must never restart an independent authority.
-            manifest.put("target", remote); manifest.put("phase", "LEAVING"); persist();
-            JSONObject request = new JSONObject(); request.put("nodeId", nodeId); request.put("groupId",manifest.getString("groupId"));
-            ClusterHttp.call(remote, "remove", request, token);
+        if (members().size() == 1) { resetMembership(); persist(); return; }
+        if (nodeId.equals(manifest.getString("coordinatorId"))) { publishRemoval(nodeId); return; }
+        JSONObject departure = new JSONObject(Map.of("groupId", manifest.getString("groupId"), "nodeId", nodeId,
+                "incarnation", members().getJSONObject(nodeId).getString("incarnation")));
+        for (String peer : members().keySet()) if (!peer.equals(nodeId)) {
+            String url = members().getJSONObject(peer).getString("url"); queue(url, tokenFor(url), "departure", departure);
         }
-        manifest.put("phase", "OFFLINE"); persist(); active.close(); active = null;
+        resetMembership(); persist();
     }
-    private void refreshSeeds() throws IOException {
-        Map<String,String> peers = store().currentPeers();
-        JSONObject http = new JSONObject();
-        store().scan("/cluster/node/").forEach((key,value) -> {
-            String id = key.substring("/cluster/node/".length()); if (peers.containsKey(id)) http.put(id,value);
-        });
-        if (!peers.isEmpty() && (!new JSONObject(peers).equals(manifest.getJSONObject("peers")) || !http.equals(manifest.getJSONObject("httpPeers")))) {
-            manifest.put("peers", peers); manifest.put("httpPeers", http); persist();
+    public synchronized void departure(JSONObject event, String caller) throws IOException {
+        String id = event.getString("nodeId");
+        if (!Objects.equals(caller, id) || !manifest.getString("groupId").equals(event.getString("groupId"))) throw new IOException("Invalid departure identity");
+        JSONObject member = members().getJSONObject(id);
+        if (member == null || !Objects.equals(member.getString("incarnation"), event.getString("incarnation"))) return;
+        if (nodeId.equals(manifest.getString("coordinatorId"))) { publishRemoval(id); return; }
+        retire(id); object("departed").put(id, member.getString("incarnation")); members().remove(id); links().remove(id); object("pending").remove(id); object("admissions").remove(id);
+        persist();
+    }
+    /** Best-effort durable control-plane delivery. No resource read/write waits for it. */
+    public boolean advance() throws IOException {
+        JSONArray jobs;
+        synchronized (this) { jobs = JSON.parseArray(manifest.getJSONArray("outbox").toJSONString()); }
+        Set<String> blocked = new HashSet<>();
+        for (Object raw : jobs) {
+            JSONObject job=(JSONObject)raw; String url=job.getString("url"); if (blocked.contains(url)) continue;
+            try {
+                call(url, job.getString("path"), job.getJSONObject("body"), job.getString("token"), 1000);
+                synchronized (this) { manifest.getJSONArray("outbox").removeIf(item -> job.getString("id").equals(((JSONObject)item).getString("id"))); manifest.remove("lastError"); persist(); }
+            } catch (ClusterHttp.HttpFailure failure) {
+                if (failure.status == 410) {
+                    synchronized (this) { manifest.getJSONArray("outbox").removeIf(item -> job.getString("id").equals(((JSONObject)item).getString("id"))); persist(); }
+                } else { blocked.add(url); synchronized(this) { manifest.put("lastError", "成员通知待重试："+url); persist(); } }
+            } catch (IOException failure) { blocked.add(url); synchronized(this) { manifest.put("lastError", "成员通知待重试："+url); persist(); } }
+        }
+        return true;
+    }
+    public void resumeLeave() {} // Local detachment is committed before notifications are sent.
+    @Override public String get(String key) { return local.get(key); }
+    @Override public NavigableMap<String,String> scan(String prefix) { return local.scan(prefix); }
+    @Override public long revision() { return local.revision(); }
+    @Override public void put(String key,String value) { writeBatch(Map.of(key,value),Set.of()); }
+    @Override public boolean delete(String key) { synchronized(local) { boolean existed=local.get(key)!=null; writeBatch(Map.of(),Set.of(key)); return existed; } }
+    @Override public void deletePrefix(String prefix) { synchronized(local) { writeBatch(Map.of(),local.scan(prefix).keySet()); } }
+    private void affected(Set<String> ids,String key,String value) {
+        String id=null;
+        if (key.startsWith("/documents/full-text/")) id=key.substring("/documents/full-text/".length());
+        else if (key.startsWith("/nodes/"+nodeId+"/catalog/")) id=key.substring(("/nodes/"+nodeId+"/catalog/").length());
+        else if (key.startsWith("/tombstones/")) id=key.substring("/tombstones/".length());
+        else if (key.startsWith("/files/") && key.endsWith("/meta") && key.split("/").length==4) id=key.split("/")[2];
+        else if (key.startsWith("/s3/") && value!=null) {
+            try { id=JSON.parseObject(value).getString("uuid"); } catch(RuntimeException invalid) { /* Preserve generic KV compatibility. */ }
+        }
+        if (id!=null && id.matches("[A-Za-z0-9_-]+")) ids.add(id);
+    }
+    private Map<String,String> versioned(Map<String,String> puts,Set<String> deletes) {
+        Map<String,String> result=new TreeMap<>(puts); Set<String> ids=new TreeSet<>(),keys=new TreeSet<>(deletes); keys.addAll(puts.keySet());
+        for (String key:keys) {
+            String old=local.get(key),next=puts.get(key); if (Objects.equals(old,next)) continue;
+            affected(ids,key,old); affected(ids,key,next);
+        }
+        long revision=local.revision()+1;
+        for (String id:ids) {
+            String key="/resource-revisions/"+id;
+            long imported=puts.containsKey(key) ? Long.parseLong(puts.get(key)) : 0;
+            result.put(key,Long.toString(Math.max(imported,revision)));
+        }
+        return result;
+    }
+    @Override public void writeBatch(Map<String,String> puts,Set<String> deletes) { synchronized(local) { local.writeBatch(versioned(puts,deletes),deletes); } }
+    @Override public boolean compareAndSet(String key,String expected,String value) {
+        return compareAndWrite(Collections.singletonMap(key,expected),value==null?Map.of():Map.of(key,value),value==null?Set.of(key):Set.of());
+    }
+    @Override public boolean compareAndWrite(Map<String,String> expected,Map<String,String> puts,Set<String> deletes) {
+        synchronized(local) {
+            for (var entry:expected.entrySet()) if (!Objects.equals(local.get(entry.getKey()),entry.getValue())) return false;
+            local.writeBatch(versioned(puts,deletes),deletes); return true;
         }
     }
-    public synchronized void resumeLeave() throws IOException {
-        if (!"LEAVING".equals(phase())) return;
-        JSONObject request = new JSONObject(); request.put("nodeId", nodeId); request.put("groupId",manifest.getString("groupId"));
-        ClusterHttp.call(manifest.getString("target"), "remove", request, token);
-        manifest.put("phase", "OFFLINE"); persist(); if (active != null) { active.close(); active = null; }
-    }
-    @Override public synchronized String get(String key) { return store().get(key); }
-    @Override public synchronized NavigableMap<String,String> scan(String prefix) { return store().scan(prefix); }
-    @Override public synchronized long revision() { return Math.addExact(Math.multiplyExact(number(store().get("/cluster/revision-era")), 1000000000000L), store().revision()); }
-    @Override public synchronized void put(String key,String value) { writable(); store().put(key,value); }
-    @Override public synchronized boolean delete(String key) { writable(); return store().delete(key); }
-    @Override public synchronized void deletePrefix(String prefix) { writable(); store().deletePrefix(prefix); }
-    @Override public synchronized void writeBatch(Map<String,String> puts, Set<String> deletes) { writable(); store().writeBatch(puts,deletes); }
-    @Override public synchronized boolean compareAndSet(String key,String expected,String value) { writable(); return store().compareAndSet(key,expected,value); }
-    @Override public synchronized boolean compareAndWrite(Map<String,String> expected,Map<String,String> puts,Set<String> deletes) { writable(); return store().compareAndWrite(expected,puts,deletes); }
-    @Override public synchronized void close() { if (active != null) { active.close(); active = null; } }
+    @Override public void close() { local.close(); }
 }

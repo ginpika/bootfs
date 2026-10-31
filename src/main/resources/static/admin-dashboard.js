@@ -853,7 +853,7 @@ function createWaterfallCard(file) {
     const isAlbumFile = isAlbum(file);
     
     return `
-        <div class="waterfall-card theme-card theme-rounded-xl overflow-hidden hover:shadow-lg transition-all cursor-pointer group" data-uuid="${file.uuid}" data-type="${isAlbumFile ? 'album' : (isImageFile ? 'image' : 'video')}">
+        <div class="waterfall-card theme-card theme-rounded-xl overflow-hidden cursor-pointer group" data-uuid="${file.uuid}" data-type="${isAlbumFile ? 'album' : (isImageFile ? 'image' : 'video')}">
             <div class="relative w-full">
                 ${isAlbumFile ? `
                     <div class="relative w-full aspect-[3/4] album-cover" style="background-color: var(--color-bg-tertiary);" data-album-uuid="${file.uuid}">
@@ -910,7 +910,7 @@ function createWaterfallCard(file) {
                 ` : ''}
                 
                 <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button class="waterfall-delete-btn p-2 text-white rounded-full transition-colors shadow-lg" style="background-color: var(--color-danger);">
+                    <button class="waterfall-delete-btn theme-icon-btn theme-btn-danger">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                         </svg>
@@ -992,7 +992,7 @@ function createGridCard(file) {
                 <div class="thumbnail-overlay absolute inset-0 opacity-0 hover:opacity-100 transition-opacity flex items-end p-3">
                     <div class="flex space-x-2 w-full">
                         ${isImageFile ? `
-                            <button class="preview-btn flex-1 px-2 py-1.5 theme-rounded-lg text-xs font-medium transition-colors flex items-center justify-center" style="background-color: var(--color-bg-secondary); color: var(--color-text-primary);">
+                            <button class="preview-btn theme-btn-secondary theme-btn-sm flex-1">
                                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
@@ -1000,13 +1000,13 @@ function createGridCard(file) {
                                 预览
                             </button>
                         ` : ''}
-                        <button class="download-btn flex-1 px-2 py-1.5 theme-rounded-lg text-xs font-medium transition-colors flex items-center justify-center" style="background-color: var(--color-bg-secondary); color: var(--color-text-primary);">
+                        <button class="download-btn theme-btn-secondary theme-btn-sm flex-1">
                             <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
                             </svg>
                             下载
                         </button>
-                        <button class="delete-btn p-1.5 theme-rounded-lg transition-colors" style="background-color: var(--color-danger); color: white;">
+                        <button class="delete-btn theme-icon-btn theme-btn-danger theme-btn-sm">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                             </svg>
@@ -1035,12 +1035,12 @@ function createGridCard(file) {
                 ${!file.copyOf ? `
                     <div class="mt-2 flex space-x-1">
                         ${!file.hlsAvailable && isVideoFile ? `
-                            <button class="hls-convert-btn flex-1 px-2 py-1 text-xs theme-rounded transition-colors" style="color: var(--color-success); background-color: rgba(16, 185, 129, 0.1);">
+                            <button class="hls-convert-btn theme-btn-quiet flex-1" style="color: var(--color-success); background-color: rgba(16, 185, 129, 0.1);">
                                 HLS 转码
                             </button>
                         ` : ''}
                         ${!file.isPublicAccess && isImageFile ? `
-                            <button class="public-access-btn flex-1 px-2 py-1 text-xs theme-rounded transition-colors" style="color: #a855f7; background-color: rgba(168, 85, 247, 0.1);">
+                            <button class="public-access-btn theme-btn-quiet flex-1" style="color: #a855f7; background-color: rgba(168, 85, 247, 0.1);">
                                 发布
                             </button>
                         ` : ''}
@@ -1142,11 +1142,11 @@ function createListRow(file) {
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                 <div class="flex space-x-2">
-                    <button class="list-preview-btn" style="color: var(--color-accent-primary); ${(isImageFile || isVideoFile || isAudioFile) ? '' : 'visibility: hidden;'}">${isImageFile ? '预览' : '播放'}</button>
-                    <button class="list-detail-btn" style="color: var(--color-accent-secondary);">详情</button>
-                    <button class="list-rename-btn" style="color: var(--color-text-secondary);">重命名</button>
-                    <a href="/f/${file.uuid}" download style="color: var(--color-success);">下载</a>
-                    <button class="list-delete-btn" style="color: var(--color-danger);">删除</button>
+                    <button class="list-preview-btn theme-text-btn" style="color: var(--color-accent-primary); ${(isImageFile || isVideoFile || isAudioFile) ? '' : 'visibility: hidden;'}">${isImageFile ? '预览' : '播放'}</button>
+                    <button class="list-detail-btn theme-text-btn" style="color: var(--color-text-secondary);">详情</button>
+                    <button class="list-rename-btn theme-text-btn" style="color: var(--color-text-secondary);">重命名</button>
+                    <a href="/f/${file.uuid}" download class="theme-text-btn" style="color: var(--color-accent-primary);">下载</a>
+                    <button class="list-delete-btn theme-text-btn" style="color: var(--color-danger);">删除</button>
                 </div>
             </td>
         </tr>
@@ -1642,6 +1642,14 @@ function updatePagination(data) {
 
 // Update statistics
 function updateStats(data) {
+    let notice = document.getElementById('federationNotice');
+    if (!notice) {
+        notice = document.createElement('p'); notice.id = 'federationNotice'; notice.setAttribute('role', 'status');
+        notice.className = 'hidden px-4 py-2 text-sm'; notice.style.color = 'var(--color-warning)';
+        document.getElementById('mainContent')?.insertBefore(notice, document.getElementById('mainContent')?.querySelector('main'));
+    }
+    notice.textContent = data?.partial ? '部分节点不可达，当前仅显示可达节点的结果；本机资源可正常使用。' : '';
+    notice.classList.toggle('hidden', !data?.partial);
     if (data && data.rows) {
         const total = data.total || data.rows.length;
         
@@ -2408,7 +2416,7 @@ function showToast(message, type = 'info') {
     
     toastMessage.textContent = message;
     toastIcon.innerHTML = icons[type];
-    toast.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 z-50 ${colors[type]}`;
+    toast.className = `fixed bottom-4 right-4 px-4 py-2.5 theme-rounded-xl shadow-lg z-50 ${colors[type]}`;
     toast.classList.remove('hidden');
     
     setTimeout(() => {

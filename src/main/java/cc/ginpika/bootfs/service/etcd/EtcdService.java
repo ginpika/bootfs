@@ -33,14 +33,15 @@ public class EtcdService {
     public void deleteWithPrefix(String prefix) { store.deletePrefix(prefix); }
     public boolean delete(String key) { return store.delete(key); }
     public boolean compareAndSet(String key, String expected, String replacement) { return store.compareAndSet(key,expected,replacement); }
+    public boolean compareAndWrite(Map<String,String> expected,Map<String,String> puts,Set<String> deletes) { return store.compareAndWrite(expected,puts,deletes); }
     public void ping() { store.revision(); }
     public List<String> getAllNodes() { return new ArrayList<>(getNodesWithKeys().values()); }
     public Map<String,String> getNodesWithKeys() {
+        if (store instanceof cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore dynamic) {
+            Map<String,String> nodes=new TreeMap<>(dynamic.peerEndpoints()); nodes.put(dynamic.nodeId(),dynamic.endpoint()); return nodes;
+        }
         Map<String,String> result = new LinkedHashMap<>();
         scan("/cluster/node/").forEach((k,v) -> result.put(k.substring("/cluster/node/".length()),v));
-        if (store instanceof cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore) {
-            result.keySet().retainAll(((cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore)store).status().getJSONObject("peers").keySet());
-        }
         return result;
     }
     public void putFile(String id, String url, String meta) {

@@ -25,6 +25,7 @@ import java.util.*;
 public class ReverseProxyService {
     @Resource
     EtcdService etcdService;
+    @Resource FederationService federation;
 
     private static final Set<String> approvedImgExt = new HashSet<>(){{
         this.add(".jpeg");this.add(".png");this.add(".jpg");this.add(".gif");
@@ -65,7 +66,12 @@ public class ReverseProxyService {
     public void reverseProxyFile(String uuid, HttpServletResponse response, HttpServletRequest request) {
         String url = getTrueNodeUrl(uuid);
         String meta = getMetaJson(uuid);
+        if (meta==null || url==null) {
+            JSONObject remote=federation.locate(uuid);
+            if (remote!=null) { meta=remote.getString("metadata"); url=remote.getString("url")+"/f/"+uuid; }
+        }
         if (meta == null) {
+            response.setStatus(404);
             log.info("uuid metaInfo 不存在", uuid);
             return;
         }
@@ -90,7 +96,7 @@ public class ReverseProxyService {
 
     public void proxyImage(HttpServletResponse response, HttpServletRequest request, JSONObject metaJson, String url) {
         String acceptType = "image/" + metaJson.getString("ext").substring(1);
-        try (CloseableHttpClient client = HttpClientBuilder.create().build()) {
+        try (CloseableHttpClient client = HttpClientBuilder.create().disableRedirectHandling().setDefaultRequestConfig(org.apache.http.client.config.RequestConfig.custom().setConnectTimeout(2000).setSocketTimeout(5000).build()).build()) {
             HttpGet rq = new HttpGet(url);
             applyProxyHeaders(rq, request, acceptType, false);
 
@@ -114,7 +120,7 @@ public class ReverseProxyService {
     public void proxyMedia(HttpServletResponse response, HttpServletRequest request, JSONObject metaJson, String url) {
         String acceptType = (approvedAudioExt.contains(metaJson.getString("ext")) ? "audio/" : "video/")
                 + metaJson.getString("ext").substring(1);
-        try (CloseableHttpClient client = HttpClientBuilder.create().build()) {
+        try (CloseableHttpClient client = HttpClientBuilder.create().disableRedirectHandling().setDefaultRequestConfig(org.apache.http.client.config.RequestConfig.custom().setConnectTimeout(2000).setSocketTimeout(5000).build()).build()) {
             HttpGet rq = new HttpGet(url);
             applyProxyHeaders(rq, request, acceptType, true);
 

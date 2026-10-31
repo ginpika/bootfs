@@ -299,11 +299,15 @@ public class DashboardApiController {
         try {
             String apiUrl = nodeUrl.endsWith("/") ? nodeUrl + "api/dashboard/node-stats"
                     : nodeUrl + "/api/dashboard/node-stats";
-            HttpRequest request = HttpRequest.newBuilder()
+            String token=federation.tokenFor(nodeUrl);
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(URI.create(apiUrl))
+                    .header("X-BootFS-Cluster-Token", token)
                     .timeout(Duration.ofSeconds(4))
-                    .GET()
-                    .build();
+                    .GET();
+            cc.ginpika.bootfs.kernel.cluster.ClusterHttp.signedHeaders(federation.identity(),"GET",URI.create(apiUrl),token,
+                    cc.ginpika.bootfs.kernel.cluster.ClusterHttp.digest(new byte[0])).forEach(builder::header);
+            HttpRequest request=builder.build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 JSONObject json = JSON.parseObject(response.body());
@@ -316,6 +320,7 @@ public class DashboardApiController {
         }
         return null;
     }
+    @org.springframework.beans.factory.annotation.Autowired private cc.ginpika.bootfs.service.FederationService federation;
 
     // ---- 文件类型聚合 ----
 

@@ -31,9 +31,13 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 // ManegeController provide basic function for TFS
 @Slf4j
@@ -41,6 +45,7 @@ import java.util.Map;
 @CrossOrigin
 @SuppressWarnings("all")
 public class ManageController {
+    private static final Pattern ALBUM_RESOURCE_PATH = Pattern.compile(".*/(thumb|p|f)/([A-Za-z0-9_-]+)");
     @Autowired
     private FileService fileService;
     @Autowired
@@ -183,13 +188,13 @@ public class ManageController {
 
     // serve webp thumbnail - 不存在时返回原图/占位图并后台生成
     @GetMapping("/thumb/{uuid}")
-    public ResponseEntity<?> thumbnail(@PathVariable String uuid) {
+    public ResponseEntity<?> thumbnail(@PathVariable String uuid, HttpServletRequest request) {
         if (visibility.deleted(uuid)) return ResponseEntity.notFound().build();
         FileObject fileObject = context.query(uuid);
         if (fileObject == null) {
-            String remote=clusterProxyService.getRemoteNodeUrl(uuid);
-            if (remote!=null) return ResponseEntity.status(302).header(HttpHeaders.LOCATION,remote+"/thumb/"+uuid).build();
-            return ResponseEntity.notFound().build();
+            // Keep album previews on the browser's origin, including HTTPS frontends
+            // whose peers are only reachable over internal HTTP endpoints.
+            return proxyMissingResource(uuid, request);
         }
         Path thumbFile = thumbnailService.thumbPath(uuid);
         if (Files.exists(thumbFile)) {
@@ -667,9 +672,33 @@ public class ManageController {
         if (context.query(uuid)==null) return proxyMissingResource(uuid,request);
         Map<String, Object> result = meiliSearchService.getDocument("full-text", uuid);
         if (Boolean.TRUE.equals(result.get("succeed"))) {
-            return ResponseEntity.ok(result.get("data"));
+            Map<String, Object> album = new HashMap<>((Map<String, Object>) result.get("data"));
+            Object resources = album.get("resources");
+            if (resources instanceof List<?>) {
+                album.put("resources", ((List<?>) resources).stream()
+                        .map(this::albumResourceUrl).collect(Collectors.toList()));
+            }
+            for (String field : List.of("poster", "thumbUrl")) {
+                if (album.containsKey(field)) album.put(field, albumResourceUrl(album.get(field)));
+            }
+            return ResponseEntity.ok(album);
         }
         return ResponseEntity.status(404).body(Map.of("error", "album not found"));
+    }
+
+    private Object albumResourceUrl(Object value) {
+        if (!(value instanceof String url)) return value;
+        try {
+            URI uri = URI.create(url);
+            if (uri.getScheme() != null && !"http".equalsIgnoreCase(uri.getScheme())
+                    && !"https".equalsIgnoreCase(uri.getScheme())) return value;
+            var match = ALBUM_RESOURCE_PATH.matcher(uri.getRawPath() == null ? "" : uri.getRawPath());
+            if (match.matches()) {
+                return "/" + match.group(1) + "/" + match.group(2)
+                        + (uri.getRawQuery() == null ? "" : "?" + uri.getRawQuery());
+            }
+        } catch (IllegalArgumentException ignored) { }
+        return value;
     }
 
     @GetMapping("/file/{uuid}")

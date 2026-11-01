@@ -147,8 +147,13 @@ class ReplicatedPublicationTest {
         JSONObject receipt = receiver.prepare(content, "test", "original", hash);
         assertEquals(receipt, receiver.prepare(content, "test", "original", hash));
         assertTrue(store.scan("/files/").isEmpty()); assertTrue(contexts.get("b").STORAGE.isEmpty());
-        Files.write(root.resolve("b/data/" + receipt.getString("replicaId")), new byte[]{0,0});
+        JSONObject prepared = JSONObject.parseObject(store.scan("/prepared-replicas/").values().iterator().next());
+        // The replica UUID identifies the resource; its bytes use a separate content object ID.
+        Path contentPath = root.resolve("b/data/" + prepared.getJSONObject("file").getString("contentObjectId"));
+        assertArrayEquals(content.getBytes(), Files.readAllBytes(contentPath));
+        Files.write(contentPath, new byte[]{0,0}, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
         assertThrows(IOException.class, () -> receiver.prepare(content, "test", "original", hash));
+        assertTrue(store.scan("/files/").isEmpty()); assertTrue(contexts.get("b").STORAGE.isEmpty());
     }
 
     @Test void callerRetryUsesTheSameUploadAndRejectsReusingTheTokenForDifferentBytes() throws Exception {

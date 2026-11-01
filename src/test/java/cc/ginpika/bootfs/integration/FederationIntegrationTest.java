@@ -53,6 +53,52 @@ class FederationIntegrationTest {
     void flush() throws Exception { for(int i=0;i<3;i++) for(Node n:nodes) if(n.app!=null) n.store().advance(); }
     @AfterEach void close() { for(Node n:nodes) n.close(); }
 
+    @Test @Timeout(90) void remoteAlbumKeepsItsPagesAndThumbnailsAccessibleThroughTheFrontend() throws Exception {
+        Node owner = new Node("album-owner", false), frontend = new Node("album-frontend", false);
+        join(frontend, owner);
+        byte[] png = Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=");
+        var archive = new java.io.ByteArrayOutputStream();
+        try (var zip = new java.util.zip.ZipOutputStream(archive)) {
+            for (String name : List.of("02.png", "01.png")) {
+                zip.putNextEntry(new java.util.zip.ZipEntry(name));
+                zip.write(png); zip.closeEntry();
+            }
+        }
+        String uploaded = owner.bean(FileService.class).uploadComic(new org.springframework.mock.web.MockMultipartFile(
+                "file", "album.zip", "application/zip", archive.toByteArray()));
+        String id = uploaded.substring(uploaded.lastIndexOf('/') + 1);
+        JSONObject canonical = owner.bean(MeiliSearchService.class).findDocument("full-text", id);
+        JSONArray storedPages = canonical.getJSONArray("resources");
+        assertEquals(2, storedPages.size());
+        owner.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(true);
+
+        JSONObject grid = JSON.parseObject(request(frontend, "GET", "/queryPageOffset?pageSize=20", null, null).body());
+        assertEquals(1, grid.getIntValue("total"));
+        assertEquals(id, grid.getJSONArray("rows").getJSONObject(0).getString("uuid"));
+        assertEquals("1", grid.getJSONArray("rows").getJSONObject(0).getString("albumAvailable"));
+        assertEquals(200, request(frontend, "GET", "/album/" + id, null, null).statusCode());
+        var response = request(frontend, "GET", "/api/album/" + id, null, null);
+        assertEquals(200, response.statusCode(), response.body());
+        JSONObject album = JSON.parseObject(response.body());
+        assertEquals(2, album.getJSONArray("resources").size());
+        for (int i = 0; i < storedPages.size(); i++) {
+            String path = URI.create(storedPages.getString(i)).getPath();
+            assertEquals(path, album.getJSONArray("resources").getString(i));
+            var thumbnail = http.send(HttpRequest.newBuilder(URI.create(frontend.url + path)).GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+            assertEquals(200, thumbnail.statusCode());
+            assertTrue(thumbnail.body().length > 0);
+            String pageId = path.substring(path.lastIndexOf('/') + 1);
+            var original = http.send(HttpRequest.newBuilder(URI.create(frontend.url + "/p/" + pageId)).GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+            assertEquals(200, original.statusCode());
+            assertArrayEquals(png, original.body());
+        }
+        assertEquals(album.getJSONArray("resources").getString(0), album.getString("poster"));
+        assertEquals(album.getString("poster"), album.getString("thumbUrl"));
+        assertEquals(canonical, owner.bean(MeiliSearchService.class).findDocument("full-text", id));
+        assertNull(frontend.bean(Context.class).query(id));
+        assertNull(frontend.store().get("/documents/full-text/" + id));
+    }
+
     @Test @Timeout(90) void gbkTextEditingAndClashSubscriptionWorkThroughTheOwningNode() throws Exception {
         Node owner = new Node("gbk-owner", false), frontend = new Node("gbk-frontend", false);
         join(frontend, owner);

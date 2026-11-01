@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
@@ -75,6 +76,32 @@ class ClashSubscriptionIntegrationTest {
         mvc.perform(get("/p/" + wrongExtension).param("p", "vless")).andExpect(status().isUnsupportedMediaType());
     }
 
+    @Test void gbkYamlProducesTheSameUtf8SubscriptionWithoutChangingSourceBytes() throws Exception {
+        byte[] gbk = CONFIG.getBytes(Charset.forName("GBK"));
+        String id = publish("中文节点.yaml", gbk, true);
+        var response = mvc.perform(get("/p/" + id).param("p", "vless"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("text/plain;charset=UTF-8"))
+                .andExpect(header().string("X-BootFS-Converted-Nodes", "4"))
+                .andReturn().getResponse();
+        String subscription = new String(Base64.getDecoder().decode(response.getContentAsString()), StandardCharsets.UTF_8);
+        assertTrue(subscription.contains("VLESS%20%E6%97%A5%E6%9C%AC"));
+        assertEquals(4, subscription.lines().count());
+        assertArrayEquals(gbk, Files.readAllBytes(Path.of(context.query(id).getPath())));
+    }
+
+    @Test void gbkSourceByteLimitIsNotRecountedAsUtf8AfterDecoding() throws Exception {
+        // The large comment is valid input and irrelevant to nodes. Its GBK source
+        // fits 2 MiB while a UTF-8 re-encoding of the same text would exceed it.
+        String yaml = "# " + "中".repeat(750_000) + "\n" + CONFIG;
+        byte[] gbk = yaml.getBytes(Charset.forName("GBK"));
+        assertTrue(gbk.length < 2 * 1024 * 1024);
+        assertTrue(yaml.getBytes(StandardCharsets.UTF_8).length > 2 * 1024 * 1024);
+        String id = publish("large-gbk.yaml", gbk, true);
+        mvc.perform(get("/p/" + id).param("p", "vless"))
+                .andExpect(status().isOk()).andExpect(header().string("X-BootFS-Converted-Nodes", "4"));
+    }
+
     @Test void invalidOrUnconvertibleConfigurationReturnsAnExplicitError() throws Exception {
         String malformed = publish("broken.yml", "proxies: [\npassword: private-test-value", true);
         String noSupportedNodes = publish("unsupported.yaml", "proxies: [{name: SOCKS, type: socks5, server: example.com, port: 1080}]", true);
@@ -86,7 +113,11 @@ class ClashSubscriptionIntegrationTest {
     }
 
     private String publish(String name, String yaml, boolean tagged) throws Exception {
-        String id = files.publish(new ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8)), name, false).file().getUuid();
+        return publish(name, yaml.getBytes(StandardCharsets.UTF_8), tagged);
+    }
+
+    private String publish(String name, byte[] bytes, boolean tagged) throws Exception {
+        String id = files.publish(new ByteArrayInputStream(bytes), name, false).file().getUuid();
         if (tagged) search.updateDocumentTags("full-text", id, List.of(Tag.manual("Clash")));
         return id;
     }

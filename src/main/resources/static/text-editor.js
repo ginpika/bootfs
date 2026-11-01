@@ -41,11 +41,24 @@ window.TextFileEditor = (() => {
     }
 
     function dirty() {
-        return !!state?.loaded && elements.content.value !== state.baseline;
+        return !!state?.loaded && (elements.content.value !== state.baseline || state.encoding !== state.baselineEncoding);
     }
 
     function serializedContent() {
         return state.bom + elements.content.value.replace(/\n/g, state.newline);
+    }
+
+    function encodedSize(content) {
+        if (state.encoding !== 'GBK') return encoder.encode(content).length;
+        // Representable GBK characters use one byte for ASCII and two otherwise.
+        // The server's strict encoder rejects characters outside GBK without replacing them.
+        let bytes = 0;
+        for (const character of content) bytes += character.codePointAt(0) <= 0x7f ? 1 : 2;
+        return bytes;
+    }
+
+    function updateEncodingLabel() {
+        elements.encoding.textContent = `${state.encoding}${state.bom ? ' BOM' : ''} · ${state.newline === '\r\n' ? 'CRLF' : 'LF'}`;
     }
 
     function error(message = '') {
@@ -55,10 +68,11 @@ window.TextFileEditor = (() => {
 
     function updateStatus() {
         const changed = dirty();
-        const tooLarge = state?.loaded && encoder.encode(serializedContent()).length > MAX_BYTES;
+        const tooLarge = state?.loaded && encodedSize(serializedContent()) > MAX_BYTES;
         elements.save.disabled = !state?.loaded || state.saving || !changed || tooLarge;
         elements.save.textContent = state?.saving ? '正在保存…' : '保存';
         elements.reload.disabled = !!state?.saving || !!state?.loading;
+        elements.charset.disabled = !!state?.saving || !!state?.loading;
         elements.surface.setAttribute('aria-busy', String(!!state?.loading || !!state?.saving));
         elements.status.textContent = state?.saving ? '正在保存…' : state?.loading ? '正在加载…' : !state?.loaded ? '加载失败' : tooLarge ? '内容超过 2 MiB，无法保存' : changed ? '有未保存的修改' : '已保存';
     }
@@ -87,7 +101,7 @@ window.TextFileEditor = (() => {
         if (!response.ok) {
             if (response.status === 409) throw new Error('文件内容或信息已变化。你的修改已保留，请先复制内容再重新加载；若已生成新版本，请刷新列表后重新打开。');
             if (response.status === 413) throw new Error('文件超过 2 MiB，无法在内置编辑器中打开或保存。');
-            if (response.status === 415) throw new Error('此文件不是可编辑的 UTF-8 文本，可能包含二进制内容或使用了其他编码。');
+            if (response.status === 415) throw new Error('此文件无法按 UTF-8 或 GBK 读取，可能含有二进制内容。也可以切换读取编码后重试。');
             if (response.status === 404) throw new Error('文件不存在或已被删除。');
             throw new Error(payload?.message || '操作失败，请稍后重试。');
         }
@@ -97,6 +111,7 @@ window.TextFileEditor = (() => {
 
     async function load() {
         const activeSession = ++session;
+        state.readEncoding = elements.charset.value;
         state.loading = true;
         state.loaded = false;
         elements.content.disabled = true;
@@ -105,12 +120,15 @@ window.TextFileEditor = (() => {
         updateStatus();
         updateMetrics();
         try {
-            const response = await fetch(`/api/file/${encodeURIComponent(state.uuid)}/text`, { cache: 'no-store' });
+            const query = state.readEncoding === 'auto' ? '' : `?encoding=${encodeURIComponent(state.readEncoding)}`;
+            const response = await fetch(`/api/file/${encodeURIComponent(state.uuid)}/text${query}`, { cache: 'no-store' });
             const data = await readResponse(response);
             if (activeSession !== session || !isOpen()) return;
             if (typeof data.content !== 'string') throw new Error('服务器未返回文本内容。');
             if (data.fileName) elements.name.textContent = data.fileName;
             state.version = data.version;
+            state.encoding = data.encoding === 'GBK' ? 'GBK' : 'UTF-8';
+            state.baselineEncoding = data.detectedEncoding || state.encoding;
             state.newline = data.content.includes('\r\n') ? '\r\n' : '\n';
             state.bom = data.content.startsWith('\uFEFF') ? '\uFEFF' : '';
             elements.content.value = data.content.slice(state.bom.length);
@@ -118,7 +136,7 @@ window.TextFileEditor = (() => {
             state.baseline = elements.content.value;
             state.loaded = true;
             elements.content.disabled = false;
-            elements.encoding.textContent = `UTF-8${state.bom ? ' BOM' : ''} · ${state.newline === '\r\n' ? 'CRLF' : 'LF'}`;
+            updateEncodingLabel();
             elements.content.focus();
         } catch (failure) {
             if (activeSession !== session || !isOpen()) return;
@@ -140,6 +158,7 @@ window.TextFileEditor = (() => {
         previousOverflow = document.body.style.overflow;
         document.body.style.overflow = 'hidden';
         state = { uuid: file.uuid, loaded: false, loading: true, saving: false };
+        elements.charset.value = 'auto';
         elements.name.textContent = file.fileName;
         elements.format.textContent = type.label;
         elements.modal.classList.remove('hidden');
@@ -174,13 +193,16 @@ window.TextFileEditor = (() => {
             const response = await fetch(`/api/file/${encodeURIComponent(state.uuid)}/text`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content: serializedContent(), version: state.version })
+                body: JSON.stringify({ content: serializedContent(), version: state.version, encoding: state.encoding })
             });
             const data = await readResponse(response);
             if (activeSession !== session) return;
             if (typeof data.uuid !== 'string' || !data.uuid) throw new Error('保存响应缺少文件版本信息，请重新加载确认。');
             state.uuid = data.uuid;
             state.version = data.version;
+            state.encoding = data.encoding || state.encoding;
+            state.baselineEncoding = data.detectedEncoding || state.encoding;
+            updateEncodingLabel();
             if (data.fileName) elements.name.textContent = data.fileName;
             state.baseline = savedValue;
             selectedFiles.delete(previousUuid);
@@ -224,11 +246,19 @@ window.TextFileEditor = (() => {
 
     document.addEventListener('DOMContentLoaded', () => {
         const byId = suffix => document.getElementById(`textEditor${suffix}`);
-        elements = { modal: byId('Modal'), name: byId('FileName'), format: byId('Format'), status: byId('Status'), error: byId('Error'), surface: byId('Surface'), content: byId('Content'), numbers: byId('LineNumbers'), cursor: byId('Cursor'), encoding: byId('Encoding'), save: byId('Save'), reload: byId('Reload'), tabMode: byId('TabMode'), close: byId('Close'), cancel: byId('Cancel') };
+        elements = { modal: byId('Modal'), name: byId('FileName'), format: byId('Format'), status: byId('Status'), error: byId('Error'), surface: byId('Surface'), content: byId('Content'), numbers: byId('LineNumbers'), cursor: byId('Cursor'), encoding: byId('Encoding'), charset: byId('Charset'), save: byId('Save'), reload: byId('Reload'), tabMode: byId('TabMode'), close: byId('Close'), cancel: byId('Cancel') };
         elements.close.addEventListener('click', close);
         elements.cancel.addEventListener('click', close);
         elements.save.addEventListener('click', save);
         elements.tabMode.addEventListener('click', toggleTabMode);
+        elements.charset.addEventListener('change', () => {
+            if (!state) return;
+            if (dirty() && !window.confirm('切换读取编码会重新加载文件并放弃当前修改，是否继续？')) {
+                elements.charset.value = state.readEncoding;
+                return;
+            }
+            load();
+        });
         elements.reload.addEventListener('click', () => {
             if (!dirty() || window.confirm('重新加载会放弃当前修改，是否继续？')) load();
         });
@@ -250,7 +280,7 @@ window.TextFileEditor = (() => {
                 event.preventDefault();
                 close();
             } else if (event.key === 'Tab' && !event.defaultPrevented) {
-                const controls = Array.from(elements.modal.querySelectorAll('button:not(:disabled), textarea:not(:disabled)'));
+                const controls = Array.from(elements.modal.querySelectorAll('button:not(:disabled), textarea:not(:disabled), select:not(:disabled)'));
                 const first = controls[0];
                 const last = controls[controls.length - 1];
                 if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }

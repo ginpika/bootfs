@@ -223,11 +223,20 @@ public class FileService {
 
     /** Text edits publish a new immutable generation, then switch metadata and protocol bindings together. */
     public synchronized PublishedResource replaceText(String originalId, String expectedVersion, byte[] content) throws IOException {
+        return replaceText(originalId, expectedVersion, content, null, false);
+    }
+
+    public synchronized PublishedResource replaceText(String originalId, String expectedVersion, byte[] content,
+                                                       String encoding, boolean encodingChanged) throws IOException {
         String hash = cc.ginpika.bootfs.kernel.object.ContentHash.sha256(new ByteArrayInputStream(content));
         String receiptKey = "/text-replacements/" + originalId + "/" + expectedVersion;
         String receiptRaw = etcdService.getOne(receiptKey);
         if (receiptRaw != null) {
             JSONObject receipt = JSONObject.parseObject(receiptRaw);
+            String receiptEncoding = receipt.getString("textEncoding");
+            if (encoding != null && !encoding.equals(receiptEncoding == null ? TextEncoding.UTF8 : receiptEncoding)) {
+                throw new S3ConcurrentWriteException("文件已使用不同编码保存，请刷新后重试");
+            }
             String pending = etcdService.getOne(publicationPrefix() + receipt.getString("uuid"));
             if (hash.equals(receipt.getString("sha256")) && pending != null) return finishPublication(JSONObject.parseObject(pending));
             FileObject replacement = context.query(receipt.getString("uuid"));
@@ -243,7 +252,7 @@ public class FileService {
         if (!Files.isRegularFile(source) || !expectedVersion.equals(cc.ginpika.bootfs.kernel.object.ContentHash.sha256(source))) {
             throw new S3ConcurrentWriteException("文件内容已变化，请重新加载后再保存");
         }
-        if (hash.equals(expectedVersion)) {
+        if (hash.equals(expectedVersion) && !encodingChanged) {
             JSONObject metadata = JSONObject.parseObject(etcdService.getOne("/files/" + originalId + "/meta"));
             return new PublishedResource(original, metadata == null ? null : metadata.getString("etag"));
         }
@@ -269,8 +278,10 @@ public class FileService {
         replacement.put("document", documentRaw);
         replacement.put("metadata", etcdService.getOne("/files/" + originalId + "/meta"));
         replacement.put("resource", JSONObject.from(resource));
+        if (encoding != null) replacement.put("textEncoding", encoding);
         // Deterministic identity makes retry after an uncertain publication resume the same generation.
-        String baseId = UUID.nameUUIDFromBytes(("text:" + originalId + ":" + expectedVersion + ":" + hash)
+        String baseId = UUID.nameUUIDFromBytes(("text:" + originalId + ":" + expectedVersion + ":" + hash
+                + (TextEncoding.GBK.equals(encoding) ? ":GBK" : ""))
                 .getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
         String id = resolveUploadId(baseId);
         while (etcdService.getOne("/tombstones/" + id) != null) {
@@ -290,6 +301,8 @@ public class FileService {
         String receiptKey = "/text-replacements/" + originalId + "/" + replacement.getString("version");
         JSONObject receipt = new JSONObject();
         receipt.put("uuid", id); receipt.put("sha256", intent.getString("sha256"));
+        String encoding = replacement.getString("textEncoding");
+        if (encoding != null) receipt.put("textEncoding", encoding);
         String committed = etcdService.getOne(receiptKey);
         if (committed == null) {
             Map<String, String> expected = new LinkedHashMap<>();
@@ -303,6 +316,7 @@ public class FileService {
             }
             JSONObject document = JSONObject.parseObject(replacement.getString("document"));
             document.put("uuid", id); document.put("size", resource.getSize());
+            if (encoding != null) document.put("textEncoding", encoding);
             document.put("contextUuid", context.uuid); document.put("updatedAt", LocalDateTime.now());
             document.put("thumbUrl", context.buildThumbUrl(id)); document.put("poster", context.buildThumbUrl(id));
             if (document.containsKey("publicUrl")) document.put("publicUrl", context.buildProxyUrl(id));
@@ -311,6 +325,7 @@ public class FileService {
             JSONObject metadata = new JSONObject();
             metadata.put("size", resource.getSize()); metadata.put("ext", extension(resource.getFileName()));
             metadata.put("etag", intent.getString("etag")); metadata.put("sha256", intent.getString("sha256"));
+            if (encoding != null) metadata.put("textEncoding", encoding);
             metadata.put("requiredCopies", Math.max(1, intent.getIntValue("requiredCopies")));
             JSONObject durableNodes = new JSONObject(); durableNodes.put(context.uuid, intent.getString("sha256"));
             JSONObject receipts = intent.getJSONObject("receipts");

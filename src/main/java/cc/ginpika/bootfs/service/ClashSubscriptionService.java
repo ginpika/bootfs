@@ -41,7 +41,9 @@ public class ClashSubscriptionService {
 
     public ParsedConfig parseConfig(String content) {
         if (content == null || content.isBlank()) throw invalid("Clash 配置为空");
-        if (content.length() > MAX_BYTES || content.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) {
+        // File reads already bound the original UTF-8/GBK bytes. Decoded GBK text can
+        // exceed that limit when re-encoded as UTF-8; bound characters here instead.
+        if (content.length() > MAX_BYTES) {
             throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Clash 配置最多支持 2 MiB");
         }
         Object loaded;

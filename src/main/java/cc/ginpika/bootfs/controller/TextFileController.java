@@ -25,21 +25,25 @@ public class TextFileController {
         this.context = context; this.textFiles = textFiles; this.proxy = proxy;
     }
 
-    public record SaveTextRequest(String content, String version) {}
+    public record SaveTextRequest(String content, String version, String encoding) {
+        public SaveTextRequest(String content, String version) { this(content, version, null); }
+    }
 
     @GetMapping
-    public ResponseEntity<?> read(@PathVariable String uuid, HttpServletRequest request) throws IOException {
+    public ResponseEntity<?> read(@PathVariable String uuid, @RequestParam(required = false) String encoding, HttpServletRequest request) throws IOException {
         ResponseEntity<?> remote = remote(uuid, request, null, false);
         if (remote != null) return remote;
-        try { return ResponseEntity.ok().header("Cache-Control", "no-store").body(textFiles.read(uuid)); }
+        try { return ResponseEntity.ok().header("Cache-Control", "no-store").body(textFiles.read(uuid, encoding)); }
         catch (ResponseStatusException failure) { return error(failure.getRawStatusCode(), failure.getReason()); }
     }
+
+    public ResponseEntity<?> read(String uuid, HttpServletRequest request) throws IOException { return read(uuid, null, request); }
 
     @PutMapping
     public ResponseEntity<?> save(@PathVariable String uuid, @RequestBody SaveTextRequest body, HttpServletRequest request) throws IOException {
         ResponseEntity<?> remote = remote(uuid, request, body, true);
         if (remote != null) return remote;
-        try { return ResponseEntity.ok().header("Cache-Control", "no-store").body(textFiles.save(uuid, body.content(), body.version())); }
+        try { return ResponseEntity.ok().header("Cache-Control", "no-store").body(textFiles.save(uuid, body.content(), body.version(), body.encoding())); }
         catch (ResponseStatusException failure) { return error(failure.getRawStatusCode(), failure.getReason()); }
         catch (S3ConcurrentWriteException conflict) { return error(409, conflict.getMessage()); }
         catch (PublicationPendingException pending) {

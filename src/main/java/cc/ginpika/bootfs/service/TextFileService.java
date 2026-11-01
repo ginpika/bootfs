@@ -12,17 +12,12 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
-import java.nio.charset.CharacterCodingException;
-import java.nio.charset.CodingErrorAction;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Set;
 
-/** Bounded, strict UTF-8 editing for explicitly recognized developer text files. */
+/** Bounded, lossless UTF-8/GBK editing for explicitly recognized developer text files. */
 @Service
 public class TextFileService {
     public static final int MAX_BYTES = 2 * 1024 * 1024;
@@ -41,19 +36,35 @@ public class TextFileService {
         this.context = context; this.files = files; this.metadata = metadata;
     }
 
-    public record TextDocument(String uuid, String fileName, String content, String version, long size, String url) {}
+    public record TextDocument(String uuid, String fileName, String content, String version, long size, String url, String encoding, String detectedEncoding) {
+        public TextDocument(String uuid, String fileName, String content, String version, long size, String url) {
+            this(uuid, fileName, content, version, size, url, TextEncoding.UTF8, TextEncoding.UTF8);
+        }
+        public TextDocument(String uuid, String fileName, String content, String version, long size, String url, String encoding) {
+            this(uuid, fileName, content, version, size, url, encoding, encoding);
+        }
+    }
 
-    public TextDocument read(String uuid) throws IOException {
+    public TextDocument read(String uuid) throws IOException { return read(uuid, null); }
+
+    public TextDocument read(String uuid, String encoding) throws IOException {
+        TextEncoding.requested(encoding);
         FileObject file = context.query(uuid);
         if (file == null || files.isDeleted(file) || file.getPath() == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "文件不存在或已删除");
         }
         String name = file.getFileName();
+        String encodingHint = null;
         String documentRaw = metadata.getOne("/documents/full-text/" + uuid);
         if (documentRaw != null) {
             JSONObject document = JSONObject.parseObject(documentRaw);
+            encodingHint = TextEncoding.hint(document.getString("textEncoding"));
             if (document.getString("fileName") != null) name = document.getString("fileName");
             else if (document.getString("title") != null) name = document.getString("title");
+        }
+        if (encodingHint == null) {
+            String metaRaw = metadata.getOne("/files/" + uuid + "/meta");
+            if (metaRaw != null) encodingHint = TextEncoding.hint(JSONObject.parseObject(metaRaw).getString("textEncoding"));
         }
         if (!editableName(name)) throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "此文件类型不支持文本编辑");
         Path path = Path.of(file.getPath());
@@ -61,32 +72,45 @@ public class TextFileService {
         byte[] bytes;
         try (InputStream input = Files.newInputStream(path)) { bytes = input.readNBytes(MAX_BYTES + 1); }
         if (bytes.length > MAX_BYTES) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "文本编辑器最多支持 2 MiB 的文件");
-        String content;
-        try { content = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
-                .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString(); }
-        catch (CharacterCodingException invalid) { throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "只支持 UTF-8 编码的文本文件"); }
-        validateCharacters(content);
+        TextEncoding.Decoded detected = TextEncoding.decode(bytes, null, encodingHint);
+        TextEncoding.Decoded decoded = TextEncoding.requested(encoding) == null ? detected : TextEncoding.decode(bytes, encoding, encodingHint);
+        validateCharacters(decoded.content());
         String version = ContentHash.sha256(new ByteArrayInputStream(bytes));
-        return new TextDocument(uuid, name, content, version, bytes.length, context.buildUrl(uuid));
+        return new TextDocument(uuid, name, decoded.content(), version, bytes.length, context.buildUrl(uuid), decoded.encoding(), detected.encoding());
     }
 
-    public TextDocument save(String uuid, String content, String version) throws IOException {
+    public TextDocument save(String uuid, String content, String version) throws IOException { return save(uuid, content, version, null); }
+
+    public TextDocument save(String uuid, String content, String version, String encoding) throws IOException {
         if (content == null || version == null || !version.matches("[0-9a-f]{64}")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "缺少文本内容或有效的文件版本");
         }
         if (content.length() > MAX_BYTES) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "文本编辑器最多支持 2 MiB 的文件");
         validateCharacters(content);
-        byte[] bytes;
-        try {
-            ByteBuffer encoded = StandardCharsets.UTF_8.newEncoder().onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT).encode(CharBuffer.wrap(content));
-            bytes = new byte[encoded.remaining()]; encoded.get(bytes);
-        } catch (CharacterCodingException invalid) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "文本包含无效的 Unicode 字符"); }
-        if (bytes.length > MAX_BYTES) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "文本编辑器最多支持 2 MiB 的文件");
+        String selected = TextEncoding.requested(encoding);
+        String sourceEncoding = null;
         // Validate the existing bytes as well: a misleading text extension must never permit binary editing.
         FileObject current = context.query(uuid);
-        if (current != null && !files.isDeleted(current)) read(uuid);
-        FileService.PublishedResource published = files.replaceText(uuid, version, bytes);
+        if (current != null && !files.isDeleted(current)) {
+            try { sourceEncoding = read(uuid).encoding(); }
+            catch (ResponseStatusException failure) {
+                // Some valid GBK bytes also decode as UTF-8 control characters. A user can
+                // explicitly correct that interpretation; still reject binary/invalid text.
+                if (selected == null || failure.getRawStatusCode() != 415) throw failure;
+                sourceEncoding = read(uuid, selected).detectedEncoding();
+            }
+        }
+        else {
+            // The original is already retired after a committed save or a lost reply. Its receipt
+            // must determine encoding before the retry reconstructs the exact same target bytes.
+            String receiptRaw = metadata.getOne("/text-replacements/" + uuid + "/" + version);
+            if (receiptRaw != null) sourceEncoding = TextEncoding.hint(JSONObject.parseObject(receiptRaw).getString("textEncoding"));
+        }
+        if (selected == null) selected = sourceEncoding == null ? TextEncoding.UTF8 : sourceEncoding;
+        byte[] bytes = TextEncoding.encode(content, selected);
+        if (bytes.length > MAX_BYTES) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "文本编辑器最多支持 2 MiB 的文件");
+        FileService.PublishedResource published = files.replaceText(uuid, version, bytes, selected,
+                sourceEncoding != null && !selected.equals(sourceEncoding));
         return read(published.file().getUuid());
     }
 

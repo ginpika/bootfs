@@ -628,6 +628,13 @@
             </div>
             <div class="text-editor-toolbar">
                 <span id="textEditorFormat" class="text-editor-format"></span>
+                <label class="text-editor-charset" for="textEditorCharset">读取编码
+                    <select id="textEditorCharset" class="theme-input">
+                        <option value="auto">自动识别</option>
+                        <option value="UTF-8">UTF-8</option>
+                        <option value="GBK">GBK</option>
+                    </select>
+                </label>
                 <span id="textEditorStatus" role="status" aria-live="polite">正在加载…</span>
                 <button id="textEditorTabMode" type="button" class="theme-text-btn" aria-pressed="true" title="Ctrl / ⌘ + M 切换 Tab 导航">Tab 缩进</button>
                 <button id="textEditorReload" type="button" class="theme-text-btn">重新加载</button>
@@ -642,7 +649,7 @@
                 <span id="textEditorEncoding">UTF-8</span>
             </div>
             <div class="text-editor-footer">
-                <p id="textEditorHint" class="text-xs theme-page-text-tertiary">Ctrl / ⌘ + S 保存 · Ctrl / ⌘ + M 切换 Tab 导航 · UTF-8，最大 2 MiB<br>保存后生成新版本，下载链接将更新。</p>
+                <p id="textEditorHint" class="text-xs theme-page-text-tertiary">Ctrl / ⌘ + S 保存 · Ctrl / ⌘ + M 切换 Tab 导航 · UTF-8 / GBK，最大 2 MiB<br>保留原编码保存为新版本，下载链接将更新。</p>
                 <div class="text-editor-actions">
                     <button id="textEditorCancel" type="button" class="theme-btn-secondary">关闭</button>
                     <button id="textEditorSave" type="button" class="theme-btn-primary" disabled>保存</button>

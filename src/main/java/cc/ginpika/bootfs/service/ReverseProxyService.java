@@ -128,10 +128,11 @@ public class ReverseProxyService {
                         .setConnectTimeout(2000).setSocketTimeout(5000).build()).build()) {
             HttpGet upstream = new HttpGet(url);
             // Range and conditional headers describe the original bytes, never the converted subscription.
-            applyProxyHeaders(upstream, request, "application/yaml;charset=UTF-8", false);
+            applyProxyHeaders(upstream, request, "application/yaml", false);
             try (CloseableHttpResponse result = client.execute(upstream)) {
                 response.setStatus(result.getStatusLine().getStatusCode());
-                response.setContentType("application/yaml;charset=UTF-8");
+                // Stream the original bytes without declaring an incorrect UTF-8 charset.
+                response.setContentType("application/yaml");
                 response.setHeader("Cache-Control", "no-store");
                 for (String name : List.of("ETag", "Last-Modified", "Content-Range", "Accept-Ranges")) {
                     Header header = result.getFirstHeader(name);

@@ -14,6 +14,8 @@ https://your-bootfs.example/p/<uuid>?p=vless
 
 支持常见 TCP、WebSocket、gRPC、HTTP 伪装及基础 XHTTP 传输，并保留可表达的 TLS、Reality、SNI、指纹、ALPN 等选项。无法由目标客户端分享链接准确表达的协议、传输或安全选项会跳过。没有可导出的节点时返回 HTTP 422；非 Clash 标签的 YAML 返回 HTTP 415。`X-BootFS-Converted-Nodes` 响应头表示导出节点数，`X-BootFS-Conversion-Warnings` 表示跳过或转换提示的数量。
 
-配置需为 UTF-8，最大 2 MiB，最多 500 个节点。读取内嵌的 `proxies` 列表，不会下载 `proxy-providers` 的远端内容。详情和检测接口沿用文件管理登录权限；订阅地址沿用 `/p` 的公开文件读取方式，跨节点访问会跳转到持有文件的节点并保留 `p=vless`。
+配置支持 UTF-8 / GBK，按原文件字节计算最大 2 MiB，最多 500 个节点。默认优先严格识别 UTF-8，无法解码时尝试 GBK；编辑器可手动选择读取编码并保存，后续 Clash 解析也会使用已保存的编码。保存保留该编码，不能用 GBK 表示的字符会明确报错，不会替换为问号。订阅输出始终为 UTF-8 分享链接列表的 Base64 编码，YAML 原文保持原始字节。
+
+读取内嵌的 `proxies` 列表，不会下载 `proxy-providers` 的远端内容。详情和检测接口沿用文件管理登录权限；订阅地址沿用 `/p` 的公开文件读取方式，跨节点访问会跳转到持有文件的节点并保留 `p=vless`。
 
 格式依据：[v2rayN 订阅说明](https://github.com/2dust/v2rayN/wiki/Description-of-subscription)、[VMess 分享链接](https://github.com/2dust/v2rayN/wiki/Description-of-VMess-share-link)、[Shadowsocks SIP002](https://shadowsocks.org/doc/sip002.html)、[Mihomo 传输配置](https://wiki.metacubex.one/en/config/proxies/transport/)。

@@ -53,6 +53,48 @@ class FederationIntegrationTest {
     void flush() throws Exception { for(int i=0;i<3;i++) for(Node n:nodes) if(n.app!=null) n.store().advance(); }
     @AfterEach void close() { for(Node n:nodes) n.close(); }
 
+    @Test @Timeout(90) void gbkTextEditingAndClashSubscriptionWorkThroughTheOwningNode() throws Exception {
+        Node owner = new Node("gbk-owner", false), frontend = new Node("gbk-frontend", false);
+        join(frontend, owner);
+        var gbk = java.nio.charset.Charset.forName("GBK");
+        String yaml = "proxies:\r\n  - {name: 中文节点, type: vless, server: example.com, port: 443, uuid: 11111111-1111-4111-8111-111111111111}\r\n";
+        String id = owner.bean(FileService.class).publish(new java.io.ByteArrayInputStream(yaml.getBytes(gbk)), "gbk-clash.yaml", false).file().getUuid();
+        owner.bean(MeiliSearchService.class).updateDocumentTags("full-text", id,
+                List.of(cc.ginpika.bootfs.domain.dto.Tag.manual("clash")));
+        owner.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(true);
+        var read = request(frontend, "GET", "/api/file/" + id + "/text", null, null);
+        assertEquals(200, read.statusCode(), read.body());
+        JSONObject original = JSON.parseObject(read.body());
+        assertEquals("GBK", original.getString("encoding"));
+        assertEquals(yaml, original.getString("content"));
+        var explicit = request(frontend, "GET", "/api/file/" + id + "/text?encoding=GBK", null, null);
+        assertEquals(200, explicit.statusCode(), explicit.body());
+        String updated = yaml.replace("中文节点", "更新节点");
+        String body = new JSONObject(Map.of("content", updated, "version", original.getString("version"), "encoding", "GBK")).toJSONString();
+        var saved = request(frontend, "PUT", "/api/file/" + id + "/text", body, null);
+        assertEquals(200, saved.statusCode(), saved.body());
+        JSONObject document = JSON.parseObject(saved.body());
+        String replacement = document.getString("uuid");
+        assertEquals("GBK", document.getString("encoding"));
+        assertArrayEquals(updated.getBytes(gbk), Files.readAllBytes(Path.of(owner.bean(Context.class).query(replacement).getPath())));
+        var retry = request(frontend, "PUT", "/api/file/" + id + "/text", body, null);
+        assertEquals(200, retry.statusCode(), retry.body());
+        assertEquals(replacement, JSON.parseObject(retry.body()).getString("uuid"));
+        owner.bean(Context.class).reload();
+        assertEquals("GBK", owner.bean(TextFileService.class).read(replacement).encoding());
+        var details = request(frontend, "GET", "/api/file/" + replacement + "/clash", null, null);
+        assertEquals(200, details.statusCode(), details.body());
+        assertEquals("更新节点", JSON.parseObject(details.body()).getJSONArray("nodes").getJSONObject(0).getString("name"));
+        var subscription = request(owner, "GET", "/p/" + replacement + "?p=vless", null, null);
+        assertEquals(200, subscription.statusCode(), subscription.body());
+        String links = new String(Base64.getDecoder().decode(subscription.body()), java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(links.contains("%E6%9B%B4%E6%96%B0%E8%8A%82%E7%82%B9"));
+        var raw = http.send(HttpRequest.newBuilder(URI.create(owner.url + "/p/" + replacement)).GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+        assertEquals(200, raw.statusCode());
+        assertFalse(raw.headers().firstValue("Content-Type").orElse("").toLowerCase(Locale.ROOT).contains("charset=utf-8"));
+        assertArrayEquals(updated.getBytes(gbk), raw.body());
+    }
+
     @Test @Timeout(90) void clashDetailsAndLatencyRunAtTheOwnerAndPublicSubscriptionKeepsItsFormat() throws Exception {
         try (var tcp = new java.net.ServerSocket(0, 8, java.net.InetAddress.getLoopbackAddress())) {
             Node owner = new Node("clash-owner", false), frontend = new Node("clash-frontend", false);

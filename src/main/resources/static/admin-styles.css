@@ -91,6 +91,8 @@
     font-size: 12px;
 }
 .text-editor-format { padding: 2px 8px; border-radius: 4px; background: var(--color-accent-muted); color: var(--color-accent-primary); }
+.text-editor-charset { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.text-editor-charset select { padding: 2px 5px; border-radius: 4px; font-size: 12px; }
 #textEditorReload { margin-left: auto; white-space: nowrap; }
 .text-editor-error { padding: 10px 24px; color: var(--color-danger); background: var(--color-bg-tertiary); font-size: 13px; overflow-wrap: anywhere; }
 .text-editor-surface { display: flex; flex: 1; min-height: 0; background: var(--color-bg-secondary); }

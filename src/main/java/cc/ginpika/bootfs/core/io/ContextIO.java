@@ -34,6 +34,9 @@ public class ContextIO {
     }
     public void append(String id, FileObject file) { update(id,file); }
     public void update(String id, FileObject file) {
+        if (file.getContentObjectId() != null && !file.getContentObjectId().matches("[A-Za-z0-9_-]+")) {
+            throw new IllegalArgumentException("Invalid content identity");
+        }
         if (deleted(file)) throw new IllegalStateException("Resource was deleted: "+id);
         String route = store.get("/files/" + id);
         String own = config.getWebEntrypoint() == null ? "" : config.getWebEntrypoint().replaceAll("/+$", "");
@@ -51,6 +54,16 @@ public class ContextIO {
         return false;
     }
     public void remove(String id) { store.delete(prefix+id); }
+    public FileObject current(String id) {
+        if (id == null || !id.matches("[A-Za-z0-9_-]+")) return null;
+        String raw = store.get(prefix + id);
+        if (raw == null) return null;
+        FileObject file = JSONObject.parseObject(raw, FileObject.class);
+        String contentId = file.getContentObjectId() == null ? id : file.getContentObjectId();
+        if (!id.equals(file.getUuid()) || !contentId.matches("[A-Za-z0-9_-]+")) throw new IllegalStateException("Invalid catalog content identity");
+        file.setPath(Path.of(config.getPathPrefix(), contentId).toString());
+        return file;
+    }
     public Map<String,FileObject> load() throws IOException {
         importLegacy();
         Map<String,FileObject> result = new LinkedHashMap<>();
@@ -58,7 +71,9 @@ public class ContextIO {
             FileObject file = JSONObject.parseObject(entry.getValue(),FileObject.class);
             validateId(file.getUuid());
             if (!entry.getKey().equals(prefix+file.getUuid())) throw new IOException("Catalog identity mismatch: "+entry.getKey());
-            file.setPath(Path.of(config.getPathPrefix(),file.getUuid()).toString());
+            String contentId = file.getContentObjectId() == null ? file.getUuid() : file.getContentObjectId();
+            validateId(contentId);
+            file.setPath(Path.of(config.getPathPrefix(),contentId).toString());
             result.put(file.getUuid(),file);
         }
         return result;

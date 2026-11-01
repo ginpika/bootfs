@@ -99,7 +99,7 @@ window.TextFileEditor = (() => {
         const json = response.headers.get('content-type')?.includes('application/json');
         const payload = json ? await response.json() : null;
         if (!response.ok) {
-            if (response.status === 409) throw new Error('文件内容或信息已变化。你的修改已保留，请先复制内容再重新加载；若已生成新版本，请刷新列表后重新打开。');
+            if (response.status === 409) throw new Error('文件内容或信息已变化。你的修改已保留，请先复制内容，再重新加载最新内容。');
             if (response.status === 413) throw new Error('文件超过 2 MiB，无法在内置编辑器中打开或保存。');
             if (response.status === 415) throw new Error('此文件无法按 UTF-8 或 GBK 读取，可能含有二进制内容。也可以切换读取编码后重试。');
             if (response.status === 404) throw new Error('文件不存在或已被删除。');
@@ -197,15 +197,13 @@ window.TextFileEditor = (() => {
             });
             const data = await readResponse(response);
             if (activeSession !== session) return;
-            if (typeof data.uuid !== 'string' || !data.uuid) throw new Error('保存响应缺少文件版本信息，请重新加载确认。');
-            state.uuid = data.uuid;
+            if (data.uuid !== previousUuid) throw new Error('保存响应的 UUID 与原文件不一致，请重新加载确认。');
             state.version = data.version;
             state.encoding = data.encoding || state.encoding;
             state.baselineEncoding = data.detectedEncoding || state.encoding;
             updateEncodingLabel();
             if (data.fileName) elements.name.textContent = data.fileName;
             state.baseline = savedValue;
-            selectedFiles.delete(previousUuid);
             updateSelectedToolbar();
             loadFileList();
             showToast('文本已保存', 'success');

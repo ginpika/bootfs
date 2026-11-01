@@ -14,6 +14,8 @@ import java.util.List;
 public class FileObject {
     private String path;
     private String uuid;
+    // Immutable on-disk content generation; the public resource UUID stays stable on edits.
+    private String contentObjectId;
     private String fileName;
     private Long size;
     // means this object is a copy

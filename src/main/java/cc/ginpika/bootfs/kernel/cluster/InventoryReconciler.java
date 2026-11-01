@@ -45,6 +45,7 @@ public class InventoryReconciler {
             if (metadata.getOne("/files/"+id)==null) {
                 JSONObject meta=new JSONObject();
                 meta.put("size",file.getSize());
+                if (file.getContentObjectId() != null) meta.put("contentObjectId", file.getContentObjectId());
                 String name=file.getFileName();
                 int dot=name==null ? -1 : name.lastIndexOf('.');
                 meta.put("ext",dot<0 ? "" : name.substring(dot).toLowerCase(Locale.ROOT));
@@ -105,6 +106,8 @@ public class InventoryReconciler {
     }
 
     private void refreshLocalView(FileObject file) {
+        synchronized (files) {
+        if (context.query(file.getUuid()) != file) return;
         String raw=metadata.getOne("/documents/full-text/"+file.getUuid());
         if (raw==null) return;
         JSONObject source=JSONObject.parseObject(raw);
@@ -126,6 +129,7 @@ public class InventoryReconciler {
         if (!refreshed.equals(file)) {
             inventory.update(file.getUuid(),refreshed);
             context.STORAGE.replace(file.getUuid(),file,refreshed);
+        }
         }
     }
 }

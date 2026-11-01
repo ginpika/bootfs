@@ -132,7 +132,10 @@ public final class KernelBackup {
             String uuid = resource.getString("uuid"), node = key.split("/")[2]; id(uuid); id(node);
             if (!key.equals("/nodes/" + node + "/catalog/" + uuid)) throw new IOException("Catalog key identity mismatch");
             if (deleted(entries, resource)) continue;
-            JSONObject file = inventory.get(node + "/" + uuid);
+            String contentId = resource.getString("contentObjectId");
+            if (contentId == null) contentId = uuid;
+            id(contentId);
+            JSONObject file = inventory.get(node + "/" + contentId);
             // Existing virtual HLS resources intentionally have no original byte object.
             if (file == null && resource.getLongValue("size") == 0 && "1".equals(resource.getString("hlsAvailable"))
                     && inventory.containsKey(node + "/hls/" + uuid + "/playlist.m3u8")) { resources.add(uuid); continue; }

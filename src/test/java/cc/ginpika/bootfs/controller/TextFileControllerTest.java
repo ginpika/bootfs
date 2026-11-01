@@ -82,7 +82,7 @@ class TextFileControllerTest {
         var response = controller.save(uuid, new TextFileController.SaveTextRequest("# 新配置\nport: 9090\n", before.version()), request("PUT"));
         assertEquals(200, response.getStatusCodeValue());
         var saved = (TextFileService.TextDocument) response.getBody();
-        assertNotEquals(uuid, saved.uuid()); assertEquals("# 新配置\nport: 9090\n", saved.content());
+        assertEquals(uuid, saved.uuid()); assertEquals("# 新配置\nport: 9090\n", saved.content());
         assertEquals(before.fileName(), saved.fileName()); assertNotEquals(before.version(), saved.version());
         assertEquals("kept", search.findDocument("full-text", saved.uuid()).getString("author"));
         assertEquals("1", search.findDocument("full-text", saved.uuid()).getString("nsfw"));
@@ -93,9 +93,9 @@ class TextFileControllerTest {
         assertEquals(saved.uuid(), keys.getIndex("bootfs", uuid).getUuid());
         assertEquals(saved.uuid(), keys.getIndex("bootfs", "config/current.yaml").getUuid());
         assertEquals("text/yaml", keys.getIndex("bootfs", "config/current.yaml").getContentType());
-        assertNull(context.query(uuid)); assertNull(search.findDocument("full-text", uuid));
-        assertNotNull(routes.getOne("/tombstones/" + uuid)); assertTrue(routes.scan("/pending-publications/").isEmpty());
-        assertFalse(Files.exists(root.resolve("data").resolve(uuid)));
+        assertNotNull(context.query(uuid)); assertNotNull(search.findDocument("full-text", uuid));
+        assertNull(routes.getOne("/tombstones/" + uuid)); assertTrue(routes.scan("/pending-publications/").isEmpty());
+        assertTrue(Files.exists(Path.of(context.query(uuid).getPath())));
         assertNotNull(files.download(saved.uuid(), request("GET")));
         context.reload(); assertEquals(saved.size(), context.query(saved.uuid()).getSize());
     }
@@ -191,7 +191,7 @@ class TextFileControllerTest {
         assertEquals(saved.version(), texts.read(saved.uuid()).version());
     }
 
-    @Test void lostGbkCommitReplyUsesTheDurableEncodingWhenTheOldFileIsAlreadyRetired() throws Exception {
+    @Test void lostGbkCommitReplyUsesTheDurableEncodingAndRetainsTheUuid() throws Exception {
         String uuid = uploadBytes("settings.toml", "名称 = '原始'\r\n".getBytes(GBK));
         var original = texts.read(uuid);
         EtcdService uncertain = spy(routes);
@@ -207,7 +207,7 @@ class TextFileControllerTest {
         ReflectionTestUtils.setField(files, "etcdService", uncertain);
         String edited = "port = 443\r\n";
         assertThrows(PublicationPendingException.class, () -> texts.save(uuid, edited, original.version()));
-        assertNotNull(routes.getOne("/tombstones/" + uuid));
+        assertNull(routes.getOne("/tombstones/" + uuid));
         assertEquals(1, routes.scan("/pending-publications/").size());
         var recovered = texts.save(uuid, edited, original.version());
         assertEquals("GBK", recovered.encoding());
@@ -322,11 +322,11 @@ class TextFileControllerTest {
         assertEquals(uuid, keys.getIndex("bootfs", uuid).getUuid());
         assertEquals(1, context.STORAGE.size()); assertEquals(1, routes.scan("/pending-publications/").size());
         FileTransferService transfers = (FileTransferService) ReflectionTestUtils.getField(files, "fileTransferService");
-        when(transfers.prepareRemote(any(), anyString(), anyString(), anyString(), any(), anyInt())).thenAnswer(call ->
+        when(transfers.prepareRemote(any(), anyString(), anyString(), anyString(), any(), anyInt(), any(cc.ginpika.bootfs.domain.dto.FileObject.class))).thenAnswer(call ->
                 new JSONObject(Map.of("nodeId", "backup", "objectId", call.getArgument(1), "sha256", call.getArgument(3),
                         "size", ((java.io.File)call.getArgument(0)).length())));
         var saved = texts.save(uuid, "value=updated", original.version());
-        assertEquals("value=updated", saved.content()); assertNull(context.query(uuid));
+        assertEquals("value=updated", saved.content()); assertEquals(uuid, saved.uuid()); assertNotNull(context.query(uuid));
         assertTrue(routes.scan("/pending-publications/").isEmpty());
         assertEquals(saved.uuid(), keys.getIndex("bootfs", uuid).getUuid());
     }
@@ -344,7 +344,7 @@ class TextFileControllerTest {
         assertEquals("UTF-8", corrected.detectedEncoding());
         var saved = texts.save(id, corrected.content(), corrected.version(), "GBK");
         assertEquals("GBK", saved.encoding());
-        assertNotEquals(id, saved.uuid());
+        assertEquals(id, saved.uuid());
         assertArrayEquals(source, Files.readAllBytes(Path.of(context.query(saved.uuid()).getPath())));
         context.reload();
         assertEquals(corrected.content(), texts.read(saved.uuid()).content());

@@ -73,7 +73,16 @@ public class Context {
         io.remove(id);
         STORAGE.remove(id);
     }
-    public FileObject query(String id) { return STORAGE.get(id); }
+    public FileObject query(String id) {
+        FileObject cached = STORAGE.get(id), committed = io.current(id);
+        if (committed == null) return cached;
+        if (cached == null || !Objects.equals(cached.getContentObjectId(), committed.getContentObjectId())
+                || !Objects.equals(cached.getSize(), committed.getSize())) {
+            STORAGE.put(id, committed);
+            return committed;
+        }
+        return cached;
+    }
     private void fillCreatedAt(FileObject file) {
         if (file.getCreatedAt()!=null) return;
         try {

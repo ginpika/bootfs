@@ -134,7 +134,7 @@ class FederationIntegrationTest {
         }
     }
 
-    @Test @Timeout(90) void textEditingUsesSignedOwnerRequestsAndRetriesAfterTheOriginalWasRetired() throws Exception {
+    @Test @Timeout(90) void textEditingUsesSignedOwnerRequestsAndRetriesWithoutChangingTheUuid() throws Exception {
         Node owner = new Node("text-owner", false), frontend = new Node("text-frontend", false);
         join(frontend, owner);
         String id = owner.upload("settings.yaml", "port: 80\n");
@@ -152,7 +152,7 @@ class FederationIntegrationTest {
         var saved = request(frontend, "PUT", "/api/file/" + id + "/text", body, null);
         assertEquals(200, saved.statusCode(), saved.body());
         String replacement = JSON.parseObject(saved.body()).getString("uuid");
-        assertNotEquals(id, replacement); assertNull(owner.bean(Context.class).query(id));
+        assertEquals(id, replacement); assertNotNull(owner.bean(Context.class).query(id));
         var retry = request(frontend, "PUT", "/api/file/" + id + "/text", body, null);
         assertEquals(200, retry.statusCode(), retry.body());
         assertEquals(replacement, JSON.parseObject(retry.body()).getString("uuid"));

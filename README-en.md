@@ -34,7 +34,7 @@ The answer may be one of the following, and I happen to satisfy all of them pers
 ## Features
 
 - Excellent audio/video preview in both list and grid modes, supporting preview of multiple formats with detailed file descriptions.
-- Dedicated list icons and a built-in editor for YAML, TXT, TOML, INI, JSON and other developer text files, with line numbers, indentation and keyboard saving (UTF-8 / GBK, up to 2 MiB). Encoding is detected automatically or selected manually; saving preserves the encoding, tags and metadata while creating a new version and download link.
+- Dedicated list icons and a built-in editor for YAML, TXT, TOML, INI, JSON and other developer text files, with line numbers, indentation and keyboard saving (UTF-8 / GBK, up to 2 MiB). Encoding is detected automatically or selected manually; saving preserves the resource UUID, URLs, encoding, tags and metadata.
 - YAML files tagged `clash` use the Clash cat icon, list proxy endpoints with server-side TCP latency, and expose a multi-protocol v2rayN subscription through `/p/<uuid>?p=vless`. See [Clash subscriptions](./docs/clash-subscriptions.md).
 - Classic dual-panel layout for easier selection and upload of image files from local paths.
 - Tag-based classification management for organizing your resources.

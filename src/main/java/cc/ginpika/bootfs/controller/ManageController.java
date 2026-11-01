@@ -129,6 +129,13 @@ public class ManageController {
             log.info("uuid {} 不存在, 返回 not found", uuid);
             return ResponseEntity.notFound().build();
         }
+        HttpHeaders contentHeaders = new HttpHeaders();
+        if (ret[3] != null) contentHeaders.setETag("\"" + ret[3] + "\"");
+        if (Boolean.TRUE.equals(ret[4])) contentHeaders.setCacheControl("no-cache");
+        String ifMatch = request.getHeader(HttpHeaders.IF_MATCH);
+        if (ifMatch != null && !ifMatch.equals("*") && !ifMatch.equals(contentHeaders.getETag())) {
+            return ResponseEntity.status(412).headers(contentHeaders).build();
+        }
         // support range-request for media resource
         if (StringUtils.isNotBlank(request.getHeader("Is-Range-Request"))) {
             log.info("uuid {} 是一个 Range-Request");
@@ -137,6 +144,7 @@ public class ManageController {
                 contentType = "video/mp4";
             }
             return ResponseEntity.ok()
+                    .headers(contentHeaders)
                     .header(HttpHeaders.CONTENT_TYPE, contentType)
                     .header(HttpHeaders.CONTENT_LENGTH, (String) ret[2])
                     .body((Resource)ret[0]);
@@ -147,6 +155,7 @@ public class ManageController {
                 contentType = "video/mp4";
             }
             return ResponseEntity.ok()
+                    .headers(contentHeaders)
                     .header(HttpHeaders.CONTENT_TYPE, contentType)
                     .header(HttpHeaders.CONTENT_LENGTH, (String) ret[2])
                     .body((Resource)ret[0]);
@@ -155,6 +164,7 @@ public class ManageController {
                 .filename((String) ret[1], StandardCharsets.UTF_8)
                 .build();
         HttpHeaders headers = new HttpHeaders();
+        headers.addAll(contentHeaders);
         headers.setContentDisposition(contentDisposition);
         headers.setContentLength(Long.parseLong((String) ret[2]));
         headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);

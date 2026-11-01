@@ -64,6 +64,7 @@ public class S3StorageService {
     }
 
     public void getObject(String bucket, String key, HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        for (int attempt = 0; attempt < 4; attempt++) {
         S3ObjectMeta meta = keyIndex.getIndex(bucket, key);
         if (meta == null || etcdService.getOne("/tombstones/" + meta.getUuid()) != null) {
             writeError(resp, S3ErrorCode.NO_SUCH_KEY, req);
@@ -72,10 +73,22 @@ public class S3StorageService {
         FileObject fo = context.query(meta.getUuid());
         File localFile = (fo != null && fo.getPath() != null) ? new File(fo.getPath()) : null;
         if (localFile != null && localFile.exists()) {
+            String raw = etcdService.getOne("/files/" + meta.getUuid() + "/meta");
+            if (raw != null) {
+                JSONObject resourceMeta = JSONObject.parseObject(raw);
+                String contentId = fo.getContentObjectId() == null ? fo.getUuid() : fo.getContentObjectId();
+                String committedId = resourceMeta.getString("contentObjectId");
+                if (committedId == null) committedId = fo.getUuid();
+                if (!contentId.equals(committedId) || (resourceMeta.getString("etag") != null
+                        && !resourceMeta.getString("etag").equals(meta.getEtag()))) continue;
+            }
             writeLocalObject(localFile, meta, req, resp);
         } else {
             proxyRemoteObject(meta, req, resp);
         }
+        return;
+        }
+        resp.sendError(503, "Object is being updated; retry the download");
     }
 
     public void headObject(String bucket, String key, HttpServletResponse resp, HttpServletRequest req) throws IOException {
@@ -106,6 +119,8 @@ public class S3StorageService {
             return;
         }
         java.util.Set<String> candidates = new java.util.LinkedHashSet<>();
+        String resourceMetadata = etcdService.getOne("/files/" + meta.getUuid() + "/meta");
+        boolean editableRevision = resourceMetadata != null && JSONObject.parseObject(resourceMetadata).getString("textVersion") != null;
         String primary = etcdService.getOne("/files/" + meta.getUuid());
         if (primary != null) candidates.add(primary);
         etcdService.scan("/files/" + meta.getUuid() + "/replicas/").forEach((key, value) -> {
@@ -120,12 +135,13 @@ public class S3StorageService {
                 get.setHeader("Accept-Encoding", "identity");
                 get.setHeader("Is-Proxy", "1");
                 get.setHeader("Accept-Type", meta.getContentType() == null ? "application/octet-stream" : meta.getContentType());
+                if (editableRevision && meta.getEtag() != null) get.setHeader("If-Match", "\"" + meta.getEtag() + "\"");
                 for (String header : new String[]{"Range", "If-Range", "If-Modified-Since", "If-None-Match"}) {
                     if (req.getHeader(header) != null) get.setHeader(header, req.getHeader(header));
                 }
                 try (org.apache.http.client.methods.CloseableHttpResponse upstream = client.execute(get)) {
                     int status = upstream.getStatusLine().getStatusCode();
-                    if (status == 404 || status >= 500 || (status >= 300 && status != 304)) continue;
+                    if (status == 404 || status == 412 || status >= 500 || (status >= 300 && status != 304)) continue;
                     resp.setStatus(status);
                     for (String header : new String[]{"Content-Length", "Content-Range", "Accept-Ranges", "Last-Modified"}) {
                         org.apache.http.Header value = upstream.getFirstHeader(header);

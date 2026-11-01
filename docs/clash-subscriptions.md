@@ -10,7 +10,7 @@
 https://your-bootfs.example/p/<uuid>?p=vless
 ```
 
-将此地址添加为 v2rayN 等客户端的订阅即可。虽然参数名为 `vless`，它会导出配置中**所有可转换类型**：VLESS、VMess、Trojan、Shadowsocks、Hysteria2 和 TUIC。响应为 UTF-8 分享链接列表的 Base64 编码。未传 `p` 时，`/p/<uuid>` 返回 YAML 原文；转换只改变响应，不修改文件。
+将此地址添加为 v2rayN 等客户端的订阅即可。虽然参数名为 `vless`，它会导出配置中**所有可转换类型**：VLESS、VMess、Trojan、Shadowsocks、Hysteria2 和 TUIC。响应为 UTF-8 分享链接列表的 Base64 编码。未传 `p` 时，`/p/<uuid>` 返回 YAML 原文；转换只改变响应，不修改文件。通过编辑器保存时，UUID、下载地址及此订阅地址保持不变，后续订阅读取更新后的内容。
 
 支持常见 TCP、WebSocket、gRPC、HTTP 伪装及基础 XHTTP 传输，并保留可表达的 TLS、Reality、SNI、指纹、ALPN 等选项。无法由目标客户端分享链接准确表达的协议、传输或安全选项会跳过。没有可导出的节点时返回 HTTP 422；非 Clash 标签的 YAML 返回 HTTP 415。`X-BootFS-Converted-Nodes` 响应头表示导出节点数，`X-BootFS-Conversion-Warnings` 表示跳过或转换提示的数量。
 

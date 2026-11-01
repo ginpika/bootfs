@@ -221,7 +221,7 @@ public class FileService {
         }
     }
 
-    /** Text edits publish a new immutable generation, then switch metadata and protocol bindings together. */
+    /** Text edits switch immutable content generations while keeping the resource UUID and URLs. */
     public synchronized PublishedResource replaceText(String originalId, String expectedVersion, byte[] content) throws IOException {
         return replaceText(originalId, expectedVersion, content, null, false);
     }
@@ -229,10 +229,28 @@ public class FileService {
     public synchronized PublishedResource replaceText(String originalId, String expectedVersion, byte[] content,
                                                        String encoding, boolean encodingChanged) throws IOException {
         String hash = cc.ginpika.bootfs.kernel.object.ContentHash.sha256(new ByteArrayInputStream(content));
+        FileObject currentResource = context.query(originalId);
+        String currentMetaRaw = etcdService.getOne("/files/" + originalId + "/meta");
+        JSONObject currentMeta = currentMetaRaw == null ? null : JSONObject.parseObject(currentMetaRaw);
+        String currentVersion = currentMeta == null ? null : currentMeta.getString("textVersion");
+        String sourceHash = currentResource != null && currentResource.getPath() != null && Files.isRegularFile(Path.of(currentResource.getPath()))
+                ? cc.ginpika.bootfs.kernel.object.ContentHash.sha256(Path.of(currentResource.getPath())) : null;
+        if (currentVersion == null) currentVersion = sourceHash;
         String receiptKey = "/text-replacements/" + originalId + "/" + expectedVersion;
         String receiptRaw = etcdService.getOne(receiptKey);
         if (receiptRaw != null) {
             JSONObject receipt = JSONObject.parseObject(receiptRaw);
+            if (receipt.getBooleanValue("stableUuid")) {
+                if (currentResource != null && !isDeleted(currentResource)
+                        && Objects.equals(currentVersion, receipt.getString("textVersion"))
+                        && hash.equals(receipt.getString("sha256"))
+                        && (encoding == null || encoding.equals(receipt.getString("textEncoding")))) {
+                    String pending = etcdService.getOne(publicationPrefix() + receipt.getString("contentObjectId"));
+                    if (pending != null) return finishPublication(JSONObject.parseObject(pending));
+                    return new PublishedResource(currentResource, currentMeta.getString("etag"));
+                }
+                throw new S3ConcurrentWriteException("文件已被更新，请重新加载后再保存");
+            }
             String receiptEncoding = receipt.getString("textEncoding");
             if (encoding != null && !encoding.equals(receiptEncoding == null ? TextEncoding.UTF8 : receiptEncoding)) {
                 throw new S3ConcurrentWriteException("文件已使用不同编码保存，请刷新后重试");
@@ -249,10 +267,11 @@ public class FileService {
         FileObject original = context.query(originalId);
         if (original == null || isDeleted(original)) throw new S3ConcurrentWriteException("文件已被修改或删除，请刷新后重试");
         Path source = Path.of(original.getPath());
-        if (!Files.isRegularFile(source) || !expectedVersion.equals(cc.ginpika.bootfs.kernel.object.ContentHash.sha256(source))) {
+        if (!Files.isRegularFile(source) || !expectedVersion.equals(currentVersion)
+                || (currentMeta != null && currentMeta.getString("sha256") != null && !currentMeta.getString("sha256").equals(sourceHash))) {
             throw new S3ConcurrentWriteException("文件内容已变化，请重新加载后再保存");
         }
-        if (hash.equals(expectedVersion) && !encodingChanged) {
+        if (hash.equals(sourceHash) && !encodingChanged) {
             JSONObject metadata = JSONObject.parseObject(etcdService.getOne("/files/" + originalId + "/meta"));
             return new PublishedResource(original, metadata == null ? null : metadata.getString("etag"));
         }
@@ -275,6 +294,7 @@ public class FileService {
         if (document.containsKey("fileCreatedAt")) resource.setCreatedAt(document.getLong("fileCreatedAt"));
         JSONObject replacement = new JSONObject();
         replacement.put("originalId", originalId); replacement.put("version", expectedVersion);
+        replacement.put("stableUuid", true);
         replacement.put("document", documentRaw);
         replacement.put("metadata", etcdService.getOne("/files/" + originalId + "/meta"));
         replacement.put("resource", JSONObject.from(resource));
@@ -297,6 +317,7 @@ public class FileService {
 
     private PublishedResource finishTextReplacement(JSONObject intent, FileObject resource, Path target) throws IOException {
         JSONObject replacement = intent.getJSONObject("textReplacement");
+        if (replacement.getBooleanValue("stableUuid")) return finishStableTextReplacement(intent, resource, target);
         String originalId = replacement.getString("originalId"), id = resource.getUuid();
         String receiptKey = "/text-replacements/" + originalId + "/" + replacement.getString("version");
         JSONObject receipt = new JSONObject();
@@ -351,6 +372,9 @@ public class FileService {
             if (replicaRaw != null) {
                 JSONObject fork = JSONObject.parseObject(replicaRaw); fork.put("forked", true);
                 expected.put(replicaKey, replicaRaw); puts.put(replicaKey, fork.toJSONString());
+            } else if (resource.getCopyOf() != null) {
+                expected.put(replicaKey, null);
+                puts.put(replicaKey, new JSONObject(Map.of("forked", true, "objectId", resource.getCopyOf())).toJSONString());
             }
             if (!etcdService.compareAndWrite(expected, puts, Set.of())) {
                 committed = etcdService.getOne(receiptKey);
@@ -374,6 +398,89 @@ public class FileService {
         return new PublishedResource(resource, intent.getString("etag"));
     }
 
+    /** Commit a new immutable content pointer without changing the public resource identity. */
+    private PublishedResource finishStableTextReplacement(JSONObject intent, FileObject stagedResource, Path target) throws IOException {
+        JSONObject replacement = intent.getJSONObject("textReplacement");
+        String id = replacement.getString("originalId"), contentId = stagedResource.getUuid();
+        String receiptKey = "/text-replacements/" + id + "/" + replacement.getString("version");
+        String encoding = replacement.getString("textEncoding");
+        String version = cc.ginpika.bootfs.kernel.object.ContentHash.sha256(new ByteArrayInputStream(
+                (contentId + ":" + intent.getString("sha256") + ":" + encoding).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        FileObject resource = JSONObject.from(stagedResource).toJavaObject(FileObject.class);
+        resource.setUuid(id); resource.setContentObjectId(contentId); resource.setPath(target.toString());
+        JSONObject receipt = new JSONObject();
+        receipt.put("uuid", id); receipt.put("contentObjectId", contentId); receipt.put("stableUuid", true);
+        receipt.put("sha256", intent.getString("sha256")); receipt.put("textVersion", version);
+        if (encoding != null) receipt.put("textEncoding", encoding);
+        String committed = etcdService.getOne(receiptKey);
+        if (committed == null) {
+            JSONObject document = JSONObject.parseObject(replacement.getString("document"));
+            document.put("size", resource.getSize()); document.put("updatedAt", LocalDateTime.now());
+            document.put("contentObjectId", contentId); document.put("textVersion", version);
+            if (encoding != null) document.put("textEncoding", encoding);
+            JSONObject meta = JSONObject.parseObject(replacement.getString("metadata"));
+            if (meta == null) meta = new JSONObject();
+            meta.put("size", resource.getSize()); meta.put("etag", intent.getString("etag"));
+            meta.put("sha256", intent.getString("sha256")); meta.put("contentObjectId", contentId);
+            meta.put("textVersion", version); if (encoding != null) meta.put("textEncoding", encoding);
+            meta.put("requiredCopies", Math.max(1, intent.getIntValue("requiredCopies")));
+            JSONObject confirmations = new JSONObject(); confirmations.put(context.uuid, intent.getString("sha256"));
+            JSONObject receipts = intent.getJSONObject("receipts"); if (receipts != null) receipts.forEach(confirmations::put);
+            meta.put("durableNodes", confirmations);
+            JSONObject catalog = JSONObject.from(resource); catalog.remove("path"); catalog.remove("url"); catalog.remove("thumbUrl");
+            Map<String,String> expected = new LinkedHashMap<>(), puts = new LinkedHashMap<>();
+            expected.put(receiptKey, null); expected.put("/tombstones/" + id, null);
+            expected.put("/documents/full-text/" + id, replacement.getString("document"));
+            expected.put("/files/" + id + "/meta", replacement.getString("metadata"));
+            puts.put(receiptKey, receipt.toJSONString());
+            puts.put("/files/" + id + "/meta", meta.toJSONString());
+            puts.put("/documents/full-text/" + id, document.toJSONString());
+            puts.put("/nodes/" + context.uuid + "/catalog/" + id, catalog.toJSONString());
+            puts.put("/resource-content/" + context.uuid + "/" + id + "/" + contentId, "content");
+            // All S3 aliases retain their logical identity while size, ETag and modification time change.
+            etcdService.scan("/s3/").forEach((key, raw) -> {
+                S3ObjectMeta binding = JSONObject.parseObject(raw, S3ObjectMeta.class);
+                if (!id.equals(binding.getUuid())) return;
+                expected.put(key, raw);
+                puts.put(key, JSONObject.toJSONString(new S3ObjectMeta(id, resource.getSize(), intent.getString("etag"),
+                        System.currentTimeMillis(), binding.getKey(), binding.getContentType())));
+            });
+            String replicaKey = "/replica-sources/" + id, replicaRaw = etcdService.getOne(replicaKey);
+            if (replicaRaw != null) {
+                JSONObject fork = JSONObject.parseObject(replicaRaw); fork.put("forked", true);
+                expected.put(replicaKey, replicaRaw); puts.put(replicaKey, fork.toJSONString());
+            } else if (resource.getCopyOf() != null) {
+                expected.put(replicaKey, null);
+                puts.put(replicaKey, new JSONObject(Map.of("forked", true, "objectId", resource.getCopyOf())).toJSONString());
+            }
+            if (!etcdService.compareAndWrite(expected, puts, Set.of())) {
+                committed = etcdService.getOne(receiptKey);
+                if (committed == null || !contentId.equals(JSONObject.parseObject(committed).getString("contentObjectId"))) {
+                    discardPublication(contentId, intent);
+                    throw new S3ConcurrentWriteException("文件内容或元数据已变化，请重新加载后再保存");
+                }
+            }
+        } else if (!contentId.equals(JSONObject.parseObject(committed).getString("contentObjectId"))) {
+            discardPublication(contentId, intent);
+            throw new S3ConcurrentWriteException("文件已被其他操作更新，请重新加载后再保存");
+        }
+        // A later edit may have committed before an uncertain earlier response is recovered.
+        String live = etcdService.getOne("/files/" + id + "/meta");
+        if (live != null && contentId.equals(JSONObject.parseObject(live).getString("contentObjectId"))
+                && etcdService.getOne("/tombstones/" + id) == null) {
+            context.STORAGE.put(id, resource);
+            meiliSearchService.visibleRevision();
+            etcdService.delete(replicationPrefix() + id);
+            fileTransferService.publicationCommitted(id);
+            try { replication(target.toFile(), id, resource.getFileName()); }
+            catch (RuntimeException optional) { log.warn("Text revision replication needs retry for {}", id, optional); }
+        }
+        etcdService.delete(publicationPrefix() + contentId);
+        FileObject current = context.query(id);
+        if (current == null || isDeleted(current)) throw new IOException("Resource was deleted after its text save");
+        return new PublishedResource(current, JSONObject.parseObject(live).getString("etag"));
+    }
+
     private String publicationPrefix() { return "/pending-publications/" + context.uuid + "/"; }
 
     private synchronized PublishedResource finishPublication(JSONObject intent) throws IOException {
@@ -383,6 +490,20 @@ public class FileService {
         Path data = Path.of(tfsConfig.getPathPrefix());
         Path target = data.resolve(uuid);
         requested.setPath(target.toString());
+        JSONObject textReplacement = intent.getJSONObject("textReplacement");
+        if (textReplacement != null && !textReplacement.getBooleanValue("stableUuid")
+                && etcdService.getOne("/tombstones/" + textReplacement.getString("originalId")) == null
+                && etcdService.getOne("/text-replacements/" + textReplacement.getString("originalId") + "/" + textReplacement.getString("version")) == null) {
+            // Upgrade an uncommitted edit journal created by the older UUID-replacement flow.
+            textReplacement.put("stableUuid", true);
+            intent.put("receipts", new JSONObject());
+            etcdService.put(publicationPrefix() + uuid, intent.toJSONString());
+        }
+        if (textReplacement != null && textReplacement.getBooleanValue("stableUuid")
+                && etcdService.getOne("/tombstones/" + textReplacement.getString("originalId")) != null) {
+            discardPublication(uuid, intent);
+            throw new IOException("Resource was deleted before its text save completed");
+        }
         if (isDeleted(requested)) {
             discardPublication(uuid, intent);
             throw new IOException("Resource was deleted before publication completed");
@@ -474,7 +595,14 @@ public class FileService {
     private void ensureDurability(JSONObject intent, FileObject resource, Path target) throws IOException {
         int required = Math.max(1, intent.getIntValue("requiredCopies"));
         if (required == 1) return;
-        String id = resource.getUuid(), hash = intent.getString("sha256");
+        String publicationId = resource.getUuid(), id = publicationId, hash = intent.getString("sha256");
+        JSONObject textReplacement = intent.getJSONObject("textReplacement");
+        FileObject pendingResource = null;
+        if (textReplacement != null && textReplacement.getBooleanValue("stableUuid")) {
+            id = textReplacement.getString("originalId");
+            pendingResource = JSONObject.from(resource).toJavaObject(FileObject.class);
+            pendingResource.setUuid(id); pendingResource.setContentObjectId(publicationId);
+        }
         if (hash == null || Files.size(target) != resource.getSize()
                 || !hash.equals(cc.ginpika.bootfs.kernel.object.ContentHash.sha256(target))) {
             throw new IOException("Local immutable bytes failed verification before publication");
@@ -486,7 +614,8 @@ public class FileService {
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(prepareTimeoutMs);
         List<Map.Entry<String, String>> candidates = new ArrayList<>(etcdService.getNodesWithKeys().entrySet());
         candidates.removeIf(node -> node.getKey().equals(context.uuid) || stripSlash(node.getValue()).equals(stripSlash(tfsConfig.getWebEntrypoint())));
-        candidates.sort(Comparator.comparing(node -> UUID.nameUUIDFromBytes((id + ":" + node.getKey()).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString()));
+        String placementId = id;
+        candidates.sort(Comparator.comparing(node -> UUID.nameUUIDFromBytes((placementId + ":" + node.getKey()).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString()));
         Set<String> attemptedEndpoints = new HashSet<>();
         Exception last = null;
         for (Map.Entry<String, String> candidate : candidates) {
@@ -495,15 +624,17 @@ public class FileService {
             long remaining = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
             if (remaining <= 0) break;
             try {
-                JSONObject receipt = fileTransferService.prepareRemote(target.toFile(), id, resource.getFileName(), hash,
-                        NodeObject.builder().url(candidate.getValue()).build(),
-                        (int)Math.min(remaining, Math.max(1,prepareTimeoutMs / Math.max(1,candidates.size()))));
+                NodeObject node = NodeObject.builder().url(candidate.getValue()).build();
+                int timeout = (int)Math.min(remaining, Math.max(1,prepareTimeoutMs / Math.max(1,candidates.size())));
+                JSONObject receipt = pendingResource == null
+                        ? fileTransferService.prepareRemote(target.toFile(), id, resource.getFileName(), hash, node, timeout)
+                        : fileTransferService.prepareRemote(target.toFile(), id, resource.getFileName(), hash, node, timeout, pendingResource);
                 if (receipt == null || !candidate.getKey().equals(receipt.getString("nodeId"))
                         || !id.equals(receipt.getString("objectId")) || !hash.equals(receipt.getString("sha256"))
                         || resource.getSize() != receipt.getLongValue("size")) throw new IOException("Replica acknowledgement does not match node and content");
                 receipts.put(candidate.getKey(), receipt);
                 // A lost reply here retains the same content identity and is safely retried.
-                etcdService.put(publicationPrefix() + id, intent.toJSONString());
+                etcdService.put(publicationPrefix() + publicationId, intent.toJSONString());
             } catch (Exception failure) { last = failure; }
         }
         if (receipts.size() + 1 < required) {
@@ -730,6 +861,13 @@ public class FileService {
         if (uuid == null || !uuid.matches("[A-Za-z0-9_-]+")) throw new IOException("Invalid cleanup identity");
         Path data = Path.of(tfsConfig.getPathPrefix());
         Files.deleteIfExists(data.resolve(uuid));
+        String contentPrefix = "/resource-content/" + context.uuid + "/" + uuid + "/";
+        for (String key : etcdService.scan(contentPrefix).keySet()) {
+            String contentId = key.substring(contentPrefix.length());
+            if (!contentId.matches("[A-Za-z0-9_-]+")) throw new IOException("Invalid content cleanup identity");
+            Files.deleteIfExists(data.resolve(contentId));
+            etcdService.delete(key);
+        }
         Path thumb = thumbnailService.thumbPath(uuid);
         if (Files.isSymbolicLink(thumb.getParent())) throw new IOException("Thumbnail root must not be a symlink");
         Files.deleteIfExists(thumb);
@@ -853,9 +991,17 @@ public class FileService {
 
     private Set<String> replicaNodes(String fileId) {
         Set<String> nodes = new HashSet<>();
-        etcdService.scan("/replication-receipts/"+context.uuid+"/"+fileId+"/").values().forEach(raw -> nodes.add(stripSlash(JSONObject.parseObject(raw).getString("url"))));
+        String metaRaw = etcdService.getOne("/files/" + fileId + "/meta");
+        String hash = metaRaw == null ? null : JSONObject.parseObject(metaRaw).getString("sha256");
+        etcdService.scan("/replication-receipts/"+context.uuid+"/"+fileId+"/").values().forEach(raw -> {
+            JSONObject receipt = JSONObject.parseObject(raw);
+            if (hash == null || (receipt.getJSONObject("receipt") != null && hash.equals(receipt.getJSONObject("receipt").getString("sha256"))))
+                nodes.add(stripSlash(receipt.getString("url")));
+        });
         etcdService.scan("/files/" + fileId + "/replicas/").forEach((key, value) -> {
             if (!key.endsWith("/meta")) {
+                String replicaMeta = etcdService.getOne(key + "/meta");
+                if (hash != null && (replicaMeta == null || !hash.equals(JSONObject.parseObject(replicaMeta).getString("sha256")))) return;
                 int path = value.lastIndexOf("/f/");
                 if (path > 0 && !stripSlash(value.substring(0, path)).equals(stripSlash(tfsConfig.getWebEntrypoint()))) {
                     nodes.add(stripSlash(value.substring(0, path)));
@@ -866,11 +1012,21 @@ public class FileService {
     }
 
     public Object[] download(String uuid, HttpServletRequest request) throws IOException {
+        for (int attempt = 0; attempt < 4; attempt++) {
         FileObject target = context.query(uuid);
         if (target == null || target.getPath() == null || isDeleted(target)) return null;
+        String raw = etcdService.getOne("/files/" + uuid + "/meta");
+        JSONObject meta = raw == null ? null : JSONObject.parseObject(raw);
+        String contentId = target.getContentObjectId() == null ? uuid : target.getContentObjectId();
+        String committedId = meta == null ? contentId : meta.getString("contentObjectId");
+        if (committedId == null) committedId = uuid;
+        if (!contentId.equals(committedId)) continue;
         Resource resource = new FileSystemResource(target.getPath());
         if (!resource.exists()) return null;
-        return new Object[]{resource, target.getFileName(), Long.toString(resource.contentLength())};
+        return new Object[]{resource, target.getFileName(), Long.toString(resource.contentLength()),
+                meta == null ? null : meta.getString("etag"), meta != null && meta.getString("textVersion") != null};
+        }
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "File is being updated; retry the download");
     }
 
     private static String filename(String name) { return name == null || name.isBlank() ? "unnamed" : name; }

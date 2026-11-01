@@ -81,6 +81,13 @@ public class ClusterProxyService {
         }
     }
 
+    public String getTextEditorNodeUrl(String uuid) {
+        if (context.query(uuid) != null) return null;
+        if (federation == null) return getRemoteNodeUrl(uuid);
+        JSONObject owner = federation.locateTextOwner(uuid);
+        return owner == null ? null : owner.getString("url");
+    }
+
     /**
      * 代理 HTTP 请求到远程节点，将响应（状态码、header、body）原样返回。
      * 适用于 /api/file/** 等管理端 JSON/二进制 API 的跨节点转发。

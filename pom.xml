@@ -17,6 +17,11 @@
 		<java.version>17</java.version>
 	</properties>
 	<dependencies>
+		<!-- Used explicitly with SafeConstructor for bounded Clash subscription parsing. -->
+		<dependency>
+			<groupId>org.yaml</groupId>
+			<artifactId>snakeyaml</artifactId>
+		</dependency>
 		<!-- Pin a transport bundle with the unconditional gRPC cumulator fix; shaded Netty
 		     version detection can otherwise pick Spring's older unshaded resource. -->
 		<dependency>

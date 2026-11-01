@@ -32,8 +32,19 @@ public class FederationService {
         return result;
     }
     public JSONObject locate(String id) {
+        return locate(id, "data/resource/");
+    }
+    /** A completed text edit retains its receipt on the owner so an uncertain save can be retried. */
+    public JSONObject localTextOwner(String id) {
+        boolean found = localResource(id).getBooleanValue("found") || !metadata.scan("/text-replacements/" + id + "/").isEmpty();
+        return new JSONObject(Map.of("found", found, "nodeId", context.uuid));
+    }
+    public JSONObject locateTextOwner(String id) {
+        return locate(id, "data/text-owner/");
+    }
+    private JSONObject locate(String id, String route) {
         if (id==null || !id.matches("[A-Za-z0-9_-]+")) throw new IllegalArgumentException("Invalid resource identity");
-        Map<String,JSONObject> replies=fanout((node,url) -> call(url,"data/resource/"+id,null));
+        Map<String,JSONObject> replies=fanout((node,url) -> call(url,route+id,null));
         List<JSONObject> found=new ArrayList<>();
         replies.forEach((node,result) -> { if (result.getBooleanValue("found")) { result.put("url",peers().get(node)); found.add(result); } });
         if (found.size()>1) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,"Resource UUID exists on multiple nodes; use the owning node URL");

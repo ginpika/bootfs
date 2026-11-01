@@ -70,12 +70,17 @@ public class ReverseProxyService {
             JSONObject remote=federation.locate(uuid);
             if (remote!=null) { meta=remote.getString("metadata"); url=remote.getString("url")+"/f/"+uuid; }
         }
-        if (meta == null) {
+        if (meta == null || url == null) {
             response.setStatus(404);
             log.info("uuid metaInfo 不存在", uuid);
             return;
         }
         JSONObject metaJson = JSONObject.parseObject(meta);
+        String extension = metaJson.getString("ext");
+        if (extension != null && Set.of(".yaml", ".yml").contains(extension.toLowerCase(Locale.ROOT))) {
+            proxyYaml(response, request, url);
+            return;
+        }
         // if (metaJson.getLong("size") > 2048000) {
         //     log.info("{} size > 2048000, no reverse proxy", uuid);
         //     return;
@@ -114,6 +119,33 @@ public class ReverseProxyService {
         } catch (IOException e) {
             log.error("ReverseProxy image failure: {}", url, e);
             throw new RuntimeException(e);
+        }
+    }
+
+    private void proxyYaml(HttpServletResponse response, HttpServletRequest request, String url) {
+        try (CloseableHttpClient client = HttpClientBuilder.create().disableRedirectHandling()
+                .setDefaultRequestConfig(org.apache.http.client.config.RequestConfig.custom()
+                        .setConnectTimeout(2000).setSocketTimeout(5000).build()).build()) {
+            HttpGet upstream = new HttpGet(url);
+            // Range and conditional headers describe the original bytes, never the converted subscription.
+            applyProxyHeaders(upstream, request, "application/yaml;charset=UTF-8", false);
+            try (CloseableHttpResponse result = client.execute(upstream)) {
+                response.setStatus(result.getStatusLine().getStatusCode());
+                response.setContentType("application/yaml;charset=UTF-8");
+                response.setHeader("Cache-Control", "no-store");
+                for (String name : List.of("ETag", "Last-Modified", "Content-Range", "Accept-Ranges")) {
+                    Header header = result.getFirstHeader(name);
+                    if (header != null) response.setHeader(name, header.getValue());
+                }
+                HttpEntity entity = result.getEntity();
+                if (entity != null) {
+                    try (InputStream input = entity.getContent()) { input.transferTo(response.getOutputStream()); }
+                }
+            }
+        } catch (ClientAbortException ignored) {
+        } catch (IOException failure) {
+            log.warn("YAML reverse proxy failed for {}", url);
+            if (!response.isCommitted()) response.setStatus(502);
         }
     }
 

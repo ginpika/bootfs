@@ -375,6 +375,7 @@ function initializeEventListeners() {
     
     // Keyboard shortcuts
     document.addEventListener('keydown', function(e) {
+        if (TextFileEditor.isOpen()) return;
         // Delete: Delete selected
         if (e.key === 'Delete' && selectedFiles.size > 0) {
             e.preventDefault();
@@ -817,6 +818,11 @@ function renderFileList(data) {
             showRenameModal(uuid, file.fileName);
         });
 
+        row.querySelector('.list-edit-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            TextFileEditor.open(file);
+        });
+
         const previewBtn = row.querySelector('.list-preview-btn');
         if (previewBtn && (isImage(file) || isVideo(file) || isAudio(file))) {
             previewBtn.addEventListener('click', (e) => {
@@ -1054,6 +1060,8 @@ function createListRow(file) {
     const isImageFile = isImage(file);
     const isVideoFile = isVideo(file);
     const isAudioFile = isAudio(file);
+    const textType = TextFileEditor.fileType(file.fileName);
+    const isClashFile = ClashFiles.isConfig(file);
     const tags = file.tags || [];
     
     return `
@@ -1064,7 +1072,7 @@ function createListRow(file) {
             <td class="px-6 py-4">
                 <div class="flex items-center">
                     <div class="list-thumbnail flex-shrink-0 h-10 w-10 overflow-hidden theme-rounded-lg">
-                        ${isImageFile ? `
+                        ${isClashFile ? ClashFiles.icon() : textType ? TextFileEditor.icon(textType) : isImageFile ? `
                             ${hasThumb(file) ? `
                                 <img class="h-10 w-10 theme-rounded-lg object-cover"
                                      src="${getThumbUrl(file)}"
@@ -1101,7 +1109,7 @@ function createListRow(file) {
                         `}
                     </div>
                     <div class="ml-4">
-                        <div class="text-sm font-medium" style="color: var(--color-text-primary);">${file.fileName}</div>
+                        <div class="text-sm font-medium" style="color: var(--color-text-primary);">${escapeFileName(file.fileName || '')}</div>
                         <div class="text-xs" style="color: var(--color-text-muted);">${file.uuid}</div>
                     </div>
                 </div>
@@ -1139,7 +1147,7 @@ function createListRow(file) {
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                 <div class="flex space-x-2">
-                    <button class="list-preview-btn theme-text-btn" style="color: var(--color-accent-primary); ${(isImageFile || isVideoFile || isAudioFile) ? '' : 'visibility: hidden;'}">${isImageFile ? '预览' : '播放'}</button>
+                    ${textType ? '<button class="list-edit-btn theme-text-btn" style="color: var(--color-accent-primary);">编辑</button>' : `<button class="list-preview-btn theme-text-btn" style="color: var(--color-accent-primary); ${(isImageFile || isVideoFile || isAudioFile) ? '' : 'visibility: hidden;'}">${isImageFile ? '预览' : '播放'}</button>`}
                     <button class="list-detail-btn theme-text-btn" style="color: var(--color-text-secondary);">详情</button>
                     <button class="list-rename-btn theme-text-btn" style="color: var(--color-text-secondary);">重命名</button>
                     <a href="/f/${file.uuid}" download class="theme-text-btn" style="color: var(--color-accent-primary);">下载</a>
@@ -2057,15 +2065,20 @@ function refreshFileList() {
 }
 
 // ======================== File Detail Modal ========================
+let fileDetailSession = 0;
 
 /**
  * 显示文件详情弹窗，异步加载详情数据
  */
 function showFileDetail(uuid) {
+    const session = ++fileDetailSession;
     const modal = document.getElementById('fileDetailModal');
     const loading = document.getElementById('fileDetailLoading');
     const content = document.getElementById('fileDetailContent');
     const mediaSection = document.getElementById('detailMediaSection');
+    ClashFiles.reset();
+    document.getElementById('fileDetailError').classList.add('hidden');
+    content.classList.remove('hidden');
 
     // 显示弹窗，展示加载层
     modal.classList.remove('hidden');
@@ -2083,13 +2096,19 @@ function showFileDetail(uuid) {
             return res.json();
         })
         .then(data => {
+            if (session !== fileDetailSession) return;
             renderFileDetail(data);
         })
         .catch(err => {
-            content.innerHTML = `<div class="text-center py-8 theme-page-text-muted">加载失败: ${err.message}</div>`;
+            if (session !== fileDetailSession) return;
+            const error = document.getElementById('fileDetailError');
+            error.textContent = `加载失败: ${err.message}`;
+            error.classList.remove('hidden');
+            content.classList.add('hidden');
             showToast('文件详情加载失败', 'error');
         })
         .finally(() => {
+            if (session !== fileDetailSession) return;
             loading.classList.add('hidden');
             content.style.opacity = '1';
         });
@@ -2099,6 +2118,7 @@ function showFileDetail(uuid) {
  * 渲染文件详情内容
  */
 function renderFileDetail(data) {
+    ClashFiles.load(data);
     // 文件名（含 title 用于截断时 tooltip）
     const nameEl = document.getElementById('detailFileName');
     nameEl.textContent = data.fileName || '-';
@@ -2384,6 +2404,8 @@ function formatChannels(channels) {
 function closeFileDetailModal(event) {
     // 如果点击了弹窗外部背景，关闭
     if (event && event.target !== document.getElementById('fileDetailModal')) return;
+    ++fileDetailSession;
+    ClashFiles.reset();
     document.getElementById('fileDetailModal').classList.add('hidden');
 }
 
@@ -2559,6 +2581,10 @@ async function confirmRename() {
 }
 
 // Utility functions
+function escapeFileName(value) {
+    return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+}
+
 function isImage(file) {
     if (!file || !file.fileName) return false;
     const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico', 'tiff', 'tif'];

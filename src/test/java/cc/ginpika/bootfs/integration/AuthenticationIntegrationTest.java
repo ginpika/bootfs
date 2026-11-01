@@ -24,6 +24,11 @@ class AuthenticationIntegrationTest {
         mvc.perform(put("/f")).andExpect(status().is3xxRedirection());
         mvc.perform(put("/comic")).andExpect(status().is3xxRedirection());
         mvc.perform(put("/api/file/resource/tags").contentType("application/json").content("[]")).andExpect(status().is3xxRedirection());
+        mvc.perform(get("/api/file/resource/text")).andExpect(status().is3xxRedirection());
+        mvc.perform(get("/api/file/resource/clash")).andExpect(status().is3xxRedirection());
+        mvc.perform(post("/api/file/resource/clash/latency")).andExpect(status().is3xxRedirection());
+        mvc.perform(put("/api/file/resource/text").contentType("application/json").content("{\"content\":\"test\",\"version\":\"" + "a".repeat(64) + "\"}"))
+                .andExpect(status().is3xxRedirection());
         mvc.perform(post("/hls/convert").param("uuid","resource")).andExpect(status().is3xxRedirection());
     }
     @Test void transferTokenDoesNotAuthorizeOtherMutationsAndHlsReadsRemainPublic() throws Exception {
@@ -32,6 +37,15 @@ class AuthenticationIntegrationTest {
         mvc.perform(put("/t").contentType("multipart/form-data").header("X-BootFS-Cluster-Token","test-cluster-token"))
                 .andExpect(status().isBadRequest());
         mvc.perform(put("/f").header("X-BootFS-Cluster-Token","test-cluster-token"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/file/resource/text").header("X-BootFS-Cluster-Token","test-cluster-token"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/file/resource/clash").header("X-BootFS-Cluster-Token","test-cluster-token"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/file/resource/clash/latency").header("X-BootFS-Cluster-Token","test-cluster-token"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(put("/api/file/resource/text").header("X-BootFS-Cluster-Token","test-cluster-token")
+                .contentType("application/json").content("{}"))
                 .andExpect(status().isUnauthorized());
         mvc.perform(get("/hls/missing/stream.m3u8")).andExpect(status().isNotFound());
     }

@@ -13,6 +13,7 @@ public class FederationDataController {
     public FederationDataController(FederationService federation,cc.ginpika.bootfs.service.FileTransferService replicas,cc.ginpika.bootfs.kernel.metadata.MetadataStore metadata) { this.federation=federation; this.replicas=replicas; this.metadata=metadata; }
     @PostMapping("/search") public JSONObject search(@RequestBody JSONObject request) { return federation.localSearch(request); }
     @GetMapping("/resource/{id}") public JSONObject resource(@PathVariable String id) { return federation.localResource(id); }
+    @GetMapping("/text-owner/{id}") public JSONObject textOwner(@PathVariable String id) { return federation.localTextOwner(id); }
     @GetMapping("/replica-source/{id}") public JSONObject replicaSource(@PathVariable String id) {
         if (metadata.get("/tombstones/"+id)!=null) return new JSONObject(java.util.Map.of("deleted",true));
         JSONObject response=new JSONObject(java.util.Map.of("deleted",false));

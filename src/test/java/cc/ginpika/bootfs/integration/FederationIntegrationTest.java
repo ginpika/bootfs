@@ -53,6 +53,72 @@ class FederationIntegrationTest {
     void flush() throws Exception { for(int i=0;i<3;i++) for(Node n:nodes) if(n.app!=null) n.store().advance(); }
     @AfterEach void close() { for(Node n:nodes) n.close(); }
 
+    @Test @Timeout(90) void clashDetailsAndLatencyRunAtTheOwnerAndPublicSubscriptionKeepsItsFormat() throws Exception {
+        try (var tcp = new java.net.ServerSocket(0, 8, java.net.InetAddress.getLoopbackAddress())) {
+            Node owner = new Node("clash-owner", false), frontend = new Node("clash-frontend", false);
+            join(frontend, owner);
+            String yaml = "proxies:\n"
+                    + "  - {name: Local VLESS, type: vless, server: 127.0.0.1, port: " + tcp.getLocalPort()
+                    + ", uuid: 11111111-1111-4111-8111-111111111111}\n"
+                    + "  - {name: Local SS, type: ss, server: 127.0.0.1, port: " + tcp.getLocalPort()
+                    + ", cipher: aes-128-gcm, password: private-test-password}\n";
+            String id = owner.upload("clash.yaml", yaml);
+            owner.bean(MeiliSearchService.class).updateDocumentTags("full-text", id,
+                    List.of(cc.ginpika.bootfs.domain.dto.Tag.manual("clash")));
+            owner.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(true);
+            assertEquals(302, request(owner, "GET", "/api/file/" + id + "/clash", null, null).statusCode());
+            assertEquals(302, request(owner, "POST", "/api/file/" + id + "/clash/latency", null, null).statusCode());
+            var details = request(frontend, "GET", "/api/file/" + id + "/clash", null, null);
+            assertEquals(200, details.statusCode(), details.body());
+            assertEquals(2, JSON.parseObject(details.body()).getJSONArray("nodes").size());
+            assertFalse(details.body().contains("private-test-password"));
+            assertFalse(details.body().contains("11111111-1111-4111-8111-111111111111"));
+            var latency = request(frontend, "POST", "/api/file/" + id + "/clash/latency?offset=0&limit=8", null, null);
+            assertEquals(200, latency.statusCode(), latency.body());
+            var measurements = JSON.parseObject(latency.body()).getJSONArray("nodes");
+            assertEquals(2, measurements.size());
+            assertEquals("ok", measurements.getJSONObject(0).getString("status"));
+            assertTrue(measurements.getJSONObject(0).getLongValue("latencyMs") > 0);
+            assertEquals(measurements.getJSONObject(0).getLongValue("latencyMs"), measurements.getJSONObject(1).getLongValue("latencyMs"));
+            var redirected = request(frontend, "GET", "/p/" + id + "?p=vless", null, null);
+            assertEquals(302, redirected.statusCode());
+            assertEquals(owner.url + "/p/" + id + "?p=vless", redirected.headers().firstValue("Location").orElseThrow());
+            var subscription = request(owner, "GET", "/p/" + id + "?p=vless", null, null);
+            assertEquals(200, subscription.statusCode(), subscription.body());
+            String links = new String(Base64.getDecoder().decode(subscription.body()), java.nio.charset.StandardCharsets.UTF_8);
+            assertTrue(links.contains("vless://")); assertTrue(links.contains("ss://"));
+            assertEquals(yaml, request(owner, "GET", "/p/" + id, null, null).body());
+            assertEquals(yaml, request(frontend, "GET", "/p/" + id, null, null).body());
+        }
+    }
+
+    @Test @Timeout(90) void textEditingUsesSignedOwnerRequestsAndRetriesAfterTheOriginalWasRetired() throws Exception {
+        Node owner = new Node("text-owner", false), frontend = new Node("text-frontend", false);
+        join(frontend, owner);
+        String id = owner.upload("settings.yaml", "port: 80\n");
+        owner.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(true);
+        assertEquals(302, request(owner, "GET", "/api/file/" + id + "/text", null, null).statusCode());
+        assertEquals(302, request(owner, "PUT", "/api/file/" + id + "/text", "{}", null).statusCode());
+        String token = frontend.store().tokenFor(owner.url);
+        assertEquals(401, request(owner, "GET", "/api/file/" + id + "/text", null, token).statusCode());
+        assertEquals(401, request(owner, "PUT", "/api/file/" + id + "/text", "{}", token).statusCode());
+        var read = request(frontend, "GET", "/api/file/" + id + "/text", null, null);
+        assertEquals(200, read.statusCode(), read.body());
+        JSONObject original = JSON.parseObject(read.body());
+        assertEquals("port: 80\n", original.getString("content"));
+        String body = new JSONObject(Map.of("content", "port: 443\n", "version", original.getString("version"))).toJSONString();
+        var saved = request(frontend, "PUT", "/api/file/" + id + "/text", body, null);
+        assertEquals(200, saved.statusCode(), saved.body());
+        String replacement = JSON.parseObject(saved.body()).getString("uuid");
+        assertNotEquals(id, replacement); assertNull(owner.bean(Context.class).query(id));
+        var retry = request(frontend, "PUT", "/api/file/" + id + "/text", body, null);
+        assertEquals(200, retry.statusCode(), retry.body());
+        assertEquals(replacement, JSON.parseObject(retry.body()).getString("uuid"));
+        String stale = new JSONObject(Map.of("content", "port: 8080\n", "version", original.getString("version"))).toJSONString();
+        assertEquals(409, request(frontend, "PUT", "/api/file/" + id + "/text", stale, null).statusCode());
+        assertEquals("port: 443\n", owner.bean(TextFileService.class).read(replacement).content());
+    }
+
     @Test @Timeout(90) void federatedQueryAndMutationRunAtTheOwnerAndDepartingNodeKeepsAllOfItsData() throws Exception {
         Node a=new Node("alpha",false),x=new Node("portable",false),b=new Node("beta",false);
         String own=x.upload("own.txt","portable original"),other=a.upload("other.txt","alpha original"); b.upload("b.txt","beta original");

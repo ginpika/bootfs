@@ -141,6 +141,11 @@ public class FileService {
 
     private synchronized PublishedResource publish(InputStream input, String name, String uuid, String parent,
                                       boolean album, boolean defaultS3Binding, JSONObject s3Binding) throws IOException {
+        return publish(input, name, uuid, parent, album, defaultS3Binding, s3Binding, null);
+    }
+
+    private synchronized PublishedResource publish(InputStream input, String name, String uuid, String parent,
+                                      boolean album, boolean defaultS3Binding, JSONObject s3Binding, JSONObject textReplacement) throws IOException {
         Path data = Path.of(tfsConfig.getPathPrefix());
         Files.createDirectories(data);
         Path staged = Files.createTempFile(data, ".upload-", ".part");
@@ -184,6 +189,10 @@ public class FileService {
             resource.setCreatedAt(System.currentTimeMillis());
             resource.setParent(parent);
             if (album) resource.setAlbumAvailable("1");
+            if (textReplacement != null) {
+                resource = textReplacement.getJSONObject("resource").toJavaObject(FileObject.class);
+                resource.setUuid(uuid); resource.setSize(size); resource.setPath(data.resolve(uuid).toString());
+            }
             JSONObject intent = new JSONObject();
             JSONObject persisted = JSONObject.from(resource); persisted.remove("path");
             intent.put("file", persisted);
@@ -193,6 +202,7 @@ public class FileService {
             intent.put("requiredCopies", "replicated".equals(writePolicy) ? configuredCopies() : 1);
             intent.put("receipts", new JSONObject());
             if (s3Binding != null) intent.put("s3Binding", s3Binding);
+            if (textReplacement != null) intent.put("textReplacement", textReplacement);
             // Mark before the RPC: a timeout can mean this intent has already committed.
             intentAttempted = true;
             etcdService.put(publicationPrefix() + uuid, intent.toJSONString());
@@ -209,6 +219,144 @@ public class FileService {
         } finally {
             if (!intentAttempted) Files.deleteIfExists(staged);
         }
+    }
+
+    /** Text edits publish a new immutable generation, then switch metadata and protocol bindings together. */
+    public synchronized PublishedResource replaceText(String originalId, String expectedVersion, byte[] content) throws IOException {
+        String hash = cc.ginpika.bootfs.kernel.object.ContentHash.sha256(new ByteArrayInputStream(content));
+        String receiptKey = "/text-replacements/" + originalId + "/" + expectedVersion;
+        String receiptRaw = etcdService.getOne(receiptKey);
+        if (receiptRaw != null) {
+            JSONObject receipt = JSONObject.parseObject(receiptRaw);
+            String pending = etcdService.getOne(publicationPrefix() + receipt.getString("uuid"));
+            if (hash.equals(receipt.getString("sha256")) && pending != null) return finishPublication(JSONObject.parseObject(pending));
+            FileObject replacement = context.query(receipt.getString("uuid"));
+            if (hash.equals(receipt.getString("sha256")) && replacement != null && !isDeleted(replacement)) {
+                JSONObject metadata = JSONObject.parseObject(etcdService.getOne("/files/" + replacement.getUuid() + "/meta"));
+                return new PublishedResource(replacement, metadata.getString("etag"));
+            }
+            throw new S3ConcurrentWriteException("文件已保存为新版本，请刷新后重试");
+        }
+        FileObject original = context.query(originalId);
+        if (original == null || isDeleted(original)) throw new S3ConcurrentWriteException("文件已被修改或删除，请刷新后重试");
+        Path source = Path.of(original.getPath());
+        if (!Files.isRegularFile(source) || !expectedVersion.equals(cc.ginpika.bootfs.kernel.object.ContentHash.sha256(source))) {
+            throw new S3ConcurrentWriteException("文件内容已变化，请重新加载后再保存");
+        }
+        if (hash.equals(expectedVersion)) {
+            JSONObject metadata = JSONObject.parseObject(etcdService.getOne("/files/" + originalId + "/meta"));
+            return new PublishedResource(original, metadata == null ? null : metadata.getString("etag"));
+        }
+        String documentRaw = etcdService.getOne("/documents/full-text/" + originalId);
+        if (documentRaw == null) throw new IOException("缺少文件元数据，无法保存");
+        JSONObject document = JSONObject.parseObject(documentRaw);
+        FileObject resource = JSONObject.from(original).toJavaObject(FileObject.class);
+        String currentName = document.getString("fileName");
+        if (currentName == null) currentName = document.getString("title");
+        if (currentName != null) resource.setFileName(currentName);
+        if (!TextFileService.editableName(resource.getFileName())) throw new S3ConcurrentWriteException("文件类型已变化，请重新加载后再保存");
+        resource.setTags(meiliSearchService.getDocumentTags("full-text", originalId));
+        resource.setIsPublicAccess(document.getString("isPublicAccess"));
+        if (document.containsKey("nsfw")) resource.setNsfw(document.getString("nsfw"));
+        if (document.containsKey("hlsAvailable")) resource.setHlsAvailable(document.getString("hlsAvailable"));
+        if (document.containsKey("thumbAvailable")) resource.setThumbAvailable(document.getString("thumbAvailable"));
+        if (document.containsKey("albumAvailable")) resource.setAlbumAvailable(document.getString("albumAvailable"));
+        if (document.containsKey("parent")) resource.setParent(document.getString("parent"));
+        if (document.containsKey("copyOf")) resource.setCopyOf(document.getString("copyOf"));
+        if (document.containsKey("fileCreatedAt")) resource.setCreatedAt(document.getLong("fileCreatedAt"));
+        JSONObject replacement = new JSONObject();
+        replacement.put("originalId", originalId); replacement.put("version", expectedVersion);
+        replacement.put("document", documentRaw);
+        replacement.put("metadata", etcdService.getOne("/files/" + originalId + "/meta"));
+        replacement.put("resource", JSONObject.from(resource));
+        // Deterministic identity makes retry after an uncertain publication resume the same generation.
+        String baseId = UUID.nameUUIDFromBytes(("text:" + originalId + ":" + expectedVersion + ":" + hash)
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+        String id = resolveUploadId(baseId);
+        while (etcdService.getOne("/tombstones/" + id) != null) {
+            // A definite CAS conflict retires its attempted generation. A later retry gets a fresh
+            // identity while uncertain attempts still resolve to their original durable journal.
+            String aliasKey = "/upload-aliases/" + context.uuid + "/" + baseId;
+            String alias = etcdService.getOne(aliasKey);
+            etcdService.compareAndSet(aliasKey, alias, IdGenerator.getUniqueId());
+            id = resolveUploadId(baseId);
+        }
+        return publish(new ByteArrayInputStream(content), resource.getFileName(), id, resource.getParent(), false, false, null, replacement);
+    }
+
+    private PublishedResource finishTextReplacement(JSONObject intent, FileObject resource, Path target) throws IOException {
+        JSONObject replacement = intent.getJSONObject("textReplacement");
+        String originalId = replacement.getString("originalId"), id = resource.getUuid();
+        String receiptKey = "/text-replacements/" + originalId + "/" + replacement.getString("version");
+        JSONObject receipt = new JSONObject();
+        receipt.put("uuid", id); receipt.put("sha256", intent.getString("sha256"));
+        String committed = etcdService.getOne(receiptKey);
+        if (committed == null) {
+            Map<String, String> expected = new LinkedHashMap<>();
+            expected.put(receiptKey, null);
+            expected.put("/tombstones/" + originalId, null);
+            expected.put("/tombstones/" + id, null);
+            expected.put("/documents/full-text/" + originalId, replacement.getString("document"));
+            expected.put("/files/" + originalId + "/meta", replacement.getString("metadata"));
+            for (String related : new String[]{resource.getParent(), resource.getCopyOf()}) {
+                if (related != null) expected.put("/tombstones/" + related, null);
+            }
+            JSONObject document = JSONObject.parseObject(replacement.getString("document"));
+            document.put("uuid", id); document.put("size", resource.getSize());
+            document.put("contextUuid", context.uuid); document.put("updatedAt", LocalDateTime.now());
+            document.put("thumbUrl", context.buildThumbUrl(id)); document.put("poster", context.buildThumbUrl(id));
+            if (document.containsKey("publicUrl")) document.put("publicUrl", context.buildProxyUrl(id));
+            JSONObject catalog = JSONObject.from(resource);
+            catalog.remove("path"); catalog.remove("url"); catalog.remove("thumbUrl");
+            JSONObject metadata = new JSONObject();
+            metadata.put("size", resource.getSize()); metadata.put("ext", extension(resource.getFileName()));
+            metadata.put("etag", intent.getString("etag")); metadata.put("sha256", intent.getString("sha256"));
+            metadata.put("requiredCopies", Math.max(1, intent.getIntValue("requiredCopies")));
+            JSONObject durableNodes = new JSONObject(); durableNodes.put(context.uuid, intent.getString("sha256"));
+            JSONObject receipts = intent.getJSONObject("receipts");
+            if (receipts != null) receipts.forEach(durableNodes::put);
+            metadata.put("durableNodes", durableNodes);
+            Map<String, String> puts = new LinkedHashMap<>();
+            puts.put(receiptKey, receipt.toJSONString());
+            puts.put("/tombstones/" + originalId, Long.toString(System.currentTimeMillis()));
+            puts.put("/files/" + id, context.buildUrl(id));
+            puts.put("/files/" + id + "/meta", metadata.toJSONString());
+            puts.put("/documents/full-text/" + id, document.toJSONString());
+            puts.put("/nodes/" + context.uuid + "/catalog/" + id, catalog.toJSONString());
+            // Move every S3 key to the new bytes before deletion retires the previous generation.
+            etcdService.scan("/s3/").forEach((key, raw) -> {
+                S3ObjectMeta binding = JSONObject.parseObject(raw, S3ObjectMeta.class);
+                if (!originalId.equals(binding.getUuid())) return;
+                expected.put(key, raw);
+                puts.put(key, JSONObject.toJSONString(new S3ObjectMeta(id, resource.getSize(), intent.getString("etag"),
+                        System.currentTimeMillis(), binding.getKey(), binding.getContentType())));
+            });
+            String replicaKey = "/replica-sources/" + originalId;
+            String replicaRaw = etcdService.getOne(replicaKey);
+            if (replicaRaw != null) {
+                JSONObject fork = JSONObject.parseObject(replicaRaw); fork.put("forked", true);
+                expected.put(replicaKey, replicaRaw); puts.put(replicaKey, fork.toJSONString());
+            }
+            if (!etcdService.compareAndWrite(expected, puts, Set.of())) {
+                committed = etcdService.getOne(receiptKey);
+                if (committed == null || !id.equals(JSONObject.parseObject(committed).getString("uuid"))) {
+                    discardPublication(id, intent);
+                    throw new S3ConcurrentWriteException("文件内容或元数据已变化，请重新加载后再保存");
+                }
+            }
+        } else if (!id.equals(JSONObject.parseObject(committed).getString("uuid"))) {
+            discardPublication(id, intent);
+            throw new S3ConcurrentWriteException("文件已保存为其他版本，请刷新后重试");
+        }
+        context.STORAGE.put(id, resource);
+        // The switch and tombstone are already durable. Cleanup and projection can safely retry.
+        deleteResource(originalId);
+        meiliSearchService.visibleRevision();
+        fileTransferService.publicationCommitted(id);
+        etcdService.delete(publicationPrefix() + id);
+        try { replication(target.toFile(), id, resource.getFileName()); }
+        catch (RuntimeException optional) { log.warn("Text replacement replication needs retry for {}", id, optional); }
+        return new PublishedResource(resource, intent.getString("etag"));
     }
 
     private String publicationPrefix() { return "/pending-publications/" + context.uuid + "/"; }
@@ -239,6 +387,7 @@ public class FileService {
         DurableFiles.syncFile(target); DurableFiles.syncDirectory(data);
         // No public inventory, routing, search source or S3 key exists until the byte policy is met.
         ensureDurability(intent, requested, target);
+        if (intent.getJSONObject("textReplacement") != null) return finishTextReplacement(intent, requested, target);
         FileObject resource = context.query(uuid);
         if (resource == null) {
             String previous = etcdService.getOne("/nodes/" + context.uuid + "/catalog/" + uuid);

@@ -614,6 +614,43 @@
         </div>
     </div>
 
+    <!-- Built-in Text Editor -->
+    <div id="textEditorModal" class="hidden text-editor-overlay" role="dialog" aria-modal="true" aria-labelledby="textEditorTitle" aria-describedby="textEditorHint">
+        <div class="text-editor-dialog theme-card theme-rounded-xl shadow-2xl">
+            <div class="text-editor-header">
+                <div class="text-editor-heading">
+                    <h3 id="textEditorTitle" class="text-lg font-semibold theme-page-text-primary">文本编辑器</h3>
+                    <p id="textEditorFileName" class="text-sm theme-page-text-secondary"></p>
+                </div>
+                <button id="textEditorClose" type="button" class="theme-icon-btn" aria-label="关闭文本编辑器" title="关闭 (Esc)">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="text-editor-toolbar">
+                <span id="textEditorFormat" class="text-editor-format"></span>
+                <span id="textEditorStatus" role="status" aria-live="polite">正在加载…</span>
+                <button id="textEditorTabMode" type="button" class="theme-text-btn" aria-pressed="true" title="Ctrl / ⌘ + M 切换 Tab 导航">Tab 缩进</button>
+                <button id="textEditorReload" type="button" class="theme-text-btn">重新加载</button>
+            </div>
+            <div id="textEditorError" class="hidden text-editor-error" role="alert"></div>
+            <div id="textEditorSurface" class="text-editor-surface" aria-busy="true">
+                <pre id="textEditorLineNumbers" class="text-editor-line-numbers" aria-hidden="true">1</pre>
+                <textarea id="textEditorContent" class="text-editor-content" aria-label="文件内容" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" disabled></textarea>
+            </div>
+            <div class="text-editor-statusbar">
+                <span id="textEditorCursor">行 1，列 1</span>
+                <span id="textEditorEncoding">UTF-8</span>
+            </div>
+            <div class="text-editor-footer">
+                <p id="textEditorHint" class="text-xs theme-page-text-tertiary">Ctrl / ⌘ + S 保存 · Ctrl / ⌘ + M 切换 Tab 导航 · UTF-8，最大 2 MiB<br>保存后生成新版本，下载链接将更新。</p>
+                <div class="text-editor-actions">
+                    <button id="textEditorCancel" type="button" class="theme-btn-secondary">关闭</button>
+                    <button id="textEditorSave" type="button" class="theme-btn-primary" disabled>保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- TS Upload Modal -->
     <div id="tsUploadModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
         <div class="theme-card theme-rounded-xl shadow-2xl p-6 w-full max-w-5xl mx-4">
@@ -777,6 +814,7 @@
                     </svg>
                     <span class="ml-3 theme-page-text-secondary">加载中...</span>
                 </div>
+                <p id="fileDetailError" class="hidden text-sm theme-page-text-secondary" role="alert"></p>
                 <!-- Detail content -->
                 <div id="fileDetailContent" class="space-y-5">
                     <!-- 文件名 & 大小 -->
@@ -787,6 +825,32 @@
                         </div>
                         <span id="detailFileSize" class="text-sm font-mono theme-page-text-secondary whitespace-nowrap mt-0.5"></span>
                     </div>
+
+                    <!-- Clash 代理节点 -->
+                    <section id="detailClashSection" class="hidden clash-details" aria-labelledby="detailClashTitle">
+                        <div class="clash-details-header">
+                            <h3 id="detailClashTitle"><span class="clash-cat-mark" aria-hidden="true"></span>Clash 节点</h3>
+                            <button id="detailClashRefresh" type="button" class="theme-text-btn">重新检测</button>
+                        </div>
+                        <p class="clash-details-hint">BootFS 服务器到节点端口的 TCP 连接耗时。</p>
+                        <p id="detailClashStatus" class="clash-details-hint" role="status" aria-live="polite"></p>
+                        <p id="detailClashError" class="hidden clash-details-error" role="alert"></p>
+                        <p id="detailClashWarnings" class="hidden clash-details-hint"></p>
+                        <div class="clash-nodes-scroll">
+                            <table class="clash-nodes-table">
+                                <thead><tr><th scope="col">节点 / 地址</th><th scope="col">当前延迟</th></tr></thead>
+                                <tbody id="detailClashNodes"></tbody>
+                            </table>
+                        </div>
+                        <div class="clash-subscription">
+                            <label for="detailClashSubscription">v2rayN 订阅地址</label>
+                            <div class="clash-subscription-controls">
+                                <input id="detailClashSubscription" type="text" readonly class="theme-input" aria-label="v2rayN 订阅地址">
+                                <button id="detailClashCopy" type="button" class="theme-btn-secondary">复制</button>
+                            </div>
+                            <p class="clash-details-hint">导出所有可转换节点，供 v2rayN 等客户端订阅；无法转换的节点将跳过。</p>
+                        </div>
+                    </section>
 
                     <!-- 媒体信息 (仅音频/视频) -->
                     <div id="detailMediaSection" class="hidden space-y-4">
@@ -998,6 +1062,8 @@
         <div class="px-6 py-2 border-t text-xs flex-shrink-0" style="border-color: var(--color-border-primary); color: var(--color-text-tertiary);">拖拽文件到左侧列表上传</div>
     </div>
 
+    <script src="/text-editor.js"></script>
+    <script src="/clash-files.js"></script>
     <script src="/admin-dashboard.js"></script>
 </body>
 </html>

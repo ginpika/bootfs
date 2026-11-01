@@ -291,11 +291,6 @@
     overflow: visible;
 }
 
-#listModeActions {
-    position: relative;
-    left: 12px;
-}
-
 #listModeActions.view-hidden {
     opacity: 0;
     pointer-events: none;

@@ -23,6 +23,9 @@ public class SsoInterceptor implements HandlerInterceptor {
     @Autowired
     private SsoService ssoService;
 
+    @Autowired
+    private LocalAccessPolicy localAccess;
+
     public SsoInterceptor(SsoService ssoService) {
         this.ssoService = ssoService;
     }
@@ -66,6 +69,8 @@ public class SsoInterceptor implements HandlerInterceptor {
         if (read && (path.startsWith("/hls/") || publicTvRead)) {
             return true;
         }
+
+        if (localAccess.authenticate(request, response)) return true;
 
         String token = getTokenFromCookie(request);
 

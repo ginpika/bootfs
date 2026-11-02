@@ -88,9 +88,10 @@ class ClusterProxyServiceTest {
         return request;
     }
 
-    @ParameterizedTest @ValueSource(strings = {"details", "text", "clash"})
+    @ParameterizedTest @ValueSource(strings = {"/api/file/remote/details", "/api/file/remote/text",
+            "/api/file/remote/clash", "/api/album/remote"})
     void browserCompressionDoesNotTurnRemoteJsonIntoUndecodedBytes(String route) {
-        var response = proxy.proxyRequest(endpoint, browserRequest("GET", "/api/file/remote/" + route), null);
+        var response = proxy.proxyRequest(endpoint, browserRequest("GET", route), null);
         assertEquals(200, response.getStatusCodeValue());
         assertArrayEquals(JSON_BODY, response.getBody());
         assertEquals("clash.yaml", JSON.parseObject(response.getBody()).getString("fileName"));

@@ -1,6 +1,7 @@
 package cc.ginpika.bootfs.controller;
 
 import cc.ginpika.bootfs.dto.SsoUser;
+import cc.ginpika.bootfs.sso.LocalAccessPolicy;
 import cc.ginpika.bootfs.service.SsoService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,12 +21,19 @@ public class AuthController {
     @Autowired
     private SsoService ssoService;
 
+    @Autowired
+    private LocalAccessPolicy localAccess;
+
     public AuthController(SsoService ssoService) {
         this.ssoService = ssoService;
     }
     
     @GetMapping("/api/logout")
     public void logout(HttpServletRequest request, HttpServletResponse response) {
+        if (localAccess.authenticate(request, response)) {
+            response.setStatus(200);
+            return;
+        }
         if (!ssoService.isEnabled()) {
             response.setStatus(200);
             return;
@@ -63,7 +71,8 @@ public class AuthController {
     }
     
     @GetMapping("/api/auth/me")
-    public SsoUser getCurrentUser(HttpServletRequest request) {
+    public SsoUser getCurrentUser(HttpServletRequest request, HttpServletResponse response) {
+        localAccess.authenticate(request, response);
         SsoUser user = (SsoUser) request.getAttribute("ssoUser");
         return user;
     }

@@ -59,6 +59,8 @@ HostID is a lightweight account foundation based on email, serving as a personal
 
 SSO authentication based on HostID is enabled by default. To disable it, please refer to application.properties & Dockerfile and configure .env.
 
+To keep remote SSO while allowing trusted direct loopback access, set `SSO_LOCAL_BYPASS_ENABLED=true` (default: `false`) with `SSO_ENABLED=true`. Docker gateway and forwarded requests remain subject to SSO. See [local access](./docs/local-access.md) for deployment limits and the header required for command-line writes.
+
 **Prerequisite (recommend): [Hostid](https://github.com/ginpika/hostid)**
 
 ```Shell

@@ -21,6 +21,9 @@ public class SsoConfig {
     
     @Value("${sso.enabled:true}")
     private boolean enabled;
+
+    @Value("${sso.local-bypass.enabled:false}")
+    private boolean localBypassEnabled;
     
     @Bean
     public WebClient ssoWebClient() {

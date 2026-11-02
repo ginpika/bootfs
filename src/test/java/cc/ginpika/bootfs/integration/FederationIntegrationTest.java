@@ -118,7 +118,9 @@ class FederationIntegrationTest {
     }
 
     @Test @Timeout(90) void remoteAlbumKeepsItsPagesAndThumbnailsAccessibleThroughTheFrontend() throws Exception {
-        Node owner = new Node("album-owner", false), frontend = new Node("album-frontend", false);
+        Node owner = new Node("album-owner", false, "--server.compression.enabled=true",
+                "--server.compression.min-response-size=1");
+        Node frontend = new Node("album-frontend", false);
         join(frontend, owner);
         byte[] png = Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=");
         var archive = new java.io.ByteArrayOutputStream();
@@ -136,13 +138,24 @@ class FederationIntegrationTest {
         assertEquals(2, storedPages.size());
         owner.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(true);
 
+        URI ownerAlbum = URI.create(owner.url + "/api/album/" + id);
+        String token = frontend.store().tokenFor(owner.url);
+        var direct = HttpRequest.newBuilder(ownerAlbum).GET()
+                .header("Accept-Encoding", "gzip").header("X-BootFS-Cluster-Token", token);
+        ClusterHttp.signedHeaders(frontend.store().transportIdentity(), "GET", ownerAlbum, token,
+                ClusterHttp.digest(new byte[0])).forEach(direct::header);
+        var compressed = http.send(direct.build(), HttpResponse.BodyHandlers.ofByteArray());
+        assertEquals(200, compressed.statusCode());
+        assertEquals("gzip", compressed.headers().firstValue("Content-Encoding").orElseThrow());
+
         JSONObject grid = JSON.parseObject(request(frontend, "GET", "/queryPageOffset?pageSize=20", null, null).body());
         assertEquals(1, grid.getIntValue("total"));
         assertEquals(id, grid.getJSONArray("rows").getJSONObject(0).getString("uuid"));
         assertEquals("1", grid.getJSONArray("rows").getJSONObject(0).getString("albumAvailable"));
         assertEquals(200, request(frontend, "GET", "/album/" + id, null, null).statusCode());
-        var response = request(frontend, "GET", "/api/album/" + id, null, null);
+        var response = request(frontend, "GET", "/api/album/" + id, null, null, "gzip, deflate, br, zstd");
         assertEquals(200, response.statusCode(), response.body());
+        assertTrue(response.headers().firstValue("Content-Encoding").isEmpty());
         JSONObject album = JSON.parseObject(response.body());
         assertEquals(2, album.getJSONArray("resources").size());
         for (int i = 0; i < storedPages.size(); i++) {

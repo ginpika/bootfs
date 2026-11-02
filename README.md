@@ -79,6 +79,8 @@ java -jar target/bootfs-v1.0.0-beta.1.jar --spring.profiles.active=dev
 
 开发配置默认关闭 SSO。旧数据目录需要显式迁移，不能直接将本地文件清单当作外部搜索元数据的完整备份。
 
+需要保留远程 SSO、仅让可信本机直连免登录时，设置 `SSO_LOCAL_BYPASS_ENABLED=true`（默认 `false`），并保持 `SSO_ENABLED=true`。Docker 网关与代理请求不享受此豁免；使用限制和命令行写请求方式见[本地访问说明](./docs/local-access.md)。
+
 ## 部署
 
 ```shell

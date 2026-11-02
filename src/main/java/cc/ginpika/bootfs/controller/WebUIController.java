@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.ModelAndView;
 
@@ -28,6 +29,11 @@ public class WebUIController {
     private final Context context;
     private final TfsConfig tfsConfig;
     private final SsoConfig ssoConfig;
+
+    @ModelAttribute("ssoLocalAccess")
+    public boolean localAccess(HttpServletRequest request) {
+        return Boolean.TRUE.equals(request.getAttribute("ssoLocalAccess"));
+    }
 
     // Web UI - Old version (keep for compatibility)
     @GetMapping("/index-old")
@@ -56,7 +62,8 @@ public class WebUIController {
         if (StringUtils.isNotBlank(ssoConfig.getInfoUrl())) {
             mv.getModel().put("ssoInfoUrl", ssoConfig.getInfoUrl());
         }
-        mv.getModel().put("ssoEnabled", ssoConfig.isEnabled());
+        mv.getModel().put("ssoEnabled", ssoConfig.isEnabled()
+                && !Boolean.TRUE.equals(request.getAttribute("ssoLocalAccess")));
         return mv;
     }
 

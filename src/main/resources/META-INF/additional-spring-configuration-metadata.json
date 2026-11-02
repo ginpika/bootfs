@@ -55,6 +55,12 @@
     "description": "是否启用 SSO 单点登录"
   },
   {
+    "name": "sso.local-bypass.enabled",
+    "type": "java.lang.Boolean",
+    "defaultValue": false,
+    "description": "允许可信回环直连免 SSO；代理和 Docker 网关请求不放行"
+  },
+  {
     "name": "sso.server-url",
     "type": "java.lang.String",
     "description": "SSO 服务器地址"

@@ -8,7 +8,7 @@ RUN mvn -B -ntp dependency:go-offline
 COPY src ./src
 RUN mvn -B -ntp package -DskipTests
 
-FROM eclipse-temurin:17-jre-jammy
+FROM eclipse-temurin:25-jre-jammy
 ENV TZ=Asia/Shanghai
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \

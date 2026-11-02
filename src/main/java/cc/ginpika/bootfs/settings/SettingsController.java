@@ -27,7 +27,7 @@ public class SettingsController {
     @GetMapping("/settings") public String page() { return "settings"; }
     @GetMapping("/api/settings") @ResponseBody public Map<String,Object> read() { return settings.view(); }
     private void browser(HttpServletRequest request) {
-        if (!BrowserRequestPolicy.allows(request,true)) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请从当前节点设置页操作");
+        if (!BrowserRequestPolicy.allows(request,true,settings.current().string("webEntrypoint"))) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请从当前节点设置页操作");
     }
     @PutMapping("/api/settings") @ResponseBody
     public Map<String,Object> save(@RequestBody JSONObject body,HttpServletRequest request) throws IOException {

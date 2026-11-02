@@ -14,7 +14,6 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.method.HandlerMethod;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.Set;
 
 @Slf4j
@@ -75,7 +74,7 @@ public class SsoInterceptor implements HandlerInterceptor {
         // Bootstrap is authorized by its short-lived code, not an existing node credential or SSO session.
         if ("POST".equals(request.getMethod()) && "/api/cluster/pairing/redeem".equals(path)) {
             privateResponse(request, response);
-            return BrowserRequestPolicy.allows(request, false) || deny(response, 403, "Cross-origin request denied");
+            return BrowserRequestPolicy.allows(request, false, appConfig.getWebEntrypoint()) || deny(response, 403, "Cross-origin request denied");
         }
         if ("POST".equals(request.getMethod()) && (path.equals("/api/cluster/membership") || path.equals("/api/cluster/departure"))
                 && metadata instanceof cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore dynamic && dynamic.verifyRevokedRequest(request,supplied)) {
@@ -91,8 +90,10 @@ public class SsoInterceptor implements HandlerInterceptor {
                 "/tv/ts/{uuid}/{fileName}", "/hls/{folder}/{file}").contains(path);
         if (read && config.isPublicSharingEnabled() && publicRead) return true;
         privateResponse(request, response);
+        boolean navigation = !path.equals("/api/logout") && BrowserRequestPolicy.isDocumentNavigation(request);
         if (!ssoService.isEnabled()) {
-            return BrowserRequestPolicy.allows(request, false) || deny(response, 403, "Cross-origin request denied");
+            return navigation || BrowserRequestPolicy.allows(request, false, appConfig.getWebEntrypoint())
+                    || deny(response, 403, "Cross-origin request denied");
         }
 
         if (localAccess.authenticate(request, response)) return true;
@@ -112,10 +113,7 @@ public class SsoInterceptor implements HandlerInterceptor {
                 if (user == null || !config.permitsRole(user.getRole())) {
                     return deny(response, 403, "Application administrator role required");
                 }
-                boolean navigation = read && !path.equals("/api/logout")
-                        && "navigate".equals(request.getHeader("Sec-Fetch-Mode"))
-                        && "document".equals(request.getHeader("Sec-Fetch-Dest"));
-                if (!navigation && !BrowserRequestPolicy.allows(request, !read || path.equals("/api/logout"))) {
+                if (!navigation && !BrowserRequestPolicy.allows(request, !read || path.equals("/api/logout"), appConfig.getWebEntrypoint())) {
                     return deny(response, 403, "Same-origin request required");
                 }
                 request.setAttribute("ssoUser", user);

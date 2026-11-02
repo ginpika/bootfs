@@ -42,6 +42,10 @@
 
 设置页保存代理策略及可信来源正则后，下一次启动会在 Tomcat 和转发过滤器初始化前从数据库读取。默认 `none`，可信来源仅回环。Caddy/Docker 示例见 [仪表盘](dashboard.md)。`native` 仅信任匹配的连接来源；`framework` 本身不按此 Tomcat 正则筛选，必须在边缘清理转发头并限制后端直连。
 
+浏览器来源校验同时识别当前请求地址和已保存的节点入口地址。HTTPS 在代理终止、后端仍为 HTTP 时，`Origin` / `Referer` 与节点入口的协议、主机和有效端口一致即可通过，不依赖未受信任的 `X-Forwarded-*`。从其他站点进入页面的普通 GET/HEAD 文档导航也允许继续认证；API Fetch、写入和退出登录仍执行来源检查。
+
+升级后 admin 也遇到 403 时，响应中的 `Same-origin request required` / `Cross-origin request denied` 表示来源检查失败；`Application administrator role required` 表示当前 SSO 用户未通过角色规则。先核对已保存的节点入口是否为实际访问的公开地址，以及旧 SSO、代理设置是否在首次升级时导入。设置库初始化后修改 `.env` 不会覆盖库中配置；可从本机直连的 `/settings` 修复（需符合当前认证或本机访问规则），无需删除设置库。
+
 ## 凭证与备份恢复
 
 秘密密钥及完整配置记录由 AES-GCM 加密后存入设置数据库，保护密钥自动保存在本机 `kernel/security/settings.key`（0600），不增加环境变量。节点管理 token 与 Ed25519 私钥仍在 `kernel/security/cluster.json`。设置 JSON、原始 KV、联合节点响应和常规日志不返回这些秘密。设置页只允许轮换管理 token，不显示它；轮换保留签名身份、已配对节点能力，旧 token 及未用完的配对验证码失效。

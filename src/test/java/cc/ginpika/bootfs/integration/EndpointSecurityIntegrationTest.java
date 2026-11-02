@@ -80,7 +80,7 @@ class EndpointSecurityIntegrationTest {
 
     @Test void cookieWritesNeedSameOriginEvidenceAndDoNotTrustACustomHeaderOverAnEvilOrigin() throws Exception {
         mvc.perform(post("/api/cluster/pairing/code").cookie(cookie)).andExpect(status().isForbidden());
-        for (String origin : new String[]{"https://evil.example", "http://sibling.localhost", "null", "http://localhost:8181"}) {
+        for (String origin : new String[]{"https://evil.example", "http://sibling.localhost", "null", "http://localhost:8182"}) {
             mvc.perform(post("/api/cluster/pairing/code").cookie(cookie).header("Origin", origin).header("X-BootFS-Request", "1"))
                     .andExpect(status().isForbidden());
         }

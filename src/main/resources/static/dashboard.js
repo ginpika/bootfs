@@ -314,7 +314,7 @@ function renderRequests(reqs, emptyMessage) {
             '<td class="px-2 py-1 font-mono text-xs whitespace-nowrap" style="color: var(--color-text-muted);">' + escapeHtml(r.time) + '</td>' +
             '<td class="px-2 py-1 text-xs whitespace-nowrap" style="color: var(--color-text-secondary);">' + escapeHtml(r.method) + '</td>' +
             '<td class="px-2 py-1 font-mono text-xs whitespace-nowrap" style="color: var(--color-text-secondary);">' + escapeHtml(r.clientIp || '--') + '</td>' +
-            '<td class="px-2 py-1 font-mono text-xs truncate" style="color: var(--color-accent-primary); max-width: 260px;" title="' + escapeHtml(r.uri) + '">' + escapeHtml(r.uri) + '</td>' +
+            '<td class="px-2 py-1 font-mono text-xs truncate" style="color: var(--color-accent-primary);" title="' + escapeHtml(r.uri) + '">' + escapeHtml(r.uri) + '</td>' +
             '<td class="px-2 py-1 text-xs whitespace-nowrap" style="color: var(--color-text-secondary);">' + escapeHtml(catLabel) + '</td>' +
             '<td class="px-2 py-1 text-right text-xs font-medium whitespace-nowrap" style="color: ' + statusColor + ';">' + r.status + '</td>' +
             '<td class="px-2 py-1 text-right text-xs whitespace-nowrap" style="color: var(--color-text-secondary);">' + formatBytes(r.bytes) + '</td>' +

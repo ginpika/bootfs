@@ -290,8 +290,8 @@
                             </div>
                         </div>
                         <!-- 右列：宽幅请求表格 -->
-                        <div class="theme-card theme-rounded-xl theme-shadow p-4 lg:col-span-2">
-                            <div class="flex items-center justify-between mb-3">
+                        <div id="recentRequestsCard" class="dashboard-recent-card theme-card theme-rounded-xl theme-shadow p-4 lg:col-span-2">
+                            <div class="flex items-center justify-between mb-3 shrink-0">
                                 <h3 class="text-sm font-semibold font-display"
                                     style="color: var(--color-text-primary);">最近请求</h3>
                                 <svg class="w-4 h-4" style="color: var(--color-text-muted);" fill="none"
@@ -301,8 +301,18 @@
                                     </path>
                                 </svg>
                             </div>
-                            <div class="overflow-x-auto" style="max-height: 380px; overflow-y: auto;">
-                                <table class="w-full text-xs">
+                            <div class="dashboard-requests-scroll">
+                                <table class="dashboard-requests-table text-xs">
+                                    <colgroup>
+                                        <col style="width: 118px;">
+                                        <col style="width: 60px;">
+                                        <col style="width: 160px;">
+                                        <col>
+                                        <col style="width: 128px;">
+                                        <col style="width: 56px;">
+                                        <col style="width: 72px;">
+                                        <col style="width: 72px;">
+                                    </colgroup>
                                     <thead style="position: sticky; top: 0; z-index: 10;">
                                         <tr style="background-color: var(--color-bg-tertiary);">
                                             <th class="px-2 py-1.5 text-left font-medium"
@@ -375,6 +385,9 @@
         .dashboard-node { cursor: pointer; border: 2px solid transparent; text-align: left; }
         .dashboard-node:hover, .dashboard-node:focus-visible { outline: 2px solid var(--color-accent-primary); outline-offset: 3px; }
         .dashboard-node[aria-pressed="true"] { border-color: var(--color-accent-primary); }
+        .dashboard-recent-card { display: flex; flex-direction: column; min-width: 0; }
+        .dashboard-requests-scroll { flex: 1 1 auto; height: 380px; min-height: 0; overflow: auto; }
+        .dashboard-requests-table { width: 100%; min-width: 860px; table-layout: fixed; }
     </style>
     <script src="/dashboard.js"></script>
     <script src="/dashboard-cluster.js"></script>

@@ -34,16 +34,18 @@ public class ClusterProxyService {
     private final Context context;
     @org.springframework.beans.factory.annotation.Autowired private FederationService federation;
 
-    // 转发请求时跳过的 hop-by-hop / 上下文相关 header
+    // 压缩由此跳的 HttpClient 协商，不能照搬浏览器的 br/zstd 等解码能力。
+    // 其他跳过项为 hop-by-hop / 上下文相关 header。
     private static final Set<String> SKIP_REQUEST_HEADERS = new HashSet<>(Arrays.asList(
             "host", "content-length", "connection", "keep-alive", "transfer-encoding",
-            "te", "trailer", "upgrade", "proxy-authenticate", "proxy-authorization"
+            "te", "trailer", "upgrade", "proxy-authenticate", "proxy-authorization", "accept-encoding"
     ));
 
-    // 回传响应时跳过的 header（HttpClient 已处理 Content-Encoding/Content-Length）
+    // HttpClient 解压后会自行移除 Content-Encoding；若未解码，必须保留该标记。
+    // 响应长度由回传的实际字节重新计算。
     private static final Set<String> SKIP_RESPONSE_HEADERS = new HashSet<>(Arrays.asList(
             "connection", "keep-alive", "te", "trailer", "transfer-encoding", "upgrade",
-            "proxy-authenticate", "proxy-authorization", "content-length", "content-encoding"
+            "proxy-authenticate", "proxy-authorization", "content-length"
     ));
 
     /**
@@ -112,7 +114,8 @@ public class ClusterProxyService {
         Enumeration<String> headerNames = request.getHeaderNames();
         while (headerNames.hasMoreElements()) {
             String name = headerNames.nextElement();
-            if (!SKIP_REQUEST_HEADERS.contains(name.toLowerCase()) && !Set.of("cookie","authorization","x-bootfs-cluster-token").contains(name.toLowerCase())) {
+            String lowerName = name.toLowerCase(Locale.ROOT);
+            if (!SKIP_REQUEST_HEADERS.contains(lowerName) && !Set.of("cookie","authorization","x-bootfs-cluster-token").contains(lowerName)) {
                 requestBuilder.addHeader(name, request.getHeader(name));
             }
         }
@@ -131,14 +134,14 @@ public class ClusterProxyService {
             requestBuilder.setEntity(entity);
         }
 
-        try (CloseableHttpClient client = HttpClientBuilder.create().disableRedirectHandling().build()) {
-            CloseableHttpResponse response = client.execute(requestBuilder.build());
+        try (CloseableHttpClient client = HttpClientBuilder.create().disableRedirectHandling().build();
+             CloseableHttpResponse response = client.execute(requestBuilder.build())) {
             HttpEntity entity = response.getEntity();
             byte[] responseBody = entity != null ? EntityUtils.toByteArray(entity) : new byte[0];
 
             HttpHeaders responseHeaders = new HttpHeaders();
             for (Header header : response.getAllHeaders()) {
-                if (!SKIP_RESPONSE_HEADERS.contains(header.getName().toLowerCase())) {
+                if (!SKIP_RESPONSE_HEADERS.contains(header.getName().toLowerCase(Locale.ROOT))) {
                     responseHeaders.add(header.getName(), header.getValue());
                 }
             }

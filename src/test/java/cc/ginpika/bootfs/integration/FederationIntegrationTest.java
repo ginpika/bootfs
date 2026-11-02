@@ -24,15 +24,17 @@ class FederationIntegrationTest {
     class Node implements AutoCloseable {
         final String id,url;
         ConfigurableApplicationContext app;
-        Node(String id,boolean replicated) throws Exception {
+        Node(String id,boolean replicated,String... extraProperties) throws Exception {
             this.id=id; int port; try(var socket=new java.net.ServerSocket(0)) { port=socket.getLocalPort(); }
             url="http://127.0.0.1:"+port;
-            app=new SpringApplicationBuilder(BootFS.class).logStartupInfo(false).run(
+            List<String> arguments = new ArrayList<>(List.of(
                     "--server.port="+port,"--server.address=127.0.0.1","--tfs.root-path="+root.resolve(id),"--tfs.unique-id="+id,
                     "--tfs.web-entrypoint="+url,"--tfs.copies="+(replicated?2:1),"--sso.enabled=false","--s3.enabled=false",
                     "--tfs.ffmpeg-url=/nonexistent-ffmpeg","--bootfs.objects.write-policy="+(replicated?"replicated":"single-local"),
                     "--bootfs.objects.required-copies="+(replicated?2:0),"--bootfs.cluster.transition-interval-ms=600000",
-                    "--bootfs.cleanup.interval-ms=600000");
+                    "--bootfs.cleanup.interval-ms=600000"));
+            arguments.addAll(List.of(extraProperties));
+            app=new SpringApplicationBuilder(BootFS.class).logStartupInfo(false).run(arguments.toArray(String[]::new));
             nodes.add(this);
         }
         <T> T bean(Class<T> type) { return app.getBean(type); }
@@ -41,8 +43,12 @@ class FederationIntegrationTest {
         @Override public void close() { if(app!=null) { app.close(); app=null; } }
     }
     HttpResponse<String> request(Node node,String method,String path,String json,String token) throws Exception {
+        return request(node,method,path,json,token,null);
+    }
+    HttpResponse<String> request(Node node,String method,String path,String json,String token,String acceptEncoding) throws Exception {
         HttpRequest.Builder request=HttpRequest.newBuilder(URI.create(node.url+path)).timeout(java.time.Duration.ofSeconds(8));
         if(token!=null) request.header("X-BootFS-Cluster-Token",token);
+        if(acceptEncoding!=null) request.header("Accept-Encoding",acceptEncoding);
         if(json!=null) request.header("Content-Type","application/json");
         return http.send(request.method(method,json==null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(json)).build(),HttpResponse.BodyHandlers.ofString());
     }
@@ -263,6 +269,46 @@ class FederationIntegrationTest {
         String stale = new JSONObject(Map.of("content", "port: 8080\n", "version", original.getString("version"))).toJSONString();
         assertEquals(409, request(frontend, "PUT", "/api/file/" + id + "/text", stale, null).statusCode());
         assertEquals("port: 443\n", owner.bean(TextFileService.class).read(replacement).content());
+    }
+
+    @Test @Timeout(90) void browserCanReadDetailsAndSaveRemoteTextWhenTheOwnerCompressesJson() throws Exception {
+        Node owner = new Node("compressed-owner", false, "--server.compression.enabled=true",
+                "--server.compression.min-response-size=1");
+        Node frontend = new Node("compressed-frontend", false);
+        join(frontend, owner);
+        String content = "# 中文配置\r\nport: 80\r\nproxies: []\r\n";
+        String id = owner.upload("clash.yaml", content);
+        owner.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(true);
+        String browserCodecs = "gzip, deflate, br, zstd";
+
+        // Check that this test really exercises a gzip-compressing owner, with peer authentication.
+        URI uri = URI.create(owner.url + "/api/file/" + id + "/text");
+        String token = frontend.store().tokenFor(owner.url);
+        HttpRequest.Builder direct = HttpRequest.newBuilder(uri).GET()
+                .header("Accept-Encoding", "gzip").header("X-BootFS-Cluster-Token", token);
+        ClusterHttp.signedHeaders(frontend.store().transportIdentity(), "GET", uri, token,
+                ClusterHttp.digest(new byte[0])).forEach(direct::header);
+        var compressed = http.send(direct.build(), HttpResponse.BodyHandlers.ofByteArray());
+        assertEquals(200, compressed.statusCode());
+        assertEquals("gzip", compressed.headers().firstValue("Content-Encoding").orElseThrow());
+
+        var details = request(frontend, "GET", "/api/file/" + id + "/details", null, null, browserCodecs);
+        assertEquals(200, details.statusCode(), details.body());
+        assertEquals("clash.yaml", JSON.parseObject(details.body()).getString("fileName"));
+        assertTrue(details.headers().firstValue("Content-Encoding").isEmpty());
+        var read = request(frontend, "GET", "/api/file/" + id + "/text", null, null, browserCodecs);
+        assertEquals(200, read.statusCode(), read.body());
+        JSONObject original = JSON.parseObject(read.body());
+        assertEquals(content, original.getString("content"));
+        String updated = content.replace("80", "443");
+        String body = new JSONObject(Map.of("content", updated, "version", original.getString("version"))).toJSONString();
+        var saved = request(frontend, "PUT", "/api/file/" + id + "/text", body, null, browserCodecs);
+        assertEquals(200, saved.statusCode(), saved.body());
+        assertEquals(id, JSON.parseObject(saved.body()).getString("uuid"));
+        assertEquals(updated, owner.bean(TextFileService.class).read(id).content());
+        var reread = request(frontend, "GET", "/api/file/" + id + "/text", null, null, browserCodecs);
+        assertEquals(200, reread.statusCode(), reread.body());
+        assertEquals(updated, JSON.parseObject(reread.body()).getString("content"));
     }
 
     @Test @Timeout(90) void federatedQueryAndMutationRunAtTheOwnerAndDepartingNodeKeepsAllOfItsData() throws Exception {

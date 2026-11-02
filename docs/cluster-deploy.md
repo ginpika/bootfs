@@ -10,3 +10,9 @@
 无需预设 group-id、peers、共享 token 或手工密钥。默认 auto 模式可直接使用已有本地 embedded 数据。旧全局 Raft 模式保留日志和保护检查，需按[备份恢复](mononode-backup.md)迁移到新本地节点。
 
 完整行为、成员协调节点可用性、离线通知、副本与 S3 范围见[动态组网](mononode-dynamic-cluster.md)和[本地内核](mononode-kernel.md)。历史外置 etcd 部署仅作为迁移参考，见[旧部署](cluster-deploy-legacy.md)。
+
+## 跨节点详情/编辑出现 JSON 乱码
+
+若本机文件正常、其他节点的详情或文本编辑报 `Unexpected token ... is not valid JSON`，需检查跨节点 HTTP 响应压缩。浏览器可能声明支持 `br/zstd`，而集群代理使用的 HttpClient 默认解码 gzip/deflate。旧代理曾透传浏览器的 `Accept-Encoding`，并无条件移除响应的 `Content-Encoding`，导致压缩字节作为普通 JSON 返回。
+
+修复后的代理独立协商上游压缩格式，并让 HttpClient 解压；若上游仍返回未解码的压缩格式，则保留编码标记供下游正确处理。Linux、Windows 节点使用相同逻辑。更新接收浏览器请求并执行转发的节点（例如从 B 操作 A 文件时更新 B），重启后重新打开详情/编辑器即可；建议集群节点统一更新。无需转换原文件编码或关闭上游正常的响应压缩。

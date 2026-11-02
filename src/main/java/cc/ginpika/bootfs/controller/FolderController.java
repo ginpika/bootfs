@@ -5,6 +5,7 @@ import cc.ginpika.bootfs.domain.dto.Tag;
 import cc.ginpika.bootfs.s3.S3Config;
 import cc.ginpika.bootfs.s3.S3ConcurrentWriteException;
 import cc.ginpika.bootfs.service.FileService;
+import cc.ginpika.bootfs.service.FolderService;
 import cc.ginpika.bootfs.service.etcd.EtcdService;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
@@ -30,6 +31,7 @@ public class FolderController {
     private final EtcdService etcdService;
     private final S3Config s3Config;
     @Autowired(required = false) private cc.ginpika.bootfs.service.FederationService federation;
+    @Autowired(required = false) private FolderService folderService;
 
     @GetMapping("/api/folders")
     public JSONObject list(@RequestParam(defaultValue = "") String folder,
@@ -133,8 +135,17 @@ public class FolderController {
         int slash = relative.indexOf('/');
         if (slash >= 0) {
             String path = folder + relative.substring(0, slash + 1);
-            folders.putIfAbsent(path, new JSONObject(Map.of("folder", true, "folderPath", path,
-                    "fileName", relative.substring(0, slash), "size", 0)));
+            JSONObject row = folders.computeIfAbsent(path, ignored -> {
+                JSONObject descriptor = folderService == null ? FolderService.initial(path, resource, key.equals(path), s3Config.getBucket())
+                        : folderService.describe(path, resource, key.equals(path));
+                descriptor.put("folder", true); descriptor.put("folderPath", path);
+                descriptor.put("fileName", relative.substring(0, slash)); descriptor.put("size", 0);
+                descriptor.put("managed", true);
+                return descriptor;
+            });
+            if (resource.getString("originEndpoint") != null) {
+                row.put("managed", false); row.put("originEndpoint", resource.getString("originEndpoint"));
+            }
         } else {
             JSONObject row = new JSONObject(resource);
             String displayName = resource.getString("fileName");
@@ -175,6 +186,28 @@ public class FolderController {
                     ? "application/octet-stream" : file.getContentType(), null, null, request.getHeader("X-BootFS-Request-Id"));
         }
         return new JSONObject(Map.of("uuid", result.file().getUuid(), "fileName", name, "objectKey", key));
+    }
+
+    @PutMapping("/api/folders/rename")
+    public JSONObject rename(@RequestBody Map<String, String> body) {
+        return folderService.rename(body.get("folder"), body.get("name"));
+    }
+
+    @DeleteMapping("/api/folders")
+    public JSONObject delete(@RequestBody Map<String, String> body) {
+        return folderService.delete(body.get("folder"));
+    }
+
+    @PostMapping("/api/folders/tags")
+    public List<Tag> addTags(@RequestBody JSONObject body) {
+        JSONArray tags = body.getJSONArray("tags");
+        return folderService.mutateTags(body.getString("folder"), tags == null ? List.of() : tags.toJavaList(Tag.class), List.of());
+    }
+
+    @DeleteMapping("/api/folders/tags")
+    public List<Tag> removeTags(@RequestBody JSONObject body) {
+        JSONArray tags = body.getJSONArray("tags");
+        return folderService.mutateTags(body.getString("folder"), List.of(), tags == null ? List.of() : tags.toJavaList(String.class));
     }
 
     @ExceptionHandler(S3ConcurrentWriteException.class)

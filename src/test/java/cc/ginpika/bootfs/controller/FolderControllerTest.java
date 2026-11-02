@@ -68,7 +68,9 @@ class FolderControllerTest {
         assertTrue(folder.getBooleanValue("folder"));
         assertEquals("docs", folder.getString("fileName"));
         assertEquals("docs/", folder.getString("folderPath"));
-        assertFalse(folder.containsKey("uuid"));
+        assertEquals("marker", folder.getString("uuid"));
+        assertEquals(12L, folder.getLongValue("createdAt"));
+        assertEquals("kept", folder.getJSONArray("tags").getJSONObject(0).getString("name"));
         assertEquals("empty", controller.list("", 1, 1, "").getJSONArray("rows").getJSONObject(0).getString("fileName"));
         JSONObject child = controller.list("docs/", 0, 10, "");
         assertEquals(1, child.getIntValue("total"));

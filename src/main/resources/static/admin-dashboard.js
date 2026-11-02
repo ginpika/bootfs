@@ -431,7 +431,7 @@ function normalizeFolderRows(data) {
         if (file.folder || !file.fileName?.endsWith('/')) return file;
         const path = file.fileName;
         const name = path.slice(0, -1).split('/').pop();
-        return {folder: true, folderPath: path, fileName: name || '/', size: 0};
+        return {...file, folder: true, folderPath: path, fileName: name || '/', size: 0};
     });
     return data;
 }
@@ -522,17 +522,53 @@ async function submitCreateFolder(event) {
     }
 }
 
-function folderIcon() {
-    return '<svg class="w-8 h-8 flex-shrink-0" style="color: var(--color-accent-primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>';
+function folderIcon(list = false) {
+    return `<svg class="${list ? 'w-5 h-5' : 'w-8 h-8 flex-shrink-0'}" style="color: var(--color-accent-${list ? 'secondary' : 'primary'});" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="${list ? '2' : '1.5'}" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>`;
+}
+
+function listTags(tags, editable = true) {
+    return `<div class="flex items-center gap-1.5 flex-wrap" style="max-width: 240px;">
+        ${(tags || []).map(tag => {
+            const label = tag.namespace && tag.namespace !== 'manual' ? `${tag.namespace}:${tag.name}` : tag.name;
+            const indexFormat = tag.namespace + ':' + tag.name;
+            return `<span class="tag-badge" title="${BootFSSecurity.html(label)}">
+                <span class="tag-badge-text">${BootFSSecurity.html(label)}</span>
+                ${editable ? `<button class="tag-delete-btn" data-tag="${BootFSSecurity.html(indexFormat)}" title="删除标签">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>` : ''}
+            </span>`;
+        }).join('')}
+        <button class="tag-add-btn" title="${editable ? '添加标签' : '请在来源节点管理此文件夹'}" ${editable ? '' : 'disabled'}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </button>
+    </div>`;
 }
 
 function createFolderRow(folder) {
-    return `<tr class="folder-row" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
-        <td class="w-12 px-4 py-4"></td>
-        <td class="px-6 py-4"><button type="button" class="flex items-center gap-4 text-left theme-text-btn" data-folder-path="${BootFSSecurity.html(folder.folderPath)}">${folderIcon()}<span class="text-sm font-medium break-all">${BootFSSecurity.html(folder.fileName || '/')}</span></button></td>
-        <td class="created-col px-4 py-3">—</td><td class="tag-col px-4 py-3"></td>
-        <td class="px-6 py-4 text-xs theme-page-text-muted">文件夹</td><td class="px-6 py-4">—</td>
-        <td class="px-6 py-4"><button type="button" class="theme-text-btn text-sm" data-folder-path="${BootFSSecurity.html(folder.folderPath)}">打开</button></td>
+    const editable = folder.managed !== false;
+    const disabled = editable ? '' : 'disabled title="请在来源节点管理此文件夹"';
+    return `<tr class="folder-row" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);" data-folder-path="${BootFSSecurity.html(folder.folderPath)}">
+        <td class="w-12 px-4 py-4 whitespace-nowrap"></td>
+        <td class="px-6 py-4">
+            <div class="flex items-center">
+                <button type="button" class="folder-open-btn list-thumbnail flex-shrink-0 h-10 w-10 overflow-hidden theme-rounded-lg" title="打开文件夹">
+                    <span class="h-10 w-10 theme-rounded-lg flex items-center justify-center" style="background-color: var(--color-bg-tertiary);">${folderIcon(true)}</span>
+                </button>
+                <div class="ml-4">
+                    <button type="button" class="folder-open-btn text-sm font-medium text-left theme-text-btn" style="color: var(--color-text-primary);">${escapeFileName(folder.fileName || '')}</button>
+                    <div class="text-xs" style="color: var(--color-text-muted);">${BootFSSecurity.html(String(folder.uuid || '—'))}</div>
+                </div>
+            </div>
+        </td>
+        <td class="created-col px-4 py-3 whitespace-nowrap text-sm" style="color: var(--color-text-secondary);">${folder.createdAt ? formatDateTime(folder.createdAt) : '—'}</td>
+        <td class="tag-col px-4 py-3 whitespace-nowrap">${listTags(folder.tags, editable)}</td>
+        <td class="px-6 py-4 whitespace-nowrap"><div class="flex space-x-1"><span class="px-2 py-1 text-xs rounded-md" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);">文件夹</span></div></td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-text-secondary);">—</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium"><div class="flex space-x-2">
+            <button type="button" class="folder-open-btn theme-text-btn" style="color: var(--color-accent-primary);">打开</button>
+            <button type="button" class="folder-rename-btn theme-text-btn disabled:opacity-50" style="color: var(--color-text-secondary);" ${disabled}>重命名</button>
+            <button type="button" class="folder-delete-btn theme-text-btn disabled:opacity-50" style="color: var(--color-danger);" ${disabled}>删除</button>
+        </div></td>
     </tr>`;
 }
 
@@ -938,8 +974,17 @@ function renderFileList(data) {
     
     // Render list view
     listContainer.innerHTML = data.rows.map(file => createListRow(file)).join('');
-    listContainer.querySelectorAll('[data-folder-path]').forEach(button => {
-        button.addEventListener('click', () => openFolder(button.dataset.folderPath));
+    listContainer.querySelectorAll('.folder-row').forEach(row => {
+        const folder = data.rows.find(file => file.folder && file.folderPath === row.dataset.folderPath);
+        row.querySelectorAll('.folder-open-btn').forEach(button => {
+            button.addEventListener('click', () => openFolder(folder.folderPath));
+        });
+        row.querySelector('.folder-rename-btn').addEventListener('click', () => showFolderRenameModal(folder));
+        row.querySelector('.folder-delete-btn').addEventListener('click', () => showFolderDeleteConfirm(folder));
+        row.querySelector('.tag-add-btn')?.addEventListener('click', () => showTagInput(row, folder.uuid, folder));
+        row.querySelectorAll('.tag-delete-btn').forEach(button => {
+            button.addEventListener('click', () => removeTag(folder.uuid, button.dataset.tag, folder));
+        });
     });
     
     // Add event listeners to list rows
@@ -1269,23 +1314,7 @@ function createListRow(file) {
             </td>
             <td class="created-col px-4 py-3 whitespace-nowrap text-sm" style="color: var(--color-text-secondary);">${file.createdAt ? formatDateTime(file.createdAt) : '—'}</td>
             <td class="tag-col px-4 py-3 whitespace-nowrap">
-                <div class="flex items-center gap-1.5 flex-wrap" style="max-width: 240px;">
-                    ${tags.map(tag => {
-                        const label = tag.namespace && tag.namespace !== 'manual' ? `${tag.namespace}:${tag.name}` : tag.name;
-                        const indexFormat = tag.namespace + ':' + tag.name;
-                        return `
-                        <span class="tag-badge" title="${BootFSSecurity.html(label)}">
-                            <span class="tag-badge-text">${BootFSSecurity.html(label)}</span>
-                            <button class="tag-delete-btn" data-tag="${BootFSSecurity.html(indexFormat)}" title="删除标签">
-                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                            </button>
-                        </span>
-                        `;
-                    }).join('')}
-                    <button class="tag-add-btn" title="添加标签">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                    </button>
-                </div>
+                ${listTags(tags)}
             </td>
             <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex space-x-1">
@@ -2056,39 +2085,53 @@ function closeUploadModal() {
 }
 
 // Delete functions
+let deleteFolderTarget = null;
+
 function showDeleteConfirm() {
     if (selectedFiles.size === 0) {
         showToast('请先选择要删除的文件', 'warning');
         return;
     }
+    deleteFolderTarget = null;
+    document.getElementById('deleteConfirmMessage').textContent = '确定要删除选中的文件吗？此操作不可恢复。';
+    document.getElementById('deleteConfirmModal').classList.remove('hidden');
+}
+
+function showFolderDeleteConfirm(folder) {
+    if (folder.managed === false) return;
+    deleteFolderTarget = folder;
+    document.getElementById('deleteConfirmMessage').textContent = `确定要删除文件夹「${folder.fileName}」及其内部的所有文件和子文件夹吗？此操作不可恢复。`;
     document.getElementById('deleteConfirmModal').classList.remove('hidden');
 }
 
 function closeDeleteModal() {
     document.getElementById('deleteConfirmModal').classList.add('hidden');
+    deleteFolderTarget = null;
 }
 
-function confirmDelete() {
+async function confirmDelete() {
     const uuids = Array.from(selectedFiles);
-    
-    fetch('/removeFileBatch', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(uuids)
-    })
-    .then(response => {
+    const folder = deleteFolderTarget;
+    if (!folder && uuids.length === 0) return;
+    const submit = document.getElementById('confirmDeleteBtn');
+    submit.disabled = true;
+    try {
+        const response = await fetch(folder ? '/api/folders' : '/removeFileBatch', {
+            method: folder ? 'DELETE' : 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(folder ? {folder: folder.folderPath} : uuids)
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         closeDeleteModal();
         clearSelection();
         showToast('删除成功', 'success');
         loadFileList();
-    })
-    .catch(error => {
+    } catch (error) {
         console.error('Delete error:', error);
         showToast('删除失败', 'error');
-        closeDeleteModal();
-    });
+    } finally {
+        submit.disabled = false;
+    }
 }
 
 // Batch download
@@ -2599,7 +2642,7 @@ function showToast(message, type = 'info') {
 }
 
 // ===== Tag management =====
-function showTagInput(row, uuid) {
+function showTagInput(row, uuid, folder = null) {
     // Remove any existing in-flight tag input
     const existingInput = row.querySelector('.tag-input-inline');
     if (existingInput) return;
@@ -2629,7 +2672,7 @@ function showTagInput(row, uuid) {
         if (e.key === 'Enter') {
             const tagName = input.value.trim();
             if (tagName) {
-                confirmAddTag(uuid, tagName);
+                confirmAddTag(uuid, tagName, folder);
             }
             cleanup();
         } else if (e.key === 'Escape') {
@@ -2647,12 +2690,14 @@ function showTagInput(row, uuid) {
     });
 }
 
-async function confirmAddTag(uuid, tagName) {
+async function confirmAddTag(uuid, tagName, folder = null) {
+    if (folder?.managed === false) return;
+    const tags = [{name: tagName, namespace: 'manual', source: 'manual', confidence: 1.0}];
     try {
-        const response = await fetch(`/api/file/${uuid}/tags`, {
+        const response = await fetch(folder ? '/api/folders/tags' : `/api/file/${uuid}/tags`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify([{ name: tagName, namespace: 'manual', source: 'manual', confidence: 1.0 }])
+            body: JSON.stringify(folder ? {folder: folder.folderPath, tags} : tags)
         });
         if (response.ok) {
             showToast('标签已添加', 'success');
@@ -2666,12 +2711,13 @@ async function confirmAddTag(uuid, tagName) {
     }
 }
 
-async function removeTag(uuid, tagIndexFormat) {
+async function removeTag(uuid, tagIndexFormat, folder = null) {
+    if (folder?.managed === false) return;
     try {
-        const response = await fetch(`/api/file/${uuid}/tags`, {
+        const response = await fetch(folder ? '/api/folders/tags' : `/api/file/${uuid}/tags`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify([tagIndexFormat])
+            body: JSON.stringify(folder ? {folder: folder.folderPath, tags: [tagIndexFormat]} : [tagIndexFormat])
         });
         if (response.ok) {
             showToast('标签已删除', 'success');
@@ -2687,9 +2733,12 @@ async function removeTag(uuid, tagIndexFormat) {
 
 // ======================== 重命名 ========================
 let renameTargetUuid = null;
+let renameTargetFolder = null;
 
 function showRenameModal(uuid, oldName) {
     renameTargetUuid = uuid;
+    renameTargetFolder = null;
+    document.getElementById('renamePrompt').textContent = '请输入新的文件名：';
     const input = document.getElementById('renameInput');
     input.value = oldName;
     document.getElementById('renameModal').classList.remove('hidden');
@@ -2702,24 +2751,40 @@ function showRenameModal(uuid, oldName) {
     }
 }
 
+function showFolderRenameModal(folder) {
+    if (folder.managed === false) return;
+    showRenameModal(folder.uuid, folder.fileName);
+    renameTargetFolder = folder;
+    document.getElementById('renamePrompt').textContent = '请输入新的文件夹名称，内部文件和子文件夹会一并保留：';
+    document.getElementById('renameInput').select();
+}
+
 function closeRenameModal() {
     document.getElementById('renameModal').classList.add('hidden');
     renameTargetUuid = null;
+    renameTargetFolder = null;
 }
 
 async function confirmRename() {
-    if (!renameTargetUuid) return;
+    if (!renameTargetUuid && !renameTargetFolder) return;
     const newFileName = document.getElementById('renameInput').value.trim();
     if (!newFileName) {
-        showToast('文件名不能为空', 'warning');
+        showToast(renameTargetFolder ? '文件夹名称不能为空' : '文件名不能为空', 'warning');
+        return;
+    }
+    if (renameTargetFolder && (/[\/\\\x00-\x1f\x7f]/.test(newFileName) || newFileName === '.' || newFileName === '..')) {
+        showToast('请输入有效的文件夹名称', 'warning');
         return;
     }
     const uuid = renameTargetUuid;
+    const folder = renameTargetFolder;
+    const submit = document.getElementById('confirmRenameBtn');
+    submit.disabled = true;
     try {
-        const response = await fetch(`/api/file/${uuid}/rename`, {
+        const response = await fetch(folder ? '/api/folders/rename' : `/api/file/${uuid}/rename`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fileName: newFileName })
+            body: JSON.stringify(folder ? {folder: folder.folderPath, name: newFileName} : {fileName: newFileName})
         });
         if (response.ok) {
             showToast('重命名成功', 'success');
@@ -2732,6 +2797,8 @@ async function confirmRename() {
     } catch (error) {
         console.error('Rename error:', error);
         showToast('重命名失败', 'error');
+    } finally {
+        submit.disabled = false;
     }
 }
 

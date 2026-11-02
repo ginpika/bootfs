@@ -614,7 +614,7 @@
                 </svg>
                 <h3 class="text-lg font-semibold theme-page-text-primary">确认删除</h3>
             </div>
-            <p class="theme-page-text-secondary mb-6">确定要删除选中的文件吗？此操作不可恢复。</p>
+            <p id="deleteConfirmMessage" class="theme-page-text-secondary mb-6">确定要删除选中的文件吗？此操作不可恢复。</p>
             <div class="flex justify-end space-x-3">
                 <button onclick="closeDeleteModal()" class="theme-btn-secondary">取消</button>
                 <button id="confirmDeleteBtn" class="theme-btn-danger">删除</button>
@@ -631,7 +631,7 @@
                 </svg>
                 <h3 class="text-lg font-semibold theme-page-text-primary">重命名</h3>
             </div>
-            <p class="theme-page-text-secondary mb-3 text-sm">请输入新的文件名：</p>
+            <p id="renamePrompt" class="theme-page-text-secondary mb-3 text-sm">请输入新的文件名：</p>
             <input id="renameInput" type="text" maxlength="255" class="w-full px-3 py-2 mb-4 theme-input theme-rounded-lg" style="color: var(--color-text-primary);">
             <div class="flex justify-end space-x-3">
                 <button onclick="closeRenameModal()" class="theme-btn-secondary">取消</button>

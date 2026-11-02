@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>Protocol</key>
+        <string>s3</string>
+        <key>Vendor</key>
+        <string>bootfs-s3-https</string>
+        <key>Scheme</key>
+        <string>https</string>
+        <key>Description</key>
+        <string>BootFS S3 (HTTPS)</string>
+        <key>Default Nickname</key>
+        <string>BootFS</string>
+        <key>Default Hostname</key>
+        <string>tfs.ginpika.cc</string>
+        <key>Hostname Configurable</key>
+        <true/>
+        <key>Default Port</key>
+        <string>443</string>
+        <key>Port Configurable</key>
+        <true/>
+        <key>Default Path</key>
+        <string>/bootfs</string>
+        <key>Path Configurable</key>
+        <true/>
+        <key>Context</key>
+        <string>/s3</string>
+        <key>Region</key>
+        <string>us-east-1</string>
+        <key>Authorization</key>
+        <string>AWS4HMACSHA256</string>
+        <key>Username Configurable</key>
+        <true/>
+        <key>Username Placeholder</key>
+        <string>Access Key ID</string>
+        <key>Password Configurable</key>
+        <true/>
+        <key>Password Placeholder</key>
+        <string>Secret Access Key</string>
+        <key>Anonymous Configurable</key>
+        <false/>
+        <key>Properties</key>
+        <dict>
+            <key>s3.bucket.virtualhost.disable</key>
+            <true/>
+            <key>s3.versioning.enable</key>
+            <false/>
+            <key>s3.listing.versioning.enable</key>
+            <false/>
+            <key>s3.upload.multipart.lookup</key>
+            <false/>
+            <key>s3.upload.multipart</key>
+            <false/>
+            <key>s3.listing.metadata.enable</key>
+            <false/>
+        </dict>
+    </dict>
+</plist>

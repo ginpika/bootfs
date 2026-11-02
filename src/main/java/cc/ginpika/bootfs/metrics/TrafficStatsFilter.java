@@ -15,7 +15,8 @@ import javax.servlet.http.HttpServletResponseWrapper;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
-import java.io.UnsupportedEncodingException;
+import java.io.Writer;
+import java.nio.charset.Charset;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
@@ -39,6 +40,9 @@ public class TrafficStatsFilter implements Filter {
         int status = 200;
         try {
             chain.doFilter(req, wrapped);
+            // The container cannot finish a writer created by this wrapper. Do this only
+            // after normal synchronous completion so errors and async dispatch retain control.
+            if (!req.isAsyncStarted()) wrapped.finishResponse();
         } catch (IOException | ServletException e) {
             status = 500;
             throw e;
@@ -61,6 +65,8 @@ public class TrafficStatsFilter implements Filter {
     private static class CountingResponseWrapper extends HttpServletResponseWrapper {
         private CountingServletOutputStream countingOut;
         private PrintWriter writer;
+        private ResettableWriter encodedWriter;
+        private boolean responseReplaced;
 
         CountingResponseWrapper(HttpServletResponse response) {
             super(response);
@@ -81,18 +87,74 @@ public class TrafficStatsFilter implements Filter {
                 if (encoding == null || encoding.isEmpty()) {
                     encoding = "UTF-8";
                 }
-                try {
-                    writer = new PrintWriter(new OutputStreamWriter(getOutputStream(), encoding));
-                } catch (UnsupportedEncodingException e) {
-                    writer = new PrintWriter(new OutputStreamWriter(getOutputStream()));
-                }
+                Charset charset;
+                try { charset = Charset.forName(encoding); }
+                catch (IllegalArgumentException invalid) { charset = Charset.defaultCharset(); }
+                encodedWriter = new ResettableWriter(getOutputStream(), charset);
+                writer = new PrintWriter(encodedWriter);
             }
             return writer;
+        }
+
+        void finishResponse() {
+            if (writer != null && !responseReplaced) writer.flush();
+        }
+
+        @Override public void flushBuffer() throws IOException {
+            if (writer != null && !responseReplaced) writer.flush();
+            super.flushBuffer();
+        }
+
+        @Override public void resetBuffer() {
+            super.resetBuffer();
+            if (encodedWriter != null) encodedWriter.reset();
+            if (countingOut != null) countingOut.bytesWritten.set(0);
+        }
+
+        @Override public void reset() {
+            super.reset();
+            writer = null;
+            encodedWriter = null;
+            countingOut = null;
+            responseReplaced = false;
+        }
+
+        @Override public void sendError(int status) throws IOException {
+            super.sendError(status);
+            responseReplaced = true;
+        }
+
+        @Override public void sendError(int status, String message) throws IOException {
+            super.sendError(status, message);
+            responseReplaced = true;
+        }
+
+        @Override public void sendRedirect(String location) throws IOException {
+            super.sendRedirect(location);
+            responseReplaced = true;
         }
 
         long getBytesWritten() {
             return countingOut != null ? countingOut.getBytesWritten() : 0L;
         }
+    }
+
+    /** Keeps an acquired PrintWriter usable when resetBuffer discards pending characters. */
+    private static class ResettableWriter extends Writer {
+        private final ServletOutputStream output;
+        private final Charset charset;
+        private OutputStreamWriter delegate;
+
+        ResettableWriter(ServletOutputStream output, Charset charset) {
+            this.output = output;
+            this.charset = charset;
+            reset();
+        }
+
+        void reset() { delegate = new OutputStreamWriter(output, charset); }
+        @Override public void write(char[] chars, int offset, int length) throws IOException { delegate.write(chars, offset, length); }
+        @Override public void flush() throws IOException { delegate.flush(); }
+        @Override public void close() throws IOException { delegate.close(); }
     }
 
     private static class CountingServletOutputStream extends ServletOutputStream {

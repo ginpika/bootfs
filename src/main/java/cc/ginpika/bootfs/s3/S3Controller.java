@@ -53,12 +53,24 @@ public class S3Controller {
     private final S3KeyIndex keyIndex;
     private final S3XmlWriter xmlWriter;
 
-    @GetMapping("/s3")
+    @GetMapping(value = "/s3", produces = MediaType.APPLICATION_XML_VALUE)
     public String listBuckets() {
         return xmlWriter.listBuckets(s3Config.getBucket());
     }
 
-    @GetMapping("/s3/{bucket}")
+    @GetMapping(value = {"/s3/{bucket}", "/s3/{bucket}/"}, params = "location", produces = MediaType.APPLICATION_XML_VALUE)
+    public String bucketLocation(@PathVariable String bucket, HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        if (!validateBucket(bucket, resp, req)) return null;
+        return xmlWriter.bucketLocation(s3Config.getRegion());
+    }
+
+    @RequestMapping(value = {"/s3/{bucket}", "/s3/{bucket}/"}, method = RequestMethod.HEAD)
+    public void headBucket(@PathVariable String bucket, HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        if (!validateBucket(bucket, resp, req)) return;
+        resp.setHeader("x-amz-bucket-region", s3Config.getRegion());
+    }
+
+    @GetMapping(value = "/s3/{bucket}", produces = MediaType.APPLICATION_XML_VALUE)
     public String listObjects(@PathVariable String bucket, HttpServletRequest req, HttpServletResponse resp) throws IOException {
         if (!validateBucket(bucket, resp, req)) return null;
         return doListObjects(bucket, req);

@@ -15,6 +15,12 @@ public class S3XmlWriter {
 
     private static final String DECL = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
 
+    public String bucketLocation(String region) {
+        // AWS represents us-east-1 with an empty LocationConstraint for compatibility.
+        return DECL + "<LocationConstraint xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"
+                + esc("us-east-1".equals(region) ? "" : region) + "</LocationConstraint>";
+    }
+
     public String listBuckets(String bucket) {
         StringBuilder sb = new StringBuilder(DECL);
         sb.append("<ListAllMyBucketsResult>");

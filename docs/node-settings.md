@@ -46,6 +46,16 @@
 
 升级后 admin 也遇到 403 时，响应中的 `Same-origin request required` / `Cross-origin request denied` 表示来源检查失败；`Application administrator role required` 表示当前 SSO 用户未通过角色规则。先核对已保存的节点入口是否为实际访问的公开地址，以及旧 SSO、代理设置是否在首次升级时导入。设置库初始化后修改 `.env` 不会覆盖库中配置；可从本机直连的 `/settings` 修复（需符合当前认证或本机访问规则），无需删除设置库。
 
+## S3 客户端连接
+
+S3 保存开启后立即对新请求生效，不需要重启。Endpoint 是 `https://<节点域名>/s3`，使用 SigV4 和 path-style 寻址；默认桶为 `bootfs`，实际列对象地址是 `/s3/bootfs`。S3 使用独立访问密钥，不使用浏览器 SSO Cookie。
+
+桶区域查询 `GET /s3/bootfs?location`（含尾斜杠和 `?location=`）返回带 S3 命名空间的 `LocationConstraint`；默认 `us-east-1` 按协议返回空值，其他区域返回配置的区域名。`HEAD /s3/bootfs` 返回空正文和 `x-amz-bucket-region`。两者都要求 SigV4，桶不存在时返回 404。旧版本误将区域查询返回为文件列表，Cyberduck 可能报 `Cannot read bucket location`；此情况需要更新服务端，仅重新导入客户端配置不能补齐接口。
+
+Cyberduck 的「服务器」只填主机名，不能把 `/s3` 拼在其中，也不能仅把 `/s3/bootfs` 当作桶路径。双击导入 [BootFS 连接配置](clients/BootFS.cyberduckprofile)，在新连接中选择 `BootFS S3 (HTTPS)`，填写主机名、端口及访问密钥，默认路径填写 `/bootfs`（自定义桶则改成对应名称）。配置使用 `Context=/s3`、path-style 和固定签名区域 `us-east-1`，关闭当前服务未实现的版本及分片任务探测，上传使用单次 PUT；文件不包含任何凭证。其他节点需把默认的 `tfs.ginpika.cc` 改成自己的域名。
+
+Cyberduck 对带前缀的 S3 服务需要自定义 `Context`，见 [官方说明](https://docs.cyberduck.io/protocols/s3/#listing-directory-failed-with-path-in-custom-s3-endpoint)。反向代理必须保留原始 Host 和 URI，不能在客户端签名后添加或删除 `/s3`，否则会造成签名不匹配。
+
 ## 凭证与备份恢复
 
 秘密密钥及完整配置记录由 AES-GCM 加密后存入设置数据库，保护密钥自动保存在本机 `kernel/security/settings.key`（0600），不增加环境变量。节点管理 token 与 Ed25519 私钥仍在 `kernel/security/cluster.json`。设置 JSON、原始 KV、联合节点响应和常规日志不返回这些秘密。设置页只允许轮换管理 token，不显示它；轮换保留签名身份、已配对节点能力，旧 token 及未用完的配对验证码失效。

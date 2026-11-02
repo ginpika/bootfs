@@ -29,11 +29,13 @@ public class ThumbnailService {
     public static final Set<String> IMAGE_EXTENSIONS = Set.of(".jpg", ".jpeg", ".png", ".gif");
     public static final Set<String> VIDEO_EXTENSIONS = Set.of(".mp4", ".webm", ".avi", ".mov", ".mkv", ".flv", ".wmv", ".m4v", ".ts");
 
-    private final ExecutorService executor = Executors.newFixedThreadPool(2, r -> {
+    private final ExecutorService executor = new java.util.concurrent.ThreadPoolExecutor(2, 2, 0, java.util.concurrent.TimeUnit.SECONDS,
+            new java.util.concurrent.ArrayBlockingQueue<>(32), r -> {
         Thread t = new Thread(r, "thumbnail-generator");
         t.setDaemon(true);
         return t;
-    });
+    }, new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+    private final Set<String> pending = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     public Path thumbPath(String uuid) {
         return Path.of(tfsConfig.getPathPrefix(), "thumb", uuid + ".webp");
@@ -65,13 +67,16 @@ public class ThumbnailService {
     }
 
     public void generateAsync(String uuid) {
+        if (!pending.add(uuid)) return;
+        try {
         CompletableFuture.runAsync(() -> {
             try {
                 generate(uuid);
             } catch (Exception e) {
                 log.error("生成缩略图失败: {}", uuid, e);
-            }
+            } finally { pending.remove(uuid); }
         }, executor);
+        } catch (java.util.concurrent.RejectedExecutionException busy) { pending.remove(uuid); }
     }
 
     public void generate(String uuid) throws IOException, InterruptedException {
@@ -133,21 +138,21 @@ public class ThumbnailService {
             );
         }
         pb.redirectErrorStream(true);
-        Process process = pb.start();
-        byte[] output = process.getInputStream().readAllBytes();
-        int exitCode = process.waitFor();
+        try {
+            cc.ginpika.bootfs.core.io.MediaProcess.capture(
+                    cc.ginpika.bootfs.core.io.MediaProcess.restrictInput(pb), 15, 1024 * 1024);
+        } catch (IOException | InterruptedException failed) {
+            Files.deleteIfExists(thumbFile);
+            if (failed instanceof InterruptedException) Thread.currentThread().interrupt();
+            throw failed;
+        }
         if (visibility.deleted(uuid)) {
             Files.deleteIfExists(thumbFile);
             return;
         }
-        if (exitCode != 0) {
-            log.error("ffmpeg 生成缩略图失败，退出码 {}，输出: {}", exitCode, new String(output));
-            Files.deleteIfExists(thumbFile);
-        } else {
-            fileObject.setThumbAvailable("1");
-            contextIO.update(uuid, fileObject);
-            search.addToFullText(cc.ginpika.bootfs.service.meilisearch.FullTextDocument.builder().uuid(uuid).thumbAvailable("1").build());
-        }
+        fileObject.setThumbAvailable("1");
+        contextIO.update(uuid, fileObject);
+        search.addToFullText(cc.ginpika.bootfs.service.meilisearch.FullTextDocument.builder().uuid(uuid).thumbAvailable("1").build());
     }
 
     @javax.annotation.PreDestroy

@@ -12,7 +12,7 @@ import java.nio.file.Path;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties={"sso.enabled=true","s3.enabled=false","bootfs.cluster.token=test-cluster-token"})
+@SpringBootTest(properties={"sso.enabled=true", "bootfs.security.public-sharing.enabled=true","s3.enabled=false","bootfs.cluster.token=test-cluster-token"})
 @AutoConfigureMockMvc
 @DirtiesContext
 class AuthenticationIntegrationTest {
@@ -69,7 +69,7 @@ class AuthenticationIntegrationTest {
     @Test void invitationCreationRequiresAuthenticationButRedemptionUsesTheCode() throws Exception {
         mvc.perform(post("/api/cluster/pairing/code")).andExpect(status().is3xxRedirection());
         mvc.perform(post("/api/cluster/pairing/adopt").contentType("application/json").content("{}"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isNotFound());
         String body = mvc.perform(post("/api/cluster/pairing/code").header("X-BootFS-Cluster-Token", "test-cluster-token"))
                 .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.token").doesNotExist()).andReturn().getResponse().getContentAsString();

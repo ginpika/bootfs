@@ -4,6 +4,8 @@
 
 当前分支正在演进为内置 mononode：RocksDB + Apache Ratis + Lucene。运行、旧数据迁移和实现边界请先阅读 [内核指南](./docs/mononode-kernel.md)。
 
+安全默认：SSO 仅允许 `admin` 角色访问共享后台，文件、缩略图、订阅和媒体读取默认需要登录；公开分享须显式设置 `BOOTFS_PUBLIC_SHARING_ENABLED=true`。升级配置、逐接口清单与未解决的生产风险见 [安全审查报告](./docs/security-audit.md)。
+
 <details>
   <summary>界面预览</summary>
   <img src="./docs/preview3.png" alt="双栏操作界面" width="600">

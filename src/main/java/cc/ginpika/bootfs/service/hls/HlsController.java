@@ -12,7 +12,6 @@ import java.util.concurrent.locks.ReentrantLock;
 
 @Slf4j
 @RestController
-@CrossOrigin
 @RequestMapping("/hls")
 @RequiredArgsConstructor
 public class HlsController {
@@ -34,11 +33,10 @@ public class HlsController {
             };
             return proxy.proxyRequest(owner,request,null);
         }
-        if (CPU_LOCK.isLocked()) {
+        if (!CPU_LOCK.tryLock()) {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
         try {
-            CPU_LOCK.lock();
             mediaConvertService.mp4ToH264Hls(uuid);
         } catch (Exception e) {
             log.error("Hls Convert fail", e);

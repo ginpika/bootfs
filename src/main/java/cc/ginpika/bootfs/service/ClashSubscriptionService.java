@@ -4,7 +4,6 @@ import com.alibaba.fastjson2.JSON;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -13,7 +12,6 @@ import org.yaml.snakeyaml.events.CollectionEndEvent;
 import org.yaml.snakeyaml.events.CollectionStartEvent;
 import org.yaml.snakeyaml.events.Event;
 import org.yaml.snakeyaml.events.ScalarEvent;
-import org.yaml.snakeyaml.representer.Representer;
 
 import java.io.StringReader;
 import java.net.IDN;
@@ -52,8 +50,10 @@ public class ClashSubscriptionService {
             options.setAllowDuplicateKeys(false);
             options.setAllowRecursiveKeys(false);
             options.setMaxAliasesForCollections(20);
-            Yaml yaml = new Yaml(new SafeConstructor(options), new Representer(), new DumperOptions(), options);
-            // SnakeYAML 1.x has no construction depth limit. Check its streaming events before
+            options.setNestingDepthLimit(40);
+            options.setCodePointLimit(TextFileService.MAX_BYTES);
+            Yaml yaml = new Yaml(new SafeConstructor(options));
+            // Check streaming events before
             // recursive object construction, including compact flow sequences and mappings.
             int depth = 0, events = 0, aliases = 0;
             Deque<String> activeAnchors = new ArrayDeque<>();

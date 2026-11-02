@@ -24,6 +24,12 @@ public class SsoConfig {
 
     @Value("${sso.local-bypass.enabled:false}")
     private boolean localBypassEnabled;
+
+    @Value("${sso.allowed-roles:admin}")
+    private String allowedRoles = "admin";
+
+    @Value("${bootfs.security.public-sharing.enabled:false}")
+    private boolean publicSharingEnabled;
     
     @Bean
     public WebClient ssoWebClient() {

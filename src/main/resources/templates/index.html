@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 
 <head>
+    <script src="/security-utils.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport"
         content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
@@ -289,17 +290,17 @@
                                 + (row.albumAvailable ? "<span  style='margin:0px 4px;position:relative;top:-2px;color: white' class='badge rounded-pill text-bg-info'><a style='color:white' href='" + window.location + "album/" + row.uuid + "'>相册可用</a></span>" : "")
                                 + (row.isPublicAccess ? "<span  style='margin:0px 4px;position:relative;top:-2px;color: white' class='badge rounded-pill text-bg-dark'><a style='color:white'>画廊</a></span>" : "")
                                 + (row.copyOf || row.hlsAvailable || row.albumAvailable || row.isPublicAccess ? "<br/>" : "")
-                                + val + "</span>"
+                                + BootFSSecurity.html(val) + "</span>"
                         }
                     },
                     { field: 'path', title: '本地路径', sortable: false },
                     {
                         field: 'fileName', title: '标题', sortable: false,
                         formatter: function (val, row) {
-                            return "<a href='" + window.location + "p/" + row.uuid + "' target='_blank'>" + val + "</a>"
+                            return "<a href='" + window.location + "p/" + row.uuid + "' target='_blank'>" + BootFSSecurity.html(val) + "</a>"
                         }
                     },
-                    { field: 'url', title: 'URL', formatter: function (val, row) { return "<a href='" + val + "' download='" + row.fileName + "' target='_blank'>" + val + "</a>" } },
+                    { field: 'url', title: 'URL', formatter: function (val, row) { return "<a href='" + BootFSSecurity.html(BootFSSecurity.url(val)) + "' download='" + BootFSSecurity.html(row.fileName) + "' target='_blank'>" + BootFSSecurity.html(val) + "</a>" } },
                     { field: 'checked', title: '操作', valign: "middle", width: "100px", formatter: function (val, row) { return "<button file-uuid-bind='" + row.uuid + "' class='btn btn-primary delete-button'>删除</button>" } }
                 ],
                 // data: res.rows,

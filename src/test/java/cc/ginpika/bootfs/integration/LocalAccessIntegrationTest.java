@@ -99,7 +99,7 @@ class LocalAccessIntegrationTest {
 
             // Local access cannot substitute for node credentials or AWS signatures.
             assertEquals(401, send(app, "/api/cluster/join", "POST", "X-BootFS-Local-Request", "1").statusCode());
-            assertEquals(401, send(app, "/api/cluster/pairing/adopt", "POST", "X-BootFS-Local-Request", "1").statusCode());
+            assertEquals(404, send(app, "/api/cluster/pairing/adopt", "POST", "X-BootFS-Local-Request", "1").statusCode());
             assertEquals(401, send(app, "/api/cluster/status", "GET", "X-BootFS-Cluster-Token", "invalid").statusCode());
             assertEquals(403, send(app, "/s3/bootfs/object", "GET").statusCode());
         }

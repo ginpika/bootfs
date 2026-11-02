@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties = {"sso.enabled=true", "s3.enabled=false", "tfs.ffmpeg-url=/nonexistent-ffmpeg"})
+@SpringBootTest(properties = {"sso.enabled=true", "bootfs.security.public-sharing.enabled=true", "s3.enabled=false", "tfs.ffmpeg-url=/nonexistent-ffmpeg"})
 @AutoConfigureMockMvc
 @DirtiesContext
 class ClashSubscriptionIntegrationTest {

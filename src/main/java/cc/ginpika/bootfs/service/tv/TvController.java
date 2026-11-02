@@ -14,7 +14,6 @@ import java.util.Map;
 
 @Slf4j
 @Controller
-@CrossOrigin
 @RequestMapping("/tv")
 @RequiredArgsConstructor
 public class TvController {

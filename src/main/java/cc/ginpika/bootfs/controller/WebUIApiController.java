@@ -19,12 +19,9 @@ import cc.ginpika.bootfs.domain.result.SearchResult;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.compress.archivers.zip.ParallelScatterZipCreator;
 import org.apache.commons.compress.archivers.zip.UnixStat;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
-import org.apache.commons.compress.parallel.InputStreamSupplier;
-import org.apache.commons.io.input.NullInputStream;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -35,6 +32,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.*;
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
@@ -44,7 +42,6 @@ import java.util.stream.Collectors;
 // All api here supported web UI
 @Slf4j
 @RestController
-@CrossOrigin
 @SuppressWarnings("all")
 @RequiredArgsConstructor
 public class WebUIApiController {
@@ -201,7 +198,7 @@ public class WebUIApiController {
 
     @PostMapping("/removeFileBatch")
     public Boolean removeFileBatch(HttpServletRequest request, @RequestBody String uuids) {
-        JSONArray array = JSONArray.parseArray(uuids);
+        JSONArray array = batchIds(uuids);
         // Return success only after all logical deletes are acknowledged.
         for (Object id : array) removeFileByUuidUnchecked(request,(String)id);
         return Boolean.TRUE;
@@ -214,41 +211,56 @@ public class WebUIApiController {
     public String downloadFileBatch(HttpServletRequest request,
                                      HttpServletResponse response,
                                      @RequestBody String uuids) throws IOException {
+        JSONArray arr = batchIds(uuids);
+        java.util.List<FileObject> batch = new java.util.ArrayList<>();
+        long total = 0;
+        for (Object value : arr) {
+            FileObject resource = context.query((String) value);
+            if (resource == null || fileService.isDeleted(resource)) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Resource not found");
+            total += Files.size(Path.of(resource.getPath()));
+            if (total > 4L * 1024 * 1024 * 1024) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.PAYLOAD_TOO_LARGE, "Batch exceeds 4 GiB");
+            batch.add(resource);
+        }
         String uuid = IdGenerator.getUniqueId();
         String zipPath = Path.of(tfsConfig.getPathPrefix(),uuid + ".zip").toString();
-        try (FileOutputStream fos = new FileOutputStream(zipPath)) {
-            ZipArchiveOutputStream zos = new ZipArchiveOutputStream(fos);
+        try (ZipArchiveOutputStream zos = new ZipArchiveOutputStream(new FileOutputStream(zipPath))) {
             zos.setEncoding("utf-8");
-            JSONArray arr = JSONArray.parseArray(uuids);
-            ParallelScatterZipCreator parallelScatterZipCreator = new ParallelScatterZipCreator();
-            arr.forEach(r -> {
-                FileObject tf = context.query((String) r);
-                String path = tf.getPath();
-                File file = new File(tf.getPath());
-                final InputStreamSupplier inputStreamSupplier = () -> {
-                    try {
-                        return new FileInputStream(path);
-                    } catch (FileNotFoundException e) {
-                        return new NullInputStream(0);
-                    }
-                };
-                ZipArchiveEntry entry = new ZipArchiveEntry(tf.getFileName());
+            java.util.Set<String> names = new java.util.HashSet<>();
+            for (FileObject tf : batch) {
+                String name = archiveName(tf.getFileName(), tf.getUuid());
+                if (!names.add(name)) name = tf.getUuid() + "-" + name;
+                ZipArchiveEntry entry = new ZipArchiveEntry(name);
                 entry.setMethod(ZipArchiveEntry.DEFLATED);
-                entry.setSize(file.length());
                 entry.setUnixMode(UnixStat.FILE_FLAG | 436);
-                parallelScatterZipCreator.addArchiveEntry(entry, inputStreamSupplier);
-            });
-            parallelScatterZipCreator.writeTo(zos);
-            zos.close();
-            return new JSONObject().fluentPut("uuid", uuid).toJSONString();
-        } catch (ExecutionException | InterruptedException e) {
-            throw new RuntimeException(e);
+                zos.putArchiveEntry(entry);
+                try (InputStream input = Files.newInputStream(Path.of(tf.getPath()))) { input.transferTo(zos); }
+                zos.closeArchiveEntry();
+            }
+        } catch (IOException | RuntimeException failed) {
+            Files.deleteIfExists(Path.of(zipPath)); throw failed;
         }
+        return new JSONObject().fluentPut("uuid", uuid).toJSONString();
     }
 
-    @RequestMapping("/g/b/{uuid}")
+    private static JSONArray batchIds(String json) {
+        JSONArray values = JSONArray.parseArray(json);
+        if (values == null || values.size() > 1000 || new java.util.HashSet<>(values).size() != values.size()
+                || values.stream().anyMatch(id -> !(id instanceof String) || !((String) id).matches("[A-Za-z0-9_-]{1,128}")))
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Invalid batch resource IDs");
+        return values;
+    }
+
+    static String archiveName(String name, String fallback) {
+        if (name == null) return fallback;
+        String basename = name.replace('\\', '/'); basename = basename.substring(basename.lastIndexOf('/') + 1)
+                .replaceAll("[\\p{Cntrl}:]", "_");
+        return basename.isBlank() || basename.equals(".") || basename.equals("..") ? fallback : basename;
+    }
+
+    @GetMapping("/g/b/{uuid}")
     public void downloadBatchFile(@PathVariable String uuid,
                                   HttpServletResponse response) {
+        if (!uuid.matches("[A-Za-z0-9_-]{1,128}")) { response.setStatus(404); return; }
         Path zipUrl = Path.of(tfsConfig.getPathPrefix(), uuid + ".zip");
         try (FileInputStream fis = new FileInputStream(zipUrl.toString())) {
             File file = new File(zipUrl.toString());
@@ -563,18 +575,8 @@ public class WebUIApiController {
                     "-"
             );
             pb.redirectError(ProcessBuilder.Redirect.DISCARD);
-            Process process = pb.start();
-
-            try (InputStream is = process.getInputStream()) {
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = is.read(buf)) != -1) {
-                    baos.write(buf, 0, n);
-                }
-            }
-            process.waitFor(10, TimeUnit.SECONDS);
-
-            byte[] imageBytes = baos.toByteArray();
+            byte[] imageBytes = cc.ginpika.bootfs.core.io.MediaProcess.capture(
+                    cc.ginpika.bootfs.core.io.MediaProcess.restrictInput(pb), 10, 8 * 1024 * 1024);
             if (imageBytes.length == 0) {
                 return ResponseEntity.notFound().build();
             }
@@ -630,18 +632,11 @@ public class WebUIApiController {
                     filePath
             );
             pb.redirectErrorStream(true);
-            Process process = pb.start();
-
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line);
-                }
-            }
-            process.waitFor(10, TimeUnit.SECONDS);
-
-            JSONObject probeResult = JSONObject.parseObject(output.toString());
+            // ffprobe has no -nostdin option; its stdin is never used by this invocation.
+            java.util.List<String> args = new java.util.ArrayList<>(cc.ginpika.bootfs.core.io.MediaProcess.restrictInput(pb).command());
+            args.remove("-nostdin"); pb.command(args);
+            byte[] output = cc.ginpika.bootfs.core.io.MediaProcess.capture(pb, 10, 2 * 1024 * 1024);
+            JSONObject probeResult = JSONObject.parseObject(new String(output, java.nio.charset.StandardCharsets.UTF_8));
 
             // 解析 format 信息
             JSONObject format = probeResult.getJSONObject("format");

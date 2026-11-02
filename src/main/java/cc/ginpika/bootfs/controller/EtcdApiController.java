@@ -10,7 +10,6 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
-@CrossOrigin
 @RequestMapping("/api/etcd")
 public class EtcdApiController {
 
@@ -45,7 +44,7 @@ public class EtcdApiController {
         } catch (Exception e) {
             log.error("查询 etcd keys 失败", e);
             result.put("succeed", false);
-            result.put("message", e.getMessage());
+            result.put("message", "Operation failed");
         }
         return result;
     }
@@ -82,7 +81,7 @@ public class EtcdApiController {
         } catch (Exception e) {
             log.error("写入 etcd key 失败", e);
             result.put("succeed", false);
-            result.put("message", e.getMessage());
+            result.put("message", "Operation failed");
         }
         return result;
     }
@@ -100,7 +99,7 @@ public class EtcdApiController {
         } catch (Exception e) {
             log.error("查询 etcd key 失败", e);
             result.put("succeed", false);
-            result.put("message", e.getMessage());
+            result.put("message", "Operation failed");
         }
         return result;
     }
@@ -115,7 +114,7 @@ public class EtcdApiController {
         } catch (Exception e) {
             log.error("删除 etcd key 失败", e);
             result.put("succeed", false);
-            result.put("message", e.getMessage());
+            result.put("message", "Operation failed");
         }
         return result;
     }
@@ -130,7 +129,7 @@ public class EtcdApiController {
         } catch (Exception e) {
             log.error("按前缀删除 etcd keys 失败", e);
             result.put("succeed", false);
-            result.put("message", e.getMessage());
+            result.put("message", "Operation failed");
         }
         return result;
     }

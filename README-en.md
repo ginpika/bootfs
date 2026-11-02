@@ -4,6 +4,8 @@ This branch now embeds RocksDB, Apache Ratis and Lucene. The older deployment in
 
 [中文](./README.md)
 
+Security defaults: only the SSO `admin` role can access this shared application. Files, thumbnails, subscriptions and media require login unless `BOOTFS_PUBLIC_SHARING_ENABLED=true` explicitly enables anonymous sharing. See the [security audit](./docs/security-audit.md) for configuration changes, the endpoint inventory and remaining production risks.
+
 <details>
   <summary>UI Preview</summary>
   <img src="./docs/preview3.png" alt="双栏操作界面" width="600">

@@ -106,12 +106,17 @@ public class MediaConvertService {
 
 
 
+            cc.ginpika.bootfs.core.io.MediaProcess.restrictInput(processBuilder);
             processBuilder.redirectErrorStream(true);
             Process process = processBuilder.start();
             log.info(processBuilder.command().toString());
             Thread pLog = new Thread(() -> logStream(process.getInputStream(), outputLog));
             pLog.start();
-            int exit = process.waitFor();
+            if (!process.waitFor(30, java.util.concurrent.TimeUnit.MINUTES)) {
+                process.destroyForcibly();
+                throw new IOException("Media conversion timed out");
+            }
+            int exit = process.exitValue();
             pLog.join();
             if (visibility.deleted(uuid)) {
                 cc.ginpika.bootfs.core.io.DurableFiles.deleteTree(outputSegmentDir);

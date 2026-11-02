@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -25,6 +26,8 @@ import java.util.zip.Inflater;
 @Slf4j
 @Service
 public class AiMetadataService {
+    private static final int MAX_TEXT_BYTES = 2 * 1024 * 1024;
+    private static final int MAX_CHUNKS = 10000;
 
     private static final byte[] PNG_SIGNATURE = {
             (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
@@ -225,9 +228,12 @@ public class AiMetadataService {
                 if (sig[i] != PNG_SIGNATURE[i]) return chunks;
             }
 
+            int count = 0, total = 0;
             while (raf.getFilePointer() < raf.length()) {
+                if (++count > MAX_CHUNKS) throw new IOException("Too many PNG chunks");
                 long chunkStart = raf.getFilePointer();
                 int length = readInt32(raf);
+                if (length < 0 || (long) length > raf.length() - chunkStart - 12) throw new IOException("Invalid PNG chunk length");
                 byte[] typeBytes = new byte[4];
                 raf.readFully(typeBytes);
                 String type = new String(typeBytes, StandardCharsets.ISO_8859_1);
@@ -239,6 +245,7 @@ public class AiMetadataService {
                     continue;
                 }
 
+                if (length > MAX_TEXT_BYTES || (total += length) > MAX_TEXT_BYTES) throw new IOException("PNG metadata exceeds limit");
                 byte[] data = new byte[length];
                 raf.readFully(data);
                 raf.seek(chunkStart + 8 + length + 4);
@@ -246,8 +253,11 @@ public class AiMetadataService {
                 try {
                     Map.Entry<String, String> entry = parseTextChunk(type, data);
                     if (entry != null) {
+                        total += entry.getValue().getBytes(StandardCharsets.UTF_8).length;
+                        if (total > MAX_TEXT_BYTES) throw new IOException("PNG metadata exceeds limit");
                         chunks.putIfAbsent(entry.getKey(), entry.getValue());
                     }
+                } catch (IOException limit) { throw limit;
                 } catch (Exception e) {
                     log.debug("解析 {} chunk 失败: {}", type, e.getMessage());
                 }
@@ -305,23 +315,23 @@ public class AiMetadataService {
     }
 
     private byte[] zlibInflate(byte[] compressed) {
+        Inflater inflater = new Inflater();
         try {
-            Inflater inflater = new Inflater();
             inflater.setInput(compressed);
-            ByteArrayOutputStream out = new ByteArrayOutputStream(compressed.length * 4);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
             byte[] buf = new byte[8192];
             while (!inflater.finished()) {
                 int n = inflater.inflate(buf);
                 if (n == 0) {
-                    if (inflater.needsInput() || inflater.needsDictionary()) break;
+                    return null;
                 }
+                if (out.size() + n > MAX_TEXT_BYTES) return null;
                 out.write(buf, 0, n);
             }
-            inflater.end();
             return out.toByteArray();
         } catch (Exception e) {
             return null;
-        }
+        } finally { inflater.end(); }
     }
 
     private static int indexOf(byte[] data, byte b) {

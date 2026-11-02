@@ -33,7 +33,10 @@ public class ClashLatencyService {
     private final int timeoutMillis;
     private final long cacheMillis;
 
-    public ClashLatencyService() { this(ClashLatencyService::tcpProbe, 8, 1200, 5000); }
+    @org.springframework.beans.factory.annotation.Autowired
+    public ClashLatencyService(@org.springframework.beans.factory.annotation.Value("${bootfs.security.allow-private-probes:false}") boolean allowPrivate) {
+        this((server, port, timeout) -> tcpProbe(server, port, timeout, allowPrivate), 8, 1200, 5000);
+    }
 
     ClashLatencyService(EndpointProbe probe, int concurrency, int timeoutMillis, long cacheMillis) {
         this.probe = probe;
@@ -127,12 +130,14 @@ public class ClashLatencyService {
         }
     }
 
-    private static ProbeResult tcpProbe(String server, int port, int timeoutMillis) {
+    private static ProbeResult tcpProbe(String server, int port, int timeoutMillis, boolean allowPrivate) {
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
         InetAddress[] addresses;
         try { addresses = InetAddress.getAllByName(server); }
         catch (UnknownHostException unresolved) { return ProbeResult.failure("unresolved"); }
         catch (RuntimeException failed) { return ProbeResult.failure("unreachable"); }
+        // Connect to these exact validated addresses, never resolve the hostname a second time.
+        if (!allowPrivate && java.util.Arrays.stream(addresses).anyMatch(address -> !publicAddress(address))) return ProbeResult.failure("blocked");
         long start = System.nanoTime();
         for (int index = 0; index < Math.min(addresses.length, 4); index++) {
             if (Thread.currentThread().isInterrupted()) return ProbeResult.failure("timeout");
@@ -145,6 +150,16 @@ public class ClashLatencyService {
             catch (IOException | RuntimeException unavailable) { /* Try the next resolved address within the same deadline. */ }
         }
         return ProbeResult.failure("unreachable");
+    }
+
+    static boolean publicAddress(InetAddress address) {
+        if (address.isAnyLocalAddress() || address.isLoopbackAddress() || address.isLinkLocalAddress()
+                || address.isSiteLocalAddress() || address.isMulticastAddress()) return false;
+        byte[] bytes = address.getAddress();
+        int a = bytes[0] & 255, b = bytes[1] & 255;
+        if (bytes.length == 16) return (a & 0xe0) == 0x20; // Global unicast only, excludes ULA and IPv4 translation.
+        return a != 0 && a < 224 && !(a == 100 && b >= 64 && b <= 127)
+                && !(a == 192 && b == 0) && !(a == 198 && (b == 18 || b == 19));
     }
 
     @PreDestroy public void close() { workers.shutdownNow(); }

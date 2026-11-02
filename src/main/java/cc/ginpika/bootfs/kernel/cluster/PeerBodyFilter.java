@@ -14,7 +14,10 @@ import java.nio.charset.StandardCharsets;
 public class PeerBodyFilter extends OncePerRequestFilter {
     @Override protected void doFilterInternal(HttpServletRequest request,HttpServletResponse response,FilterChain chain) throws ServletException,IOException {
         String type=request.getContentType(),signature=request.getHeader("X-BootFS-Signature");
-        if (signature==null || type==null || !type.toLowerCase(java.util.Locale.ROOT).startsWith("application/json")) { chain.doFilter(request,response); return; }
+        boolean transfer = request.getRequestURI().equals(request.getContextPath() + "/t")
+                || request.getRequestURI().equals(request.getContextPath() + "/t/prepare");
+        if (signature==null || (transfer && type!=null && type.toLowerCase(java.util.Locale.ROOT).startsWith("multipart/form-data"))
+                || "GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod())) { chain.doFilter(request,response); return; }
         byte[] body=request.getInputStream().readNBytes(16*1024*1024+1);
         if (body.length>16*1024*1024 || !ClusterHttp.digest(body).equals(request.getHeader("X-BootFS-Digest"))) {
             response.setStatus(401); response.setContentType("application/json"); response.getWriter().write("{\"error\":\"Invalid signed request body\"}"); return;

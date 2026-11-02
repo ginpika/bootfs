@@ -12,7 +12,6 @@ import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,7 +27,6 @@ import java.util.concurrent.*;
 
 @Slf4j
 @RestController
-@CrossOrigin
 @RequestMapping("/api/dashboard")
 public class DashboardApiController {
 
@@ -72,7 +70,7 @@ public class DashboardApiController {
         } catch (Exception e) {
             log.error("获取 dashboard 统计数据失败", e);
             result.put("succeed", false);
-            result.put("message", e.getMessage());
+            result.put("message", "Operation failed");
         }
         return result;
     }
@@ -90,7 +88,7 @@ public class DashboardApiController {
         } catch (Exception e) {
             log.error("获取本节点统计失败", e);
             result.put("succeed", false);
-            result.put("message", e.getMessage());
+            result.put("message", "Operation failed");
         }
         return result;
     }

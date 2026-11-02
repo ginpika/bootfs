@@ -5,7 +5,6 @@ import cc.ginpika.bootfs.sso.LocalAccessPolicy;
 import cc.ginpika.bootfs.service.SsoService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -15,7 +14,6 @@ import javax.servlet.http.HttpServletResponse;
 
 @Slf4j
 @RestController
-@CrossOrigin
 public class AuthController {
     
     @Autowired
@@ -23,6 +21,7 @@ public class AuthController {
 
     @Autowired
     private LocalAccessPolicy localAccess;
+    @Autowired private cc.ginpika.bootfs.config.TfsConfig appConfig;
 
     public AuthController(SsoService ssoService) {
         this.ssoService = ssoService;
@@ -56,13 +55,9 @@ public class AuthController {
         cookie.setMaxAge(0);
         response.addCookie(cookie);
         
-        // 获取当前请求的完整 URL 作为重定向地址
-        String requestUrl = request.getRequestURL().toString();
-        // 提取基础路径（去掉 /api/logout 部分）
-        String baseUrl = requestUrl.replace("/api/logout", "");
-        // 使用基础路径作为重定向地址，确保登录后返回原页面
+        // Only configured application origins enter SSO redirects, never a supplied Host header.
+        String baseUrl = appConfig.getWebEntrypoint().replaceAll("/+$", "");
         String redirectUrl = ssoService.getLoginUrl(baseUrl);
-        log.debug("重定向到 SSO 登录页：{}", redirectUrl);
         try {
             response.sendRedirect(redirectUrl);
         } catch (Exception e) {

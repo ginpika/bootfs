@@ -134,9 +134,14 @@ public final class DynamicMetadataStore implements MetadataStore {
     private boolean verifySignature(javax.servlet.http.HttpServletRequest request,String token,String publicKey,boolean consume) {
         String time=request.getHeader("X-BootFS-Time"),nonce=request.getHeader("X-BootFS-Nonce"),digest=request.getHeader("X-BootFS-Digest");
         long now=System.currentTimeMillis();
-        try { if (Math.abs(now-Long.parseLong(time))>60_000 || nonce==null || !nonce.matches("[A-Za-z0-9-]{36}") || digest==null || !digest.matches("[a-f0-9]{64}")) return false; }
+        try { long suppliedTime=Long.parseLong(time);
+            if (suppliedTime<now-60_000 || suppliedTime>now+60_000 || nonce==null || !nonce.matches("[A-Za-z0-9-]{36}") || digest==null || !digest.matches("[a-f0-9]{64}")) return false; }
         catch(NumberFormatException invalid) { return false; }
-        if (request.getContentType()!=null && request.getContentType().toLowerCase(Locale.ROOT).startsWith("application/json") && !Boolean.TRUE.equals(request.getAttribute("bootfs.peerBodyVerified"))) return false;
+        String path=request.getRequestURI().substring(request.getContextPath().length());
+        boolean transfer=(path.equals("/t") || path.equals("/t/prepare")) && request.getContentType()!=null
+                && request.getContentType().toLowerCase(Locale.ROOT).startsWith("multipart/form-data");
+        boolean read="GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod());
+        if (!read && !transfer && !Boolean.TRUE.equals(request.getAttribute("bootfs.peerBodyVerified"))) return false;
         if (("GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod())) && !ClusterHttp.digest(new byte[0]).equals(digest)) return false;
         String target=request.getRequestURI()+(request.getQueryString()==null ? "" : "?"+request.getQueryString());
         if (!ClusterCredentials.verify(publicKey,ClusterHttp.signingInput(request.getMethod(),target,token,time,nonce,digest),request.getHeader("X-BootFS-Signature"))) return false;

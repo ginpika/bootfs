@@ -61,6 +61,18 @@ public class ReverseProxyService {
         }
         rq.addHeader(isRange ? "Is-Range-Request" : "Is-Proxy", "1");
         rq.addHeader("Accept-Type", acceptType);
+        // Only paired nodes receive credentials; browser cookies are never forwarded.
+        if (federation != null) {
+            try {
+                String endpoint = rq.getURI().toString();
+                int path = endpoint.lastIndexOf("/f/");
+                if (path < 0) throw new IOException("Invalid resource route");
+                String token = federation.tokenFor(endpoint.substring(0, path));
+                rq.setHeader("X-BootFS-Cluster-Token", token);
+                cc.ginpika.bootfs.kernel.cluster.ClusterHttp.signedHeaders(federation.identity(), "GET", rq.getURI(), token,
+                        cc.ginpika.bootfs.kernel.cluster.ClusterHttp.digest(new byte[0])).forEach(rq::setHeader);
+            } catch (IOException unauthorized) { throw new IllegalStateException("Resource node is not authorized", unauthorized); }
+        }
     }
 
     public void reverseProxyFile(String uuid, HttpServletResponse response, HttpServletRequest request) {

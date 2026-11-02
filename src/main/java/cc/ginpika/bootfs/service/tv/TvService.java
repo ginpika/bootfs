@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
 public class TvService {
     private final Context context;
     private final TfsConfig tfsConfig;
+    @org.springframework.beans.factory.annotation.Autowired private cc.ginpika.bootfs.service.hls.HlsFileService hlsFiles;
 
     private static final int PLAYLIST_WINDOW_SIZE = 5;
 
@@ -247,12 +248,8 @@ public class TvService {
 
     @SuppressWarnings("null")
     public Resource getTsSegment(String uuid, String fileName) {
-        Path tsPath = Path.of(tfsConfig.getPathPrefix(), "hls", uuid, fileName);
-        if (!Files.exists(tsPath)) {
-            log.warn("TS file not found: {}", tsPath);
-            return null;
-        }
-        return new FileSystemResource(tsPath);
+        if (fileName == null || !fileName.matches("[A-Za-z0-9_-][A-Za-z0-9_.-]{0,200}\\.ts")) return null;
+        return hlsFiles.mappingToLocal(uuid, fileName);
     }
 
     public Map<String, Object> getStatus() {

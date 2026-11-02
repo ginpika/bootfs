@@ -297,7 +297,7 @@ function initializeEventListeners() {
             const item = document.createElement('div');
             item.className = 'search-suggestion-item';
             item.innerHTML = `
-                <div class="file-name">${file.fileName}</div>
+                <div class="file-name">${BootFSSecurity.html(file.fileName)}</div>
                 <div class="file-meta">${file.uuid} · ${formatFileSize(file.size || 0)}</div>
             `;
             item.addEventListener('click', () => {
@@ -725,8 +725,8 @@ async function appendToWaterfallAsync(files) {
                     fetchAlbumPoster(file.uuid).then(posterUrl => {
                         if (posterUrl) {
                             albumCover.innerHTML = `
-                                <img src="${posterUrl}" 
-                                     alt="${file.fileName}" 
+                                <img src="${BootFSSecurity.html(BootFSSecurity.url(posterUrl))}"
+                                     alt="${BootFSSecurity.html(file.fileName)}"
                                      class="w-full h-full object-cover"
                                      loading="lazy"
                                      onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center\\' style=\\'background-color: var(--color-bg-tertiary);\\'><svg class=\\'w-16 h-16\\' style=\\'color: var(--color-text-muted);\\' fill=\\'none\\' stroke=\\'currentColor\\' viewBox=\\'0 0 24 24\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' stroke-width=\\'2\\' d=\\'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z\\'></path></svg></div>';">
@@ -861,8 +861,8 @@ function createWaterfallCard(file) {
                 ${isAlbumFile ? `
                     <div class="relative w-full aspect-[3/4] album-cover" style="background-color: var(--color-bg-tertiary);" data-album-uuid="${file.uuid}">
                         ${file.thumbUrl ? `
-                            <img src="${file.thumbUrl}"
-                                 alt="${file.fileName}"
+                            <img src="${BootFSSecurity.html(BootFSSecurity.url(file.thumbUrl))}"
+                                 alt="${BootFSSecurity.html(file.fileName)}"
                                  class="w-full h-full object-cover"
                                  loading="lazy">
                         ` : `
@@ -875,8 +875,8 @@ function createWaterfallCard(file) {
                     </div>
                 ` : isImageFile ? `
                     ${hasThumb(file) ? `
-                        <img src="${getThumbUrl(file)}"
-                             alt="${file.fileName}"
+                        <img src="${BootFSSecurity.html(BootFSSecurity.url(getThumbUrl(file)))}"
+                             alt="${BootFSSecurity.html(file.fileName)}"
                              class="w-full h-auto object-cover"
                              loading="lazy"
                              onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
@@ -890,8 +890,8 @@ function createWaterfallCard(file) {
                 ` : isVideoFile ? `
                     <div class="relative w-full aspect-video video-card-container" data-video-uuid="${file.uuid}" style="background-color: var(--color-bg-tertiary);">
                         ${hasThumb(file) ? `
-                            <img src="${getThumbUrl(file)}" 
-                                 alt="${file.fileName}" 
+                            <img src="${BootFSSecurity.html(BootFSSecurity.url(getThumbUrl(file)))}"
+                                 alt="${BootFSSecurity.html(file.fileName)}"
                                  class="w-full h-full object-cover video-thumbnail"
                                  loading="lazy"
                                  onerror="this.style.display='none';this.parentElement.querySelector('.video-placeholder').style.display='flex';">
@@ -922,12 +922,12 @@ function createWaterfallCard(file) {
             </div>
             
             <div class="p-3">
-                <p class="text-sm font-medium truncate" style="color: var(--color-text-primary);" title="${file.fileName}">${file.fileName}</p>
+                <p class="text-sm font-medium truncate" style="color: var(--color-text-primary);" title="${BootFSSecurity.html(file.fileName)}">${BootFSSecurity.html(file.fileName)}</p>
                 ${(file.tags && file.tags.length > 0) ? `
                 <div class="flex items-center gap-1 mt-1.5 flex-wrap">
                     ${file.tags.map(tag => {
                         const label = tag.namespace && tag.namespace !== 'manual' ? `${tag.namespace}:${tag.name}` : tag.name;
-                        return `<span class="waterfall-tag-badge" title="${label}">${label}</span>`;
+                        return `<span class="waterfall-tag-badge" title="${BootFSSecurity.html(label)}">${BootFSSecurity.html(label)}</span>`;
                     }).join('')}
                 </div>
                 ` : ''}
@@ -955,8 +955,8 @@ function createGridCard(file) {
             <div class="card-preview-area relative aspect-square overflow-hidden" style="background-color: var(--color-bg-tertiary);">
                 ${isImageFile ? `
                     ${hasThumb(file) ? `
-                        <img src="${getThumbUrl(file)}"
-                             alt="${file.fileName}"
+                        <img src="${BootFSSecurity.html(BootFSSecurity.url(getThumbUrl(file)))}"
+                             alt="${BootFSSecurity.html(file.fileName)}"
                              class="w-full h-full object-cover zoom-image"
                              onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
                     ` : `
@@ -1033,7 +1033,7 @@ function createGridCard(file) {
             
             <!-- Info -->
             <div class="p-3">
-                <h3 class="text-sm font-medium truncate theme-page-text-primary" title="${file.fileName}">${file.fileName}</h3>
+                <h3 class="text-sm font-medium truncate theme-page-text-primary" title="${BootFSSecurity.html(file.fileName)}">${BootFSSecurity.html(file.fileName)}</h3>
                 <p class="text-xs mt-1 truncate theme-page-text-muted">${formatFileSize(file.size || 0)}</p>
                 ${!file.copyOf ? `
                     <div class="mt-2 flex space-x-1">
@@ -1075,7 +1075,7 @@ function createListRow(file) {
                         ${isClashFile ? ClashFiles.icon() : textType ? TextFileEditor.icon(textType) : isImageFile ? `
                             ${hasThumb(file) ? `
                                 <img class="h-10 w-10 theme-rounded-lg object-cover"
-                                     src="${getThumbUrl(file)}"
+                                     src="${BootFSSecurity.html(BootFSSecurity.url(getThumbUrl(file)))}"
                                      alt=""
                                      onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 24 22%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
                             ` : `
@@ -1121,9 +1121,9 @@ function createListRow(file) {
                         const label = tag.namespace && tag.namespace !== 'manual' ? `${tag.namespace}:${tag.name}` : tag.name;
                         const indexFormat = tag.namespace + ':' + tag.name;
                         return `
-                        <span class="tag-badge" title="${label}">
-                            <span class="tag-badge-text">${label}</span>
-                            <button class="tag-delete-btn" data-tag="${indexFormat}" title="删除标签">
+                        <span class="tag-badge" title="${BootFSSecurity.html(label)}">
+                            <span class="tag-badge-text">${BootFSSecurity.html(label)}</span>
+                            <button class="tag-delete-btn" data-tag="${BootFSSecurity.html(indexFormat)}" title="删除标签">
                                 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                             </button>
                         </span>
@@ -2238,10 +2238,10 @@ function renderFileDetail(data) {
                 let value = metadata[f.key];
                 let titleAttr = '';
                 if (f.maxLen && value.length > f.maxLen) {
-                    titleAttr = ` title="${value.replace(/"/g, '&quot;')}"`;
+                    titleAttr = ` title="${BootFSSecurity.html(value)}"`;
                     value = value.substring(0, f.maxLen) + '…';
                 }
-                return `<div class="flex justify-between"${titleAttr}><span class="theme-page-text-muted">${f.label}</span><span class="theme-page-text-primary font-medium text-right" style="max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${value}</span></div>`;
+                return `<div class="flex justify-between"${titleAttr}><span class="theme-page-text-muted">${f.label}</span><span class="theme-page-text-primary font-medium text-right" style="max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${BootFSSecurity.html(value)}</span></div>`;
             });
             if (items.length > 0) {
                 metadataGrid.innerHTML = items.join('');
@@ -2305,7 +2305,7 @@ function renderFileDetail(data) {
                 ];
                 paramsGrid.innerHTML = params
                     .filter(p => p.value)
-                    .map(p => `<div class="flex justify-between"><span class="theme-page-text-muted">${p.label}</span><span class="theme-page-text-primary font-medium text-right ${p.mono ? 'font-mono' : ''}">${p.value}</span></div>`)
+                    .map(p => `<div class="flex justify-between"><span class="theme-page-text-muted">${p.label}</span><span class="theme-page-text-primary font-medium text-right ${p.mono ? 'font-mono' : ''}">${BootFSSecurity.html(p.value)}</span></div>`)
                     .join('');
                 aiSection.classList.remove('hidden');
             })
@@ -3128,7 +3128,7 @@ async function renderBookmarksDropdown() {
         bookmarks.forEach(bm => {
             html += `
                 <div class="bookmark-item flex items-center justify-between px-3 py-2 text-sm cursor-pointer transition-colors" data-bookmark-id="${bm.id}" style="color: var(--color-text-secondary);" onmouseover="this.style.backgroundColor='var(--color-bg-tertiary)'" onmouseout="this.style.backgroundColor=''">
-                    <span class="truncate flex-1">${bm.name}</span>
+                    <span class="truncate flex-1">${BootFSSecurity.html(bm.name)}</span>
                     <button class="bookmark-delete-btn ml-2 flex-shrink-0 p-0.5 rounded" data-bookmark-id="${bm.id}" style="color: var(--color-text-muted);" title="删除书签">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                     </button>
@@ -3144,7 +3144,7 @@ async function renderBookmarksDropdown() {
         recents.forEach(r => {
             html += `
                 <div class="recent-item flex items-center px-3 py-2 text-sm cursor-pointer transition-colors" data-recent-id="${r.id}" style="color: var(--color-text-secondary);" onmouseover="this.style.backgroundColor='var(--color-bg-tertiary)'" onmouseout="this.style.backgroundColor=''">
-                    <span class="truncate">${r.name}</span>
+                    <span class="truncate">${BootFSSecurity.html(r.name)}</span>
                 </div>
             `;
         });
@@ -3599,13 +3599,13 @@ function renderSegmentList(segments) {
              style="background-color: var(--color-bg-secondary); ${selectedSegmentIndex === index ? 'box-shadow: inset 0 0 0 2px var(--color-accent-primary);' : ''}"
              draggable="true"
              data-index="${index}"
-             data-filename="${segment.fileName}">
+             data-filename="${BootFSSecurity.html(segment.fileName)}">
             <div class="flex-shrink-0 w-6 h-6 flex items-center justify-center theme-rounded text-xs font-bold"
                  style="background-color: var(--color-accent-muted); color: var(--color-accent-primary);">
                 ${index + 1}
             </div>
             <div class="flex-1 min-w-0">
-                <div class="text-xs font-medium truncate theme-page-text-primary" title="${segment.fileName}">${segment.fileName}</div>
+                <div class="text-xs font-medium truncate theme-page-text-primary" title="${BootFSSecurity.html(segment.fileName)}">${BootFSSecurity.html(segment.fileName)}</div>
                 <div class="text-xs theme-page-text-muted">${formatFileSize(segment.size)} · ${segment.duration.toFixed(1)}s</div>
             </div>
             <div class="flex-shrink-0 cursor-grab theme-page-text-muted hover:theme-page-text-primary">
@@ -3780,7 +3780,7 @@ function handleTsFileSelect(e) {
         item.className = 'flex items-center justify-between px-2 py-1 theme-rounded text-xs';
         item.style.backgroundColor = 'var(--color-bg-secondary)';
         item.innerHTML = `
-            <span class="truncate theme-page-text-primary" title="${file.name}">${file.name}</span>
+            <span class="truncate theme-page-text-primary" title="${BootFSSecurity.html(file.name)}">${BootFSSecurity.html(file.name)}</span>
             <span class="theme-page-text-muted ml-2">${formatFileSize(file.size)}</span>
         `;
         fileList.appendChild(item);

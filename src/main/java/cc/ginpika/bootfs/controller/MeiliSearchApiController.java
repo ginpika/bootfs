@@ -9,7 +9,6 @@ import java.util.*;
 
 @Slf4j
 @RestController
-@CrossOrigin
 @RequestMapping("/api/meilisearch")
 public class MeiliSearchApiController {
     @Autowired
@@ -29,7 +28,7 @@ public class MeiliSearchApiController {
         } catch (Exception e) {
             log.error("获取索引列表失败", e);
             result.put("succeed", false);
-            result.put("message", e.getMessage());
+            result.put("message", "Operation failed");
         }
         return result;
     }

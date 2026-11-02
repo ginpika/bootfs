@@ -40,6 +40,7 @@ public class S3AuthFilter implements Filter {
             resp.getWriter().write(xmlWriter.error(err, err.getDefaultMessage(), req.getRequestURI(), requestId));
             return;
         }
+        req.setAttribute("bootfs.s3.authenticated", true);
         chain.doFilter(rq, rs);
     }
 }

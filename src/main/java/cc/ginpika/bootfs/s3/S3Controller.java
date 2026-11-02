@@ -68,6 +68,7 @@ public class S3Controller {
 
     @RequestMapping(value = "/s3/{bucket}/**", method = {RequestMethod.GET, RequestMethod.HEAD})
     public void object(@PathVariable String bucket, HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        resp.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
         if (!validateBucket(bucket, resp, req)) return;
         String key = extractKey(req, bucket);
         if (key.isEmpty()) {

@@ -30,6 +30,7 @@ class FederationIntegrationTest {
             List<String> arguments = new ArrayList<>(List.of(
                     "--server.port="+port,"--server.address=127.0.0.1","--tfs.root-path="+root.resolve(id),"--tfs.unique-id="+id,
                     "--tfs.web-entrypoint="+url,"--tfs.copies="+(replicated?2:1),"--sso.enabled=false","--s3.enabled=false",
+                    "--bootfs.security.public-sharing.enabled=true",
                     "--tfs.ffmpeg-url=/nonexistent-ffmpeg","--bootfs.objects.write-policy="+(replicated?"replicated":"single-local"),
                     "--bootfs.objects.required-copies="+(replicated?2:0),"--bootfs.cluster.transition-interval-ms=600000",
                     "--bootfs.cleanup.interval-ms=600000"));
@@ -220,7 +221,7 @@ class FederationIntegrationTest {
 
     @Test @Timeout(90) void clashDetailsAndLatencyRunAtTheOwnerAndPublicSubscriptionKeepsItsFormat() throws Exception {
         try (var tcp = new java.net.ServerSocket(0, 8, java.net.InetAddress.getLoopbackAddress())) {
-            Node owner = new Node("clash-owner", false), frontend = new Node("clash-frontend", false);
+            Node owner = new Node("clash-owner", false, "--bootfs.security.allow-private-probes=true"), frontend = new Node("clash-frontend", false);
             join(frontend, owner);
             String yaml = "proxies:\n"
                     + "  - {name: Local VLESS, type: vless, server: 127.0.0.1, port: " + tcp.getLocalPort()
@@ -396,5 +397,35 @@ class FederationIntegrationTest {
         assertThrows(ClusterHttp.HttpFailure.class,() -> ClusterHttp.call(b.url,"data/resource/"+id,null,knownGrant,2000,a.store().transportIdentity()));
         JSONObject valid=ClusterHttp.call(b.url,"data/resource/"+id,null,c.store().tokenFor(b.url),2000,c.store().transportIdentity());
         assertTrue(valid.getBooleanValue("found"));
+    }
+
+    @Test @Timeout(90) void signedPeersCannotChangeBodiesThroughVendorJsonOrRemoveMembership() throws Exception {
+        Node owner = new Node("body-owner", false), caller = new Node("body-caller", false);
+        join(caller, owner);
+        String token = caller.store().tokenFor(owner.url);
+        URI target = URI.create(owner.url + "/api/cluster/data/search");
+        String body = "{\"query\":\"original\",\"tags\":[],\"offset\":0,\"limit\":10}";
+        for (boolean tamper : new boolean[]{false, true}) {
+            var request = HttpRequest.newBuilder(target).header("X-BootFS-Cluster-Token", token)
+                    .header("Content-Type", "application/problem+json");
+            ClusterHttp.signedHeaders(caller.store().transportIdentity(), "POST", target, token,
+                    ClusterHttp.digest(body.getBytes(java.nio.charset.StandardCharsets.UTF_8))).forEach(request::header);
+            var result = http.send(request.POST(HttpRequest.BodyPublishers.ofString(tamper ? body.replace("original", "changed") : body)).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(tamper ? 401 : 200, result.statusCode(), result.body());
+        }
+        String extremeTime = Long.toString(System.currentTimeMillis() - Long.MIN_VALUE);
+        String nonce = java.util.UUID.randomUUID().toString(), digest = ClusterHttp.digest(body.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String signature = caller.store().transportIdentity().sign(ClusterHttp.signingInput("POST", target.getRawPath(), token, extremeTime, nonce, digest));
+        var expired = HttpRequest.newBuilder(target).header("X-BootFS-Cluster-Token", token).header("Content-Type", "application/json")
+                .header("X-BootFS-Time", extremeTime).header("X-BootFS-Nonce", nonce).header("X-BootFS-Digest", digest)
+                .header("X-BootFS-Signature", signature).POST(HttpRequest.BodyPublishers.ofString(body));
+        assertEquals(401, http.send(expired.build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+        URI remove = URI.create(owner.url + "/api/cluster/remove");
+        String removal = "{\"nodeId\":\"body-caller\"}";
+        var request = HttpRequest.newBuilder(remove).header("X-BootFS-Cluster-Token", token).header("Content-Type", "application/json");
+        ClusterHttp.signedHeaders(caller.store().transportIdentity(), "POST", remove, token,
+                ClusterHttp.digest(removal.getBytes(java.nio.charset.StandardCharsets.UTF_8))).forEach(request::header);
+        assertEquals(401, http.send(request.POST(HttpRequest.BodyPublishers.ofString(removal)).build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+        assertTrue(owner.store().peerEndpoints().containsKey(caller.id));
     }
 }

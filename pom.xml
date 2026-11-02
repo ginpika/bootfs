@@ -15,6 +15,8 @@
 	<description>A lightweight, multimedia-centric file system for minimalists. Based on Spring Boot and FFmpeg.</description>
 	<properties>
 		<java.version>17</java.version>
+		<snakeyaml.version>2.5</snakeyaml.version>
+		<tomcat.version>9.0.123</tomcat.version>
 	</properties>
 	<dependencies>
 		<!-- Used explicitly with SafeConstructor for bounded Clash subscription parsing. -->

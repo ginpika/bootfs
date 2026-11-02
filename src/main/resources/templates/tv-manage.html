@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
 <head>
+    <script src="/security-utils.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TV 节目单管理</title>
@@ -247,7 +248,7 @@
                 </div>
                 <div class="checkbox ${inPlaylist ? 'checked' : ''}" data-uuid="${video.uuid}"></div>
                 <div class="flex-1 min-w-0">
-                    <div class="text-sm font-medium truncate" style="color: var(--color-text-primary);" title="${video.fileName}">${video.fileName}</div>
+                    <div class="text-sm font-medium truncate" style="color: var(--color-text-primary);" title="${BootFSSecurity.html(video.fileName)}">${BootFSSecurity.html(video.fileName)}</div>
                     <div class="text-xs mt-1" style="color: var(--color-text-muted);">${video.segmentCount} 个切片 · ${duration}</div>
                 </div>
                 ${inPlaylist ? `<div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white" style="background-color: var(--color-accent-primary);">${order}</div>` : ''}

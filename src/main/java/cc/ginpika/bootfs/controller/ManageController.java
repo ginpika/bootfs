@@ -42,7 +42,6 @@ import java.util.stream.Collectors;
 // ManegeController provide basic function for TFS
 @Slf4j
 @RestController
-@CrossOrigin
 @SuppressWarnings("all")
 public class ManageController {
     private static final Pattern ALBUM_RESOURCE_PATH = Pattern.compile(".*/(thumb|p|f)/([A-Za-z0-9_-]+)");
@@ -135,6 +134,7 @@ public class ManageController {
             return ResponseEntity.notFound().build();
         }
         HttpHeaders contentHeaders = new HttpHeaders();
+        contentHeaders.set("Content-Security-Policy", "sandbox; default-src 'none'");
         if (ret[3] != null) contentHeaders.setETag("\"" + ret[3] + "\"");
         if (Boolean.TRUE.equals(ret[4])) contentHeaders.setCacheControl("no-cache");
         String ifMatch = request.getHeader(HttpHeaders.IF_MATCH);
@@ -144,10 +144,7 @@ public class ManageController {
         // support range-request for media resource
         if (StringUtils.isNotBlank(request.getHeader("Is-Range-Request"))) {
             log.info("uuid {} 是一个 Range-Request");
-            String contentType = request.getHeader("Accept-Type");
-            if (StringUtils.isBlank(contentType)) {
-                contentType = "video/mp4";
-            }
+            String contentType = inlineType((String) ret[1]);
             return ResponseEntity.ok()
                     .headers(contentHeaders)
                     .header(HttpHeaders.CONTENT_TYPE, contentType)
@@ -155,10 +152,7 @@ public class ManageController {
                     .body((Resource)ret[0]);
         } else if (StringUtils.isNotBlank(request.getHeader("Is-Proxy"))) {
             log.info("接收到一个 Proxy Request {}", uuid);
-            String contentType = request.getHeader("Accept-Type");
-            if (StringUtils.isBlank(contentType)) {
-                contentType = "video/mp4";
-            }
+            String contentType = inlineType((String) ret[1]);
             return ResponseEntity.ok()
                     .headers(contentHeaders)
                     .header(HttpHeaders.CONTENT_TYPE, contentType)
@@ -180,10 +174,38 @@ public class ManageController {
 
     // reverse proxy file
     @GetMapping("/p/{uuid}")
-    public void reverseProxy(@PathVariable String uuid,
+    public ResponseEntity<?> reverseProxy(@PathVariable String uuid,
                              HttpServletResponse response,
-                             HttpServletRequest request) {
+                             HttpServletRequest request) throws IOException {
+        // Local reads must not loop through an unauthenticated HTTP request to /f.
+        if (context.query(uuid) != null) {
+            Object[] file = fileService.download(uuid, request);
+            if (file == null) return ResponseEntity.notFound().build();
+            String type = inlineType((String) file[1]);
+            if (MediaType.APPLICATION_OCTET_STREAM_VALUE.equals(type)) return ResponseEntity.notFound().build();
+            return ResponseEntity.ok().contentType(MediaType.parseMediaType(type))
+                    .contentLength(Long.parseLong((String) file[2]))
+                    .header("Cache-Control", "no-store")
+                    .header("Content-Security-Policy", "sandbox; default-src 'none'")
+                    .body(file[0]);
+        }
         reverseProxyService.reverseProxyFile(uuid, response, request);
+        return null;
+    }
+
+    private static String inlineType(String name) {
+        String lower = name == null ? "" : name.toLowerCase(java.util.Locale.ROOT);
+        int dot = lower.lastIndexOf('.');
+        return switch (dot < 0 ? "" : lower.substring(dot)) {
+            case ".jpg", ".jpeg" -> "image/jpeg";
+            case ".png" -> "image/png";
+            case ".gif" -> "image/gif";
+            case ".webp" -> "image/webp";
+            case ".mp4" -> "video/mp4";
+            case ".mp3" -> "audio/mpeg";
+            case ".yaml", ".yml" -> "application/yaml";
+            default -> MediaType.APPLICATION_OCTET_STREAM_VALUE;
+        };
     }
 
     // serve webp thumbnail - 不存在时返回原图/占位图并后台生成
@@ -255,6 +277,10 @@ public class ManageController {
             String actor=localPeer(request.getHeader("X-BootFS-Cluster-Token"));
             return fileTransferService.prepare(file,filename,id,sha256,com.alibaba.fastjson2.JSON.parseObject(snapshot),actor);
         }
+        if (localMetadata instanceof cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore dynamic
+                && dynamic.actor(request.getHeader("X-BootFS-Cluster-Token"), false) != null) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Signed replica snapshot required");
+        }
         return fileTransferService.prepare(file, filename, id, sha256);
     }
     @org.springframework.beans.factory.annotation.Autowired private cc.ginpika.bootfs.kernel.metadata.MetadataStore localMetadata;
@@ -314,7 +340,7 @@ public class ManageController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("创建虚拟文件失败", e);
-            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("error", "Operation failed"));
         }
     }
 
@@ -385,7 +411,7 @@ public class ManageController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("上传HLS切片失败", e);
-            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("error", "Operation failed"));
         }
     }
 
@@ -417,7 +443,7 @@ public class ManageController {
             ));
         } catch (Exception e) {
             log.error("完成HLS播放列表失败", e);
-            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("error", "Operation failed"));
         }
     }
 
@@ -469,7 +495,7 @@ public class ManageController {
             ));
         } catch (Exception e) {
             log.error("获取HLS切片信息失败", e);
-            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("error", "Operation failed"));
         }
     }
 
@@ -541,12 +567,14 @@ public class ManageController {
             return ResponseEntity.ok(Map.of("segments", segments, "uuid", uuid));
         } catch (Exception e) {
             log.error("获取HLS切片列表失败", e);
-            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("error", "Operation failed"));
         }
     }
 
     @PostMapping("/hls/{uuid}/segments/reorder")
     public ResponseEntity<?> reorderHlsSegments(@PathVariable String uuid, @RequestBody java.util.List<String> segmentOrder) {
+        if (segmentOrder == null || segmentOrder.size() > 10000 || segmentOrder.stream().anyMatch(name -> !safeSegmentName(name))
+                || new java.util.HashSet<>(segmentOrder).size() != segmentOrder.size()) return ResponseEntity.badRequest().build();
         try {
             FileObject fileObject = context.query(uuid);
             if (fileObject == null) {
@@ -591,6 +619,7 @@ public class ManageController {
             newM3u8.append("#EXT-X-PLAYLIST-TYPE:EVENT\n");
             
             for (String fileName : segmentOrder) {
+                if (!Files.isRegularFile(hlsDir.resolve(fileName), java.nio.file.LinkOption.NOFOLLOW_LINKS)) return ResponseEntity.badRequest().build();
                 Double duration = durations.getOrDefault(fileName, 10.0);
                 newM3u8.append(String.format("#EXTINF:%.6f,\n", duration));
                 newM3u8.append(fileName).append("\n");
@@ -611,7 +640,7 @@ public class ManageController {
             ));
         } catch (Exception e) {
             log.error("重新排序HLS切片失败", e);
-            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("error", "Operation failed"));
         }
     }
 
@@ -662,7 +691,7 @@ public class ManageController {
             ));
         } catch (Exception e) {
             log.error("删除HLS切片失败", e);
-            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("error", "Operation failed"));
         }
     }
 
@@ -715,7 +744,7 @@ public class ManageController {
             return ResponseEntity.ok(fileObject);
         } catch (Exception e) {
             log.error("获取文件信息失败", e);
-            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("error", "Operation failed"));
         }
     }
     private ResponseEntity<?> proxyMissingResource(String uuid,HttpServletRequest request) {
@@ -753,8 +782,7 @@ public class ManageController {
         }
     }
     private boolean safeSegmentName(String name) {
-        return name != null && name.toLowerCase(java.util.Locale.ROOT).endsWith(".ts")
-                && !name.contains("/") && !name.contains("\\") && !name.contains("\n") && !name.contains("\r") && !name.contains("\0");
+        return name != null && name.matches("[A-Za-z0-9_-][A-Za-z0-9_.-]{0,200}\\.[tT][sS]");
     }
 
 }

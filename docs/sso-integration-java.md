@@ -1,5 +1,7 @@
 # SelfHostMail SSO 集成指南 (Java)
 
+本页后续为通用集成示例。BootFS 当前还要求 SSO 角色命中 `SSO_ALLOWED_ROLES`（默认 `admin`），并检查 Cookie 写请求的同源上下文；不能仅凭 `authenticated=true` 授权管理后台。部署请先核对 [安全审查与配置](./security-audit.md)，并正确设置可信的 `TFS_WEB_ENTRYPOINT` 供 SSO 返回跳转使用。
+
 本文档指导如何将 SelfHostMail 作为 SSO 服务端，接入 Java 客户端应用。
 
 ## 架构概述

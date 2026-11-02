@@ -9,9 +9,9 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.TimeZone;
-import java.util.TreeMap;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
 /**
  * AWS Signature Version 4 验证。仅校验 Authorization 头形式签名,信任 x-amz-content-sha256,
@@ -39,6 +39,10 @@ public class S3SigV4Verifier {
         if (p == null) {
             return S3ErrorCode.ACCESS_DENIED;
         }
+        if (!p.signedHeaders.contains("host") || !p.signedHeaders.contains("x-amz-date")
+                || !p.signedHeaders.equals(p.signedHeaders.stream().distinct().sorted().toList())
+                || p.signedHeaders.stream().anyMatch(h -> req.getHeader(h) == null)
+                || req.getHeader("host") == null) return S3ErrorCode.SIGNATURE_DOES_NOT_MATCH;
         if (!"s3".equals(p.service) || !"aws4_request".equals(p.trailer)) {
             return S3ErrorCode.SIGNATURE_DOES_NOT_MATCH;
         }
@@ -68,13 +72,13 @@ public class S3SigV4Verifier {
                 + p.date + "/" + p.region + "/s3/aws4_request\n"
                 + S3CryptoUtils.sha256Hex(canonicalRequest);
 
-        byte[] kDate = S3CryptoUtils.hmacSha256(("AWS4" + s3Config.getSecretKey()).getBytes(), p.date);
+        byte[] kDate = S3CryptoUtils.hmacSha256(("AWS4" + s3Config.getSecretKey()).getBytes(StandardCharsets.UTF_8), p.date);
         byte[] kRegion = S3CryptoUtils.hmacSha256(kDate, p.region);
         byte[] kService = S3CryptoUtils.hmacSha256(kRegion, "s3");
         byte[] kSigning = S3CryptoUtils.hmacSha256(kService, "aws4_request");
         String computed = S3CryptoUtils.hmacSha256Hex(kSigning, stringToSign);
 
-        if (!computed.equals(p.signature)) {
+        if (!MessageDigest.isEqual(computed.getBytes(StandardCharsets.US_ASCII), p.signature.getBytes(StandardCharsets.US_ASCII))) {
             return S3ErrorCode.SIGNATURE_DOES_NOT_MATCH;
         }
         return null;
@@ -102,7 +106,7 @@ public class S3SigV4Verifier {
     private String canonicalQueryString(String query) {
         if (query == null || query.isEmpty()) return "";
         String[] pairs = query.split("&");
-        TreeMap<String, String> map = new TreeMap<>();
+        List<String[]> parameters = new ArrayList<>();
         for (String pair : pairs) {
             int idx = pair.indexOf('=');
             String k, v;
@@ -113,14 +117,15 @@ public class S3SigV4Verifier {
                 k = pair.substring(0, idx);
                 v = pair.substring(idx + 1);
             }
-            map.put(k, v);
+            parameters.add(new String[]{k, v});
         }
+        parameters.sort(java.util.Comparator.<String[], String>comparing(pair -> pair[0]).thenComparing(pair -> pair[1]));
         StringBuilder sb = new StringBuilder();
         boolean first = true;
-        for (Map.Entry<String, String> e : map.entrySet()) {
+        for (String[] e : parameters) {
             if (!first) sb.append('&');
             first = false;
-            sb.append(e.getKey()).append('=').append(e.getValue());
+            sb.append(e[0]).append('=').append(e[1]);
         }
         return sb.toString();
     }
@@ -132,7 +137,7 @@ public class S3SigV4Verifier {
         for (String h : sorted) {
             String v = req.getHeader(h);
             if (v == null) v = "";
-            sb.append(h).append(':').append(v.trim()).append('\n');
+            sb.append(h).append(':').append(v.trim().replaceAll("\\s+", " ")).append('\n');
         }
         return sb.toString();
     }
@@ -146,7 +151,9 @@ public class S3SigV4Verifier {
 
     private Long parseAmzDate(String amzDate) {
         try {
+            if (!amzDate.matches("[0-9]{8}T[0-9]{6}Z")) return null;
             SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'");
+            sdf.setLenient(false);
             sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
             return sdf.parse(amzDate).getTime();
         } catch (Exception e) {
@@ -163,7 +170,7 @@ public class S3SigV4Verifier {
             return null;
         }
         String[] parts = credential.split("/");
-        if (parts.length < 5) return null;
+        if (parts.length != 5 || !parts[1].matches("[0-9]{8}") || !signature.matches("[a-f0-9]{64}")) return null;
         ParsedAuth p = new ParsedAuth();
         p.accessKey = parts[0];
         p.date = parts[1];

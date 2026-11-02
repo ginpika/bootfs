@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
+    <script src="/security-utils.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>索引文档管理 - BootFS</title>
@@ -421,7 +422,7 @@
             fetch(url)
                 .then(r => r.json())
                 .then(res => {
-                    if (!res.succeed) { tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-danger);">查询失败: ' + (res.message || '') + '</div>'; return; }
+                    if (!res.succeed) { tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-danger);">查询失败: ' + escapeHtml(res.message || '') + '</div>'; return; }
                     var data = res.data;
                     var results = data.results || [];
                     currentResults = results;
@@ -438,7 +439,7 @@
             fetch(url)
                 .then(r => r.json())
                 .then(res => {
-                    if (!res.succeed) { tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-danger);">搜索失败: ' + (res.message || '') + '</div>'; return; }
+                    if (!res.succeed) { tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-danger);">搜索失败: ' + escapeHtml(res.message || '') + '</div>'; return; }
                     var data = res.data;
                     var hits = data.hits || [];
                     var results = hits.map(function (h) { return h; });
@@ -479,7 +480,7 @@
                     'style="border-color: var(--color-border-primary); ' + (isSelected ? 'background-color: var(--color-bg-tertiary);' : '') + '">' +
                     '<div class="min-w-0 flex-1">' +
                         '<div class="text-xs font-mono truncate" style="color: var(--color-accent-primary);">' + escapeHtml(String(docId)) + '</div>' +
-                        '<div class="text-xs truncate mt-0.5" style="color: var(--color-text-muted);">' + (tagsStr || '—') + '</div>' +
+                        '<div class="text-xs truncate mt-0.5" style="color: var(--color-text-muted);">' + escapeHtml(tagsStr || '—') + '</div>' +
                     '</div>' +
                     '<button onclick="event.stopPropagation(); showConfirmDelete(\'' + escapeJs(String(docId)) + '\')" ' +
                         'class="ml-2 opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs rounded transition-opacity" ' +
@@ -511,7 +512,7 @@
                         actions.classList.remove('hidden');
                         actions.classList.add('flex');
                     } else {
-                        ph.textContent = '获取失败: ' + (res.message || '');
+                        ph.textContent = '获取失败: ' + escapeHtml(res.message || '');
                     }
                 }).catch(function () { ph.textContent = '请求失败'; });
         }
@@ -532,7 +533,7 @@
                 if (res.succeed) {
                     toast('保存成功', 'warn');
                 } else {
-                    toast('保存失败: ' + (res.message || ''), 'error');
+                    toast('保存失败: ' + escapeHtml(res.message || ''), 'error');
                 }
             })
             .catch(function () { toast('请求失败', 'error'); });
@@ -602,7 +603,7 @@
                         }
                         searchMode ? executeSearch(lastSearchQuery) : loadDocuments();
                         refreshIndexes();
-                    } else { toast('删除失败: ' + (res.message || ''), 'error'); }
+                    } else { toast('删除失败: ' + escapeHtml(res.message || ''), 'error'); }
                 }).catch(function () { toast('请求失败', 'error'); });
         }
 
@@ -618,7 +619,7 @@
                             resetDetailPanel();
                             loadDocuments();
                             refreshIndexes();
-                        } else { toast('清空失败: ' + (res.message || ''), 'error'); }
+                        } else { toast('清空失败: ' + escapeHtml(res.message || ''), 'error'); }
                     }).catch(function () { toast('请求失败', 'error'); });
             });
         }
@@ -685,7 +686,7 @@
                     searchMode ? executeSearch(lastSearchQuery) : loadDocuments();
                     refreshIndexes();
                 } else {
-                    toast('新增失败: ' + (res.message || ''), 'error');
+                    toast('新增失败: ' + escapeHtml(res.message || ''), 'error');
                 }
             })
             .catch(function () { toast('请求失败', 'error'); });
@@ -698,7 +699,7 @@
 
         function escapeJs(str) {
             if (!str) return '';
-            return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '');
+            return escapeHtml(str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, ''));
         }
     </script>
 </body>

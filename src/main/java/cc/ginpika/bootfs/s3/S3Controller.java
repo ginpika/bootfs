@@ -20,6 +20,11 @@ import java.nio.charset.StandardCharsets;
 @RequiredArgsConstructor
 public class S3Controller {
 
+    @ExceptionHandler(S3OperationException.class)
+    public void operationFailed(S3OperationException error, HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        writeError(resp, error.getCode(), req, error.getMessage());
+    }
+
     @ExceptionHandler(cc.ginpika.bootfs.kernel.object.PublicationPendingException.class)
     public void pending(cc.ginpika.bootfs.kernel.object.PublicationPendingException error, HttpServletResponse response) throws IOException {
         response.setStatus(503); response.setHeader("X-BootFS-Upload-Id", error.getUploadId());
@@ -104,7 +109,18 @@ public class S3Controller {
             writeError(resp, S3ErrorCode.INVALID_REQUEST, req, "key is empty");
             return;
         }
-        S3ObjectMeta meta = storageService.putObject(bucket, key, req);
+        String copySource = req.getHeader("x-amz-copy-source");
+        S3ObjectMeta meta;
+        if (copySource != null) {
+            String[] source = extractCopySource(copySource);
+            if (!validateBucket(source[0], resp, req)) return;
+            meta = storageService.copyObject(bucket, key, source[1], req);
+            resp.setContentType(MediaType.APPLICATION_XML_VALUE);
+            resp.setCharacterEncoding("UTF-8");
+            resp.getWriter().write(xmlWriter.copyObjectResult(meta));
+        } else {
+            meta = storageService.putObject(bucket, key, req);
+        }
         resp.setStatus(200);
         resp.setHeader("ETag", "\"" + meta.getEtag() + "\"");
     }
@@ -124,7 +140,8 @@ public class S3Controller {
     private String doListObjects(String bucket, HttpServletRequest req) {
         String prefix = req.getParameter("prefix");
         String delimiter = req.getParameter("delimiter");
-        String continuationToken = req.getParameter("continuation-token");
+        boolean v2 = "2".equals(req.getParameter("list-type"));
+        String cursor = req.getParameter(v2 ? "continuation-token" : "marker");
         int maxKeys = 1000;
         String maxKeysParam = req.getParameter("max-keys");
         if (maxKeysParam != null) {
@@ -132,9 +149,10 @@ public class S3Controller {
                 maxKeys = Integer.parseInt(maxKeysParam);
             } catch (NumberFormatException ignored) {}
         }
-        if (maxKeys <= 0) maxKeys = 1000;
-        S3ListPage page = keyIndex.listIndex(bucket, prefix, delimiter, maxKeys, continuationToken);
-        return xmlWriter.listBucketResult(page, bucket, prefix, delimiter, maxKeys, continuationToken);
+        maxKeys = Math.max(0, Math.min(1000, maxKeys));
+        S3ListPage page = v2 ? keyIndex.listIndex(bucket, prefix, delimiter, maxKeys, cursor)
+                : keyIndex.listIndexV1(bucket, prefix, delimiter, maxKeys, cursor);
+        return xmlWriter.listBucketResult(page, bucket, prefix, delimiter, maxKeys, cursor, v2);
     }
 
     private boolean validateBucket(String bucket, HttpServletResponse resp, HttpServletRequest req) throws IOException {
@@ -161,5 +179,21 @@ public class S3Controller {
         } catch (Exception e) {
             return encoded;
         }
+    }
+
+    private String[] extractCopySource(String value) {
+        // Split the optional version query before decoding: %3F belongs to the key.
+        int query = value.indexOf('?');
+        if (query >= 0) {
+            if (!"versionId=null".equals(value.substring(query + 1))) {
+                throw new IllegalArgumentException("Source object versions are not supported");
+            }
+            value = value.substring(0, query);
+        }
+        String source = URLDecoder.decode(value.replace("+", "%2B"), StandardCharsets.UTF_8);
+        if (source.startsWith("/")) source = source.substring(1);
+        int slash = source.indexOf('/');
+        if (slash <= 0 || slash == source.length() - 1) throw new IllegalArgumentException("Invalid copy source");
+        return new String[]{source.substring(0, slash), source.substring(slash + 1)};
     }
 }

@@ -81,9 +81,9 @@ class ReplicatedPublicationTest {
         assertEquals(1, store.scan("/pending-publications/").size()); assertTrue(Files.exists(root.resolve("owner/data/" + uuid)));
         // Recovery uses the persisted policy even after the configured policy is lowered.
         ReflectionTestUtils.setField(files, "writePolicy", "single-local");
-        files.resumePendingPublications(); assertNull(keys.getIndex("bootfs", uuid));
+        files.resumePendingPublications(); assertNull(keys.getIndex("bootfs", "safe.bin"));
         unavailable.set(false); files.resumePendingPublications();
-        assertEquals(uuid, keys.getIndex("bootfs", uuid).getUuid()); assertEquals(Set.of(uuid), owner.STORAGE.keySet());
+        assertEquals(uuid, keys.getIndex("bootfs", "safe.bin").getUuid()); assertEquals(Set.of(uuid), owner.STORAGE.keySet());
         assertTrue(store.scan("/pending-publications/").isEmpty());
         JSONObject meta = JSONObject.parseObject(store.get("/files/" + uuid + "/meta"));
         assertEquals(3, meta.getIntValue("requiredCopies")); assertEquals(Set.of("owner", "b", "c"), meta.getJSONObject("durableNodes").keySet());
@@ -113,7 +113,7 @@ class ReplicatedPublicationTest {
             return receivers.get(url).prepare(new MockMultipartFile("file",Files.readAllBytes(content.toPath())),call.getArgument(2),call.getArgument(1),call.getArgument(3));
         }).when(transport).prepareRemote(any(),anyString(),anyString(),anyString(),any(),anyInt());
         var published = files.publish(new ByteArrayInputStream(new byte[]{1}),"fallback",true);
-        assertEquals(2,attempts.get()); assertNotNull(keys.getIndex("bootfs",published.file().getUuid()));
+        assertEquals(2,attempts.get()); assertNotNull(keys.getIndex("bootfs","fallback"));
     }
 
     @Test void aliasOrWrongContentAcknowledgementsCannotSatisfyDistinctNodePolicy() throws Exception {

@@ -44,6 +44,9 @@ public class S3SigV4Verifier {
                 || !p.signedHeaders.equals(p.signedHeaders.stream().distinct().sorted().toList())
                 || p.signedHeaders.stream().anyMatch(h -> req.getHeader(h) == null)
                 || req.getHeader("host") == null) return S3ErrorCode.SIGNATURE_DOES_NOT_MATCH;
+        if (req.getHeader("x-amz-copy-source") != null && !p.signedHeaders.contains("x-amz-copy-source")) {
+            return S3ErrorCode.SIGNATURE_DOES_NOT_MATCH;
+        }
         if (!"s3".equals(p.service) || !"aws4_request".equals(p.trailer)) {
             return S3ErrorCode.SIGNATURE_DOES_NOT_MATCH;
         }

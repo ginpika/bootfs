@@ -59,6 +59,8 @@ let selectedFiles = new Set();
 let currentView = localStorage.getItem('tfs-view') || 'list'; // 'grid' or 'list' - default to list
 let showAllFiles = localStorage.getItem('tfs-show-all') === 'true';
 let searchQuery = showAllFiles ? 'meta:all' : '';
+let currentFolder = new URLSearchParams(window.location.search).get('folder') || '';
+let folderRequestVersion = 0;
 let dirStack = []; // FileSystemDirectoryHandle 栈，用于本地文件夹右栏返回上级
 let draggingFileHandle = null; // 当前拖拽中的 FileSystemFileHandle
 let storedDirHandle = null; // 持久化的根目录句柄（IndexedDB）
@@ -216,8 +218,7 @@ function initializeEventListeners() {
     const homeBtn = document.getElementById('homeBtn');
     if (homeBtn) {
         homeBtn.addEventListener('click', () => {
-            searchInput.value = '';
-            performSearch();
+            openFolder('');
         });
     }
     
@@ -325,6 +326,12 @@ function initializeEventListeners() {
     
     // Upload
     document.getElementById('uploadFileBtn').addEventListener('change', handleFileUpload);
+    document.getElementById('newFolderBtn')?.addEventListener('click', createFolder);
+    document.getElementById('newFolderForm')?.addEventListener('submit', submitCreateFolder);
+    document.getElementById('newFolderCancel')?.addEventListener('click', closeCreateFolder);
+    document.getElementById('newFolderModal')?.addEventListener('keydown', event => {
+        if (event.key === 'Escape') { event.preventDefault(); closeCreateFolder(); }
+    });
     document.getElementById('comicUploadBtn').addEventListener('change', handleComicUpload);
     
     // Pagination
@@ -407,6 +414,136 @@ function initializeEventListeners() {
     });
 }
 
+// A typed search retains global full-text search across folders.
+function isGlobalFileSearch() {
+    return searchQuery.replace(/meta:(all|local)\b/gi, '').trim().length > 0;
+}
+
+function fileListUrl(params) {
+    if (isGlobalFileSearch()) return `/queryPageOffset?${params}`;
+    params.set('folder', currentFolder);
+    return `/api/folders?${params}`;
+}
+
+function normalizeFolderRows(data) {
+    if (!data || !Array.isArray(data.rows)) return data;
+    data.rows = data.rows.map(file => {
+        if (file.folder || !file.fileName?.endsWith('/')) return file;
+        const path = file.fileName;
+        const name = path.slice(0, -1).split('/').pop();
+        return {folder: true, folderPath: path, fileName: name || '/', size: 0};
+    });
+    return data;
+}
+
+function renderFolderBreadcrumbs() {
+    const container = document.getElementById('folderBreadcrumbs');
+    if (!container) return;
+    container.replaceChildren();
+    const addCrumb = (name, path) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'theme-text-btn break-all';
+        button.textContent = name;
+        button.addEventListener('click', () => openFolder(path));
+        container.appendChild(button);
+    };
+    addCrumb('全部文件', '');
+    let path = '';
+    const segments = currentFolder.endsWith('/') ? currentFolder.slice(0, -1).split('/') : [];
+    for (const segment of segments) {
+        path += segment + '/';
+        const separator = document.createElement('span');
+        separator.textContent = '›';
+        separator.setAttribute('aria-hidden', 'true');
+        container.appendChild(separator);
+        addCrumb(segment || '/', path);
+    }
+    if (isGlobalFileSearch()) {
+        const label = document.createElement('span');
+        label.textContent = '· 所有文件夹的搜索结果';
+        container.appendChild(label);
+    }
+}
+
+function openFolder(path) {
+    currentFolder = path;
+    currentPage = 1;
+    searchQuery = showAllFiles ? 'meta:all' : '';
+    document.getElementById('searchInput').value = searchQuery;
+    clearSelection();
+    const url = new URL(window.location.href);
+    if (path) url.searchParams.set('folder', path);
+    else url.searchParams.delete('folder');
+    history.replaceState(null, '', url);
+    gridLoading = false;
+    loadFileList();
+}
+
+function createFolder() {
+    const modal = document.getElementById('newFolderModal');
+    modal.dataset.folder = currentFolder;
+    document.getElementById('newFolderName').value = '';
+    document.getElementById('newFolderError').textContent = '';
+    document.getElementById('newFolderSubmit').disabled = false;
+    modal.classList.remove('hidden');
+    document.getElementById('newFolderName').focus();
+}
+
+function closeCreateFolder() {
+    document.getElementById('newFolderModal').classList.add('hidden');
+    document.getElementById('newFolderBtn').focus();
+}
+
+async function submitCreateFolder(event) {
+    event.preventDefault();
+    const name = document.getElementById('newFolderName').value;
+    const error = document.getElementById('newFolderError');
+    if (!name.trim() || /[\/\\\x00-\x1f\x7f]/.test(name) || name === '.' || name === '..') {
+        error.textContent = '请输入有效的文件夹名称，不含斜杠或控制字符。';
+        return;
+    }
+    const submit = document.getElementById('newFolderSubmit');
+    submit.disabled = true;
+    error.textContent = '';
+    try {
+        const response = await fetch('/api/folders', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({folder: document.getElementById('newFolderModal').dataset.folder || '', name})
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        closeCreateFolder();
+        showToast('文件夹已创建', 'success');
+        refreshFileList();
+    } catch (failure) {
+        error.textContent = '创建文件夹失败，请重试。';
+    } finally {
+        submit.disabled = false;
+    }
+}
+
+function folderIcon() {
+    return '<svg class="w-8 h-8 flex-shrink-0" style="color: var(--color-accent-primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>';
+}
+
+function createFolderRow(folder) {
+    return `<tr class="folder-row" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
+        <td class="w-12 px-4 py-4"></td>
+        <td class="px-6 py-4"><button type="button" class="flex items-center gap-4 text-left theme-text-btn" data-folder-path="${BootFSSecurity.html(folder.folderPath)}">${folderIcon()}<span class="text-sm font-medium break-all">${BootFSSecurity.html(folder.fileName || '/')}</span></button></td>
+        <td class="created-col px-4 py-3">—</td><td class="tag-col px-4 py-3"></td>
+        <td class="px-6 py-4 text-xs theme-page-text-muted">文件夹</td><td class="px-6 py-4">—</td>
+        <td class="px-6 py-4"><button type="button" class="theme-text-btn text-sm" data-folder-path="${BootFSSecurity.html(folder.folderPath)}">打开</button></td>
+    </tr>`;
+}
+
+function createFolderCard(folder) {
+    return `<div class="waterfall-card theme-card theme-rounded-xl overflow-hidden cursor-pointer p-4" role="button" tabindex="0" aria-label="${BootFSSecurity.html('打开文件夹 ' + folder.fileName)}">
+        <div class="flex justify-center py-8">${folderIcon()}</div>
+        <p class="text-sm font-medium truncate theme-page-text-primary" title="${BootFSSecurity.html(folder.fileName)}">${BootFSSecurity.html(folder.fileName || '/')}</p>
+        <p class="text-xs mt-1 theme-page-text-muted">文件夹</p>
+    </div>`;
+}
+
 // Load file list
 function loadFileList() {
     if (currentView === 'list') {
@@ -418,6 +555,8 @@ function loadFileList() {
 
 // Load list view (paginated)
 function loadListView() {
+    const requestVersion = ++folderRequestVersion;
+    renderFolderBreadcrumbs();
     const startTime = Date.now();
     const minLoadingTime = 800; // 最小加载时间 0.8s
     
@@ -432,12 +571,12 @@ function loadListView() {
     
     console.log('Loading list view with params:', params.toString());
     
-    fetch(`/queryPageOffset?${params}`)
+    fetch(fileListUrl(params))
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            return response.json();
+            return response.json().then(normalizeFolderRows);
         })
         .then(data => {
             console.log('Received data:', data);
@@ -454,6 +593,7 @@ function loadListView() {
         })
         .then(data => {
             // 隐藏加载动画
+            if (requestVersion !== folderRequestVersion) return;
             hideLoadingOverlay();
             
             // 渲染内容
@@ -466,6 +606,7 @@ function loadListView() {
             }
         })
         .catch(error => {
+            if (requestVersion !== folderRequestVersion) return;
             console.error('Error loading files:', error);
             hideLoadingOverlay();
             if (error.message && !error.message.includes('Cannot read properties')) {
@@ -476,9 +617,11 @@ function loadListView() {
 
 // Load grid view (waterfall with load more button)
 function loadGridView(reset = false) {
-    if (gridLoading) return;
+    if (gridLoading && !reset) return;
     
     if (reset) {
+        folderRequestVersion++;
+        renderFolderBreadcrumbs();
         gridPage = 0;
         gridHasMore = true;
         gridLoading = false;
@@ -552,6 +695,7 @@ function loadGridView(reset = false) {
 }
 
 async function loadMediaFilesRecursively(needCount) {
+    const requestVersion = folderRequestVersion;
     if (needCount <= 0 || !gridHasMore) {
         finishLoading();
         return;
@@ -568,21 +712,23 @@ async function loadMediaFilesRecursively(needCount) {
     // console.log(`Loading grid: need ${needCount} more, offset ${gridPage * GRID_PAGE_SIZE}, limit ${Math.min(needCount, GRID_PAGE_SIZE)}`);
     
     try {
-        const response = await fetch(`/queryPageOffset?${params}`);
+        const response = await fetch(fileListUrl(params));
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        const data = await response.json();
+        const data = normalizeFolderRows(await response.json());
+        if (requestVersion !== folderRequestVersion) return;
         
         if (data && data.rows) {
             gridTotal = data.total || gridTotal;
             
-            const mediaFiles = data.rows.filter(file => isImage(file) || isVideo(file) || isAlbum(file));
+            const mediaFiles = data.rows.filter(file => file.folder || isImage(file) || isVideo(file) || isAlbum(file));
             previewMediaFiles = previewMediaFiles.concat(mediaFiles.filter(file => isImage(file) || isVideo(file)));
             
             if (mediaFiles.length > 0) {
-                await appendToWaterfallAsync(mediaFiles);
+                await appendToWaterfallAsync(mediaFiles, requestVersion);
             }
+            if (requestVersion !== folderRequestVersion) return;
             
             gridPage++;
             
@@ -604,6 +750,7 @@ async function loadMediaFilesRecursively(needCount) {
             finishLoading();
         }
     } catch (error) {
+        if (requestVersion !== folderRequestVersion) return;
         console.error('Error loading grid:', error);
         gridLoading = false;
         
@@ -661,7 +808,7 @@ function finishLoading() {
     }
 }
 
-async function appendToWaterfallAsync(files) {
+async function appendToWaterfallAsync(files, requestVersion = folderRequestVersion) {
     const columns = [];
     for (let i = 0; i < WATERFALL_COLUMNS; i++) {
         const column = document.getElementById(`waterfall-column-${i}`);
@@ -688,6 +835,7 @@ async function appendToWaterfallAsync(files) {
     }
     
     for (let index = 0; index < files.length; index++) {
+        if (requestVersion !== folderRequestVersion) return;
         const file = files[index];
         await new Promise((resolve) => {
             const targetColumnIndex = getShortestColumnIndex();
@@ -699,7 +847,14 @@ async function appendToWaterfallAsync(files) {
             
             if (card && targetColumn) {
                 card.addEventListener('click', () => {
-                    previewFile(file);
+                    if (file.folder) openFolder(file.folderPath);
+                    else previewFile(file);
+                });
+                if (file.folder) card.addEventListener('keydown', event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        openFolder(file.folderPath);
+                    }
                 });
                 
                 const deleteBtn = card.querySelector('.waterfall-delete-btn');
@@ -740,6 +895,7 @@ async function appendToWaterfallAsync(files) {
                 const img = card.querySelector('img');
                 
                 const updateHeight = () => {
+                    if (requestVersion !== folderRequestVersion) { resolve(); return; }
                     const cardHeight = card.offsetHeight;
                     columnHeights[targetColumnIndex] += cardHeight;
                     resolve();
@@ -770,17 +926,9 @@ function renderFileList(data) {
     previewMediaFiles = (data && data.rows) ? data.rows.filter(file => isImage(file) || isVideo(file)) : [];
     
     if (!data || !data.rows || data.rows.length === 0) {
-        gridContainer.innerHTML = `
-            <div class="col-span-full text-center py-12">
-                <svg class="mx-auto h-12 w-12 theme-page-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-                </svg>
-                <p class="mt-2 theme-page-text-secondary">暂无文件</p>
-            </div>
-        `;
         listContainer.innerHTML = `
             <tr>
-                <td colspan="6" class="px-6 py-12 text-center theme-page-text-secondary">
+                <td colspan="7" class="px-6 py-12 text-center theme-page-text-secondary">
                     暂无文件
                 </td>
             </tr>
@@ -790,6 +938,9 @@ function renderFileList(data) {
     
     // Render list view
     listContainer.innerHTML = data.rows.map(file => createListRow(file)).join('');
+    listContainer.querySelectorAll('[data-folder-path]').forEach(button => {
+        button.addEventListener('click', () => openFolder(button.dataset.folderPath));
+    });
     
     // Add event listeners to list rows
     listContainer.querySelectorAll('.list-row').forEach(row => {
@@ -851,6 +1002,7 @@ function renderFileList(data) {
 
 // Create waterfall card HTML
 function createWaterfallCard(file) {
+    if (file.folder) return createFolderCard(file);
     const isImageFile = isImage(file);
     const isVideoFile = isVideo(file);
     const isAlbumFile = isAlbum(file);
@@ -1056,6 +1208,7 @@ function createGridCard(file) {
 
 // Create list row HTML
 function createListRow(file) {
+    if (file.folder) return createFolderRow(file);
     const isSelected = selectedFiles.has(file.uuid);
     const isImageFile = isImage(file);
     const isVideoFile = isVideo(file);
@@ -1684,6 +1837,7 @@ function updateStats(data) {
 
 // File upload
 function handleFileUpload(e) {
+    const uploadFolder = currentFolder;
     const files = e.target.files;
     if (files.length === 0) return;
     
@@ -1718,6 +1872,7 @@ function handleFileUpload(e) {
             
             const formData = new FormData();
             formData.append('file', file);
+            if (uploadFolder) formData.append('folder', uploadFolder);
             
             const xhr = new XMLHttpRequest();
             
@@ -1770,7 +1925,7 @@ function handleFileUpload(e) {
                 reject(new Error('Upload aborted'));
             });
             
-            xhr.open('PUT', '/f');
+            xhr.open(uploadFolder ? 'POST' : 'PUT', uploadFolder ? '/api/folders/upload' : '/f');
             xhr.send(formData);
         });
     };
@@ -2586,14 +2741,14 @@ function escapeFileName(value) {
 }
 
 function isImage(file) {
-    if (!file || !file.fileName) return false;
+    if (!file || file.folder || !file.fileName) return false;
     const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico', 'tiff', 'tif'];
     const fileName = file.fileName.toLowerCase();
     return imageExtensions.some(ext => fileName.endsWith('.' + ext) || fileName.endsWith(ext));
 }
 
 function isVideo(file) {
-    if (!file || !file.fileName) return false;
+    if (!file || file.folder || !file.fileName) return false;
     const videoExtensions = ['mp4', 'webm', 'avi', 'mov', 'mkv', 'flv', 'wmv', 'm4v'];
     const fileName = file.fileName.toLowerCase();
     return videoExtensions.some(ext => fileName.endsWith('.' + ext) || fileName.endsWith(ext));
@@ -2615,7 +2770,7 @@ function hasThumb(file) {
 }
 
 function isAudio(file) {
-    if (!file || !file.fileName) return false;
+    if (!file || file.folder || !file.fileName) return false;
     const audioExtensions = ['mp3', 'wav', 'flac', 'aac', 'ogg', 'wma', 'm4a', 'opus'];
     const fileName = file.fileName.toLowerCase();
     return audioExtensions.some(ext => fileName.endsWith('.' + ext) || fileName.endsWith(ext));

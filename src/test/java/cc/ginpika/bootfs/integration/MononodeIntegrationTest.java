@@ -55,10 +55,10 @@ class MononodeIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         String id=url.substring(url.lastIndexOf('/')+1);
         assertNotNull(context.query(id));
-        assertNotNull(keys.getIndex("bootfs",id));
-        perform(get("/s3/bootfs/"+id)).andExpect(status().isOk()).andExpect(content().string("hello"));
+        assertNotNull(keys.getIndex("bootfs","星空笔记.txt"));
+        perform(get("/s3/bootfs/星空笔记.txt")).andExpect(status().isOk()).andExpect(content().string("hello"));
         perform(get("/queryPageOffset").param("search","星空")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
-        perform(delete("/s3/bootfs/"+id)).andExpect(status().isNoContent());
+        perform(delete("/s3/bootfs/星空笔记.txt")).andExpect(status().isNoContent());
         assertNull(context.query(id));
         assertFalse(Files.exists(ROOT.resolve("data").resolve(id)));
         perform(get("/f/"+id)).andExpect(status().isNotFound());

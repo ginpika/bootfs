@@ -13,6 +13,8 @@ public enum S3ErrorCode {
     SIGNATURE_DOES_NOT_MATCH("SignatureDoesNotMatch", 403, "The request signature we calculated does not match the signature you provided."),
     REQUEST_TIME_TOO_SKEWED("RequestTimeTooSkewed", 403, "The difference between the request time and the server's time is too large."),
     INVALID_REQUEST("InvalidRequest", 400, "Invalid Request."),
+    PRECONDITION_FAILED("PreconditionFailed", 412, "At least one of the preconditions you specified did not hold."),
+    SERVICE_UNAVAILABLE("ServiceUnavailable", 503, "The source object is temporarily unavailable. Please retry."),
     METHOD_NOT_ALLOWED("MethodNotAllowed", 405, "The specified method is not allowed against this resource.");
 
     private final String xmlCode;

@@ -9,7 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * ListObjectsV2 分页结果。
+ * ListObjects V1/V2 分页结果。
  */
 @Data
 @NoArgsConstructor
@@ -20,6 +20,12 @@ public class S3ListPage {
     private List<String> commonPrefixes;
     private boolean truncated;
     private String nextContinuationToken;
+    private String nextMarker;
+
+    public S3ListPage(List<S3ObjectMeta> contents, List<String> commonPrefixes,
+                      boolean truncated, String nextContinuationToken) {
+        this(contents, commonPrefixes, truncated, nextContinuationToken, null);
+    }
 
     public static S3ListPage empty() {
         return S3ListPage.builder()

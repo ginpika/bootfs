@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.File;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -28,6 +29,7 @@ import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.HexFormat;
 import java.util.TimeZone;
 
 /**
@@ -59,6 +61,115 @@ public class S3StorageService {
         FileService.PublishedResource published = fileService.publishS3(req.getInputStream(), key, bucket, type, expected, hash, req.getHeader("X-BootFS-Request-Id"));
         return new S3ObjectMeta(published.file().getUuid(), published.file().getSize(), published.etag(),
                 published.file().getCreatedAt(), key, type);
+    }
+
+    /** CopyObject has an empty request body; the new object must be published from the source bytes. */
+    public synchronized S3ObjectMeta copyObject(String bucket, String key, String sourceKey, HttpServletRequest req) throws IOException {
+        String hash = req.getHeader("x-amz-content-sha256");
+        String encoding = req.getHeader("Content-Encoding");
+        if ((encoding != null && encoding.toLowerCase(Locale.ROOT).contains("aws-chunked"))
+                || (hash != null && !hash.equals("UNSIGNED-PAYLOAD") && !hash.matches("[0-9a-fA-F]{64}"))) {
+            throw new S3PayloadException("Streaming aws-chunked signing modes are not supported", false);
+        }
+        if (req.getInputStream().read() != -1) throw new IllegalArgumentException("CopyObject requests must have an empty body");
+        if (hash != null && !"UNSIGNED-PAYLOAD".equals(hash) && !S3CryptoUtils.sha256Hex(new byte[0]).equalsIgnoreCase(hash)) {
+            throw new S3PayloadException("The provided x-amz-content-sha256 does not match the payload", true);
+        }
+        S3ObjectMeta source = keyIndex.getIndex(bucket, sourceKey);
+        if (source == null || etcdService.getOne("/tombstones/" + source.getUuid()) != null) {
+            throw new S3OperationException(S3ErrorCode.NO_SUCH_KEY);
+        }
+        String match = req.getHeader("x-amz-copy-source-if-match");
+        String noneMatch = req.getHeader("x-amz-copy-source-if-none-match");
+        String quotedEtag = "\"" + source.getEtag() + "\"";
+        if ((match != null && !match.equals(quotedEtag) && !match.equals(source.getEtag()) && !match.equals("*"))
+                || (noneMatch != null && (noneMatch.equals(quotedEtag) || noneMatch.equals(source.getEtag()) || noneMatch.equals("*")))) {
+            throw new S3OperationException(S3ErrorCode.PRECONDITION_FAILED);
+        }
+        String directive = req.getHeader("x-amz-metadata-directive");
+        if (directive != null && !"COPY".equals(directive) && !"REPLACE".equals(directive)) {
+            throw new IllegalArgumentException("Invalid metadata directive");
+        }
+        String type = "REPLACE".equals(directive) ? req.getContentType() : source.getContentType();
+        if (type == null) type = "application/octet-stream";
+        String expected = keyIndex.rawIndex(bucket, key);
+        FileObject file = context.query(source.getUuid());
+        if (file != null && file.getPath() != null && Files.isRegularFile(Path.of(file.getPath()))) {
+            try (InputStream input = verifiedCopyStream(Files.newInputStream(Path.of(file.getPath())), source)) {
+                return publishCopy(input, bucket, key, type, expected, req);
+            }
+        }
+        return copyRemoteObject(bucket, key, source, type, expected, req);
+    }
+
+    private S3ObjectMeta publishCopy(InputStream input, String bucket, String key, String type, String expected,
+                                     HttpServletRequest req) throws IOException {
+        // The request hash describes the empty CopyObject request, not the copied object's contents.
+        FileService.PublishedResource published = fileService.publishS3(input, key, bucket, type, expected, null,
+                req.getHeader("X-BootFS-Request-Id"));
+        return new S3ObjectMeta(published.file().getUuid(), published.file().getSize(), published.etag(),
+                published.file().getCreatedAt(), key, type);
+    }
+
+    private S3ObjectMeta copyRemoteObject(String bucket, String key, S3ObjectMeta source, String type, String expected,
+                                          HttpServletRequest req) throws IOException {
+        java.util.Set<String> candidates = new java.util.LinkedHashSet<>();
+        String primary = etcdService.getOne("/files/" + source.getUuid());
+        if (primary != null) candidates.add(primary);
+        etcdService.scan("/files/" + source.getUuid() + "/replicas/").forEach((route, url) -> {
+            if (!route.endsWith("/meta")) candidates.add(url);
+        });
+        var config = org.apache.http.client.config.RequestConfig.custom().setConnectTimeout(5000).setSocketTimeout(60000).build();
+        try (var client = org.apache.http.impl.client.HttpClients.custom().setDefaultRequestConfig(config)
+                .disableContentCompression().disableRedirectHandling().build()) {
+            for (String url : candidates) {
+                var get = new org.apache.http.client.methods.HttpGet(url);
+                get.setHeader("Accept-Encoding", "identity");
+                get.setHeader("Is-Proxy", "1");
+                get.setHeader("Accept-Type", type);
+                get.setHeader("If-Match", "\"" + source.getEtag() + "\"");
+                try (var upstream = client.execute(get)) {
+                    if (upstream.getStatusLine().getStatusCode() != 200 || upstream.getEntity() == null) continue;
+                    try (InputStream input = verifiedCopyStream(upstream.getEntity().getContent(), source)) {
+                        return publishCopy(input, bucket, key, type, expected, req);
+                    }
+                } catch (S3ConcurrentWriteException | cc.ginpika.bootfs.kernel.object.PublicationPendingException failure) {
+                    throw failure;
+                } catch (IOException failure) {
+                    log.warn("S3 copy source {} candidate {} unavailable", source.getUuid(), url, failure);
+                }
+            }
+        }
+        throw new S3OperationException(S3ErrorCode.SERVICE_UNAVAILABLE);
+    }
+
+    private InputStream verifiedCopyStream(InputStream input, S3ObjectMeta source) {
+        MessageDigest digest;
+        try { digest = MessageDigest.getInstance("MD5"); }
+        catch (java.security.NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
+        return new FilterInputStream(input) {
+            long count;
+            boolean verified;
+            @Override public int read() throws IOException {
+                int value = in.read();
+                if (value < 0) verifyEnd();
+                else { count++; digest.update((byte) value); }
+                return value;
+            }
+            @Override public int read(byte[] bytes, int offset, int length) throws IOException {
+                int read = in.read(bytes, offset, length);
+                if (read < 0) verifyEnd();
+                else { count += read; digest.update(bytes, offset, read); }
+                return read;
+            }
+            private void verifyEnd() throws IOException {
+                if (verified) return;
+                verified = true;
+                if (count != source.getSize() || !HexFormat.of().formatHex(digest.digest()).equalsIgnoreCase(source.getEtag())) {
+                    throw new IOException("Copy source content no longer matches its metadata");
+                }
+            }
+        };
     }
 
     public void getObject(String bucket, String key, HttpServletRequest req, HttpServletResponse resp) throws IOException {

@@ -54,6 +54,12 @@ S3 保存开启后立即对新请求生效，不需要重启。Endpoint 是 `htt
 
 Cyberduck 的「服务器」只填主机名，不能把 `/s3` 拼在其中，也不能仅把 `/s3/bootfs` 当作桶路径。双击导入 [BootFS 连接配置](clients/BootFS.cyberduckprofile)，在新连接中选择 `BootFS S3 (HTTPS)`，填写主机名、端口及访问密钥，默认路径填写 `/bootfs`（自定义桶则改成对应名称）。配置使用 `Context=/s3`、path-style 和固定签名区域 `us-east-1`，关闭当前服务未实现的版本及分片任务探测，上传使用单次 PUT；文件不包含任何凭证。其他节点需把默认的 `tfs.ginpika.cc` 改成自己的域名。
 
+浏览器上传的资源在 S3 中使用文件名作为对象键，Cyberduck 因而直接显示文件名。同名资源会分配带资源 ID 的独立名称，避免覆盖已有内容；升级时，旧的默认 UUID 对象键会迁移到文件名，资源本身的 `/f/{uuid}` 地址不变。通过 S3 上传时，客户端指定的对象键和路径保持原样。
+
+BootFS 文件列表按 S3 对象键的 `/` 路径展示文件夹，支持逐级进入和返回；界面中的文件夹名称显示为 `name`。S3 协议中的键和 `CommonPrefixes` 仍保留末尾 `/`，兼容 Cyberduck 创建的零字节文件夹标记以及没有显式标记的路径。文件列表同时支持 [ListObjects V1 的 `marker` / `NextMarker`](https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjects.html) 与 V2 的 continuation token，跨页浏览时也能继续获取文件和文件夹。
+
+在 Cyberduck 中移动或重命名对象会先执行 [S3 CopyObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html)，复制成功后再删除来源。BootFS 会复制源内容并返回包含 ETag 和修改时间的 `CopyObjectResult` XML；旧服务把复制请求当成空文件上传并返回空正文，可能引发 `Cannot copy` / `文件提前结束`，需要更新服务端修复。
+
 Cyberduck 对带前缀的 S3 服务需要自定义 `Context`，见 [官方说明](https://docs.cyberduck.io/protocols/s3/#listing-directory-failed-with-path-in-custom-s3-endpoint)。反向代理必须保留原始 Host 和 URI，不能在客户端签名后添加或删除 `/s3`，否则会造成签名不匹配。
 
 ## 凭证与备份恢复

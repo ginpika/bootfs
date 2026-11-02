@@ -60,15 +60,15 @@ class UnifiedStorageTest {
     @Test void ordinaryUploadIsReadableThroughS3AndSharesTheSearchLifecycle() throws Exception {
         String url = files.upload(new MockMultipartFile("file", "photo.png", "image/png", "pixels".getBytes(StandardCharsets.UTF_8)));
         String uuid = url.substring(url.lastIndexOf('/') + 1);
-        assertNotNull(keys.getIndex("bootfs", uuid));
+        assertNotNull(keys.getIndex("bootfs", "photo.png"));
         MockHttpServletResponse response = new MockHttpServletResponse();
-        s3.getObject("bootfs", uuid, new MockHttpServletRequest(), response);
+        s3.getObject("bootfs", "photo.png", new MockHttpServletRequest(), response);
         assertEquals("pixels", response.getContentAsString());
         assertEquals("image/png", response.getContentType());
         verify(search).addToFullText(argThat((FullTextDocument doc) -> uuid.equals(doc.getUuid())));
         verify(thumbnails).generateAsync(uuid);
         files.deleteResource(uuid);
-        assertNull(keys.getIndex("bootfs", uuid));
+        assertNull(keys.getIndex("bootfs", "photo.png"));
         assertNull(context.query(uuid));
         assertFalse(Files.exists(root.resolve("data").resolve(uuid)));
         verify(search).deleteDocumentFromIndex("full-text", uuid);
@@ -84,6 +84,60 @@ class UnifiedStorageTest {
         assertNull(context.query(object.getUuid()));
         assertNull(keys.getIndex("bootfs", "archive/data.bin"));
         assertFalse(Files.exists(root.resolve("data").resolve(object.getUuid())));
+    }
+
+    @Test void duplicateBrowserFilenamesKeepBothContentsAndRetryKeepsTheAssignedKey() throws Exception {
+        var first = files.publish(new ByteArrayInputStream("first".getBytes(StandardCharsets.UTF_8)), "报告.txt", true);
+        var second = files.publish(new ByteArrayInputStream("second".getBytes(StandardCharsets.UTF_8)), "报告.txt", true);
+        String secondKey = "报告 (" + second.file().getUuid() + ").txt";
+        assertEquals(first.file().getUuid(), keys.getIndex("bootfs", "报告.txt").getUuid());
+        assertEquals(second.file().getUuid(), keys.getIndex("bootfs", secondKey).getUuid());
+        assertNull(keys.getIndex("bootfs", first.file().getUuid()));
+        files.deleteResource(first.file().getUuid());
+        S3ObjectMeta rebound = keys.bindFilename("bootfs", "报告.txt", keys.getIndex("bootfs", secondKey));
+        assertEquals(secondKey, rebound.getKey());
+        assertNull(keys.getIndex("bootfs", "报告.txt"));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        s3.getObject("bootfs", secondKey, new MockHttpServletRequest(), response);
+        assertEquals("second", response.getContentAsString());
+    }
+
+    @Test void bootstrapMigratesLegacyUuidBindingsAndPreservesExplicitPathsAndNameCollisions() throws Exception {
+        S3ObjectMeta explicit = s3.putObject("bootfs", "photo.png", request("existing"));
+        var legacy = files.publish(new ByteArrayInputStream("legacy".getBytes(StandardCharsets.UTF_8)), "photo.png", false);
+        String uuid = legacy.file().getUuid();
+        keys.putIndex("bootfs", uuid, new S3ObjectMeta(uuid, legacy.file().getSize(), legacy.etag(),
+                legacy.file().getCreatedAt(), uuid, "image/png"));
+        S3ObjectMeta nested = s3.putObject("bootfs", "目录/文件.txt", request("nested"));
+        files.bootstrapExistingBindings();
+        String namedKey = "photo (" + uuid + ").png";
+        assertEquals(uuid, keys.getIndex("bootfs", namedKey).getUuid());
+        assertNull(keys.getIndex("bootfs", uuid));
+        assertEquals(explicit.getUuid(), keys.getIndex("bootfs", "photo.png").getUuid());
+        assertEquals(nested.getUuid(), keys.getIndex("bootfs", "目录/文件.txt").getUuid());
+        assertNotNull(files.download(uuid, new MockHttpServletRequest()));
+        long revision = metadata.revision();
+        files.bootstrapExistingBindings();
+        assertEquals(revision, metadata.revision());
+        assertEquals(3, keys.listIndex("bootfs", "", null, 1000, null).getContents().size());
+    }
+
+    @Test void interruptedLegacyMigrationKeepsBothResourcesAndCanResumeRemovingOnlyTheOldAlias() throws Exception {
+        var legacy = files.publish(new ByteArrayInputStream(new byte[]{1, 2}), "safe.txt", false);
+        String uuid = legacy.file().getUuid();
+        keys.putIndex("bootfs", uuid, new S3ObjectMeta(uuid, 2, legacy.etag(), legacy.file().getCreatedAt(), uuid, "text/plain"));
+        S3KeyIndex uncertain = spy(keys);
+        doAnswer(call -> { call.callRealMethod(); throw new IllegalStateException("named key committed but reply lost"); })
+                .when(uncertain).compareAndSet(eq("bootfs"), eq("safe.txt"), isNull(), any(S3ObjectMeta.class));
+        ReflectionTestUtils.setField(files, "s3KeyIndex", uncertain);
+        assertThrows(IllegalStateException.class, files::bootstrapExistingBindings);
+        assertNotNull(keys.getIndex("bootfs", uuid));
+        assertEquals(uuid, keys.getIndex("bootfs", "safe.txt").getUuid());
+        ReflectionTestUtils.setField(files, "s3KeyIndex", keys);
+        files.bootstrapExistingBindings();
+        assertNull(keys.getIndex("bootfs", uuid));
+        assertEquals(uuid, keys.getIndex("bootfs", "safe.txt").getUuid());
+        assertArrayEquals(new byte[]{1, 2}, Files.readAllBytes(Path.of(context.query(uuid).getPath())));
     }
 
     @Test void overwritePublishesNewGenerationAndCleansTheOldGeneration() throws Exception {
@@ -195,7 +249,7 @@ class UnifiedStorageTest {
         doCallRealMethod().when(uncertain).putFile(anyString(), anyString(), anyString());
         files.resumePendingPublications();
         assertTrue(routes.scan("/pending-publications/").isEmpty());
-        assertEquals(uuid, keys.getIndex("bootfs", uuid).getUuid());
+        assertEquals(uuid, keys.getIndex("bootfs", "safe.bin").getUuid());
         assertEquals(Set.of(uuid), context.STORAGE.keySet());
     }
 

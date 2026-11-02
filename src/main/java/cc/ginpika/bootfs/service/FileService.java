@@ -575,18 +575,9 @@ public class FileService {
         }
         if (etcdService.getOne("/documents/full-text/" + uuid) == null) indexResource(resource);
         if (intent.getBooleanValue("defaultS3Binding") && s3KeyIndex != null && resource.getParent() == null) {
-            S3ObjectMeta binding = new S3ObjectMeta(uuid, resource.getSize(), etag, resource.getCreatedAt() == null ? requested.getCreatedAt() : resource.getCreatedAt(), uuid, contentType(resource.getFileName()));
-            S3ObjectMeta current = s3KeyIndex.getIndex(bucket(), uuid);
-            if (current == null) {
-                if (!s3KeyIndex.compareAndSet(bucket(), uuid, null, binding)) {
-                    current = s3KeyIndex.getIndex(bucket(), uuid);
-                    if (current == null) throw new IOException("S3 UUID binding changed; publication will retry");
-                }
-            }
-            if (current != null && !uuid.equals(current.getUuid())) {
-                discardPublication(uuid, intent);
-                throw new IOException("S3 UUID binding belongs to another resource");
-            }
+            s3KeyIndex.bindFilename(bucket(), resource.getFileName(), new S3ObjectMeta(uuid, resource.getSize(), etag,
+                    resource.getCreatedAt() == null ? requested.getCreatedAt() : resource.getCreatedAt(), null,
+                    contentType(resource.getFileName())));
         }
         if (isDeleted(resource)) { discardPublication(uuid, intent); throw new IOException("Resource is deleted"); }
         if (explicitBinding != null && explicitBinding.getString("expected") != null) {
@@ -891,21 +882,35 @@ public class FileService {
         DurableFiles.syncDirectory(data);
     }
 
-    /** Startup migration: existing normal resources become addressable by their immutable UUID. */
+    /** Startup migration: expose original names and replace legacy automatic UUID keys without touching resource URLs. */
     public void bootstrapExistingBindings() {
         if (s3KeyIndex == null) return;
         Set<String> bound = s3KeyIndex.boundResourceIds();
         for (FileObject resource : context.STORAGE.values()) {
-            if (resource.getParent() != null || resource.getCopyOf() != null || bound.contains(resource.getUuid())) continue;
+            if (resource.getParent() != null || resource.getCopyOf() != null) continue;
             if (resource.getPath() == null || etcdService.getOne("/tombstones/" + resource.getUuid()) != null) continue;
             Path path = Path.of(resource.getPath());
-            if (!Files.isRegularFile(path) || s3KeyIndex.getIndex(bucket(), resource.getUuid()) != null) continue;
-            try (InputStream input = Files.newInputStream(path); DigestInputStream content = new DigestInputStream(input, md5())) {
-                content.transferTo(OutputStream.nullOutputStream());
-                String etag = HexFormat.of().formatHex(content.getMessageDigest().digest());
-                s3KeyIndex.compareAndSet(bucket(), resource.getUuid(), null, new S3ObjectMeta(resource.getUuid(), Files.size(path),
-                        etag, resource.getCreatedAt() == null ? Files.getLastModifiedTime(path).toMillis() : resource.getCreatedAt(),
-                        resource.getUuid(), contentType(resource.getFileName())));
+            if (!Files.isRegularFile(path)) continue;
+            String legacyRaw = s3KeyIndex.rawIndex(bucket(), resource.getUuid());
+            S3ObjectMeta legacy = legacyRaw == null ? null : JSONObject.parseObject(legacyRaw, S3ObjectMeta.class);
+            boolean automaticUuidKey = legacy != null && resource.getUuid().equals(legacy.getUuid())
+                    && resource.getUuid().equals(legacy.getKey());
+            if (bound.contains(resource.getUuid()) && !automaticUuidKey) continue;
+            try {
+                S3ObjectMeta binding = legacy;
+                if (!automaticUuidKey) {
+                    try (InputStream input = Files.newInputStream(path); DigestInputStream content = new DigestInputStream(input, md5())) {
+                        content.transferTo(OutputStream.nullOutputStream());
+                        binding = new S3ObjectMeta(resource.getUuid(), Files.size(path), HexFormat.of().formatHex(content.getMessageDigest().digest()),
+                                resource.getCreatedAt() == null ? Files.getLastModifiedTime(path).toMillis() : resource.getCreatedAt(),
+                                null, contentType(resource.getFileName()));
+                    }
+                }
+                S3ObjectMeta named = s3KeyIndex.bindFilename(bucket(), resource.getFileName(), binding);
+                // Publish the named key before removing the old one; a retry can safely finish either step.
+                if (automaticUuidKey && !resource.getUuid().equals(named.getKey())) {
+                    s3KeyIndex.compareAndSet(bucket(), resource.getUuid(), legacyRaw, null);
+                }
             } catch (IOException failure) {
                 throw new IllegalStateException("Cannot expose existing resource through S3: " + resource.getUuid(), failure);
             }

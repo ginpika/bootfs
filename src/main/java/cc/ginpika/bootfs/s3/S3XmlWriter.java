@@ -15,6 +15,14 @@ public class S3XmlWriter {
 
     private static final String DECL = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
 
+    public String copyObjectResult(S3ObjectMeta object) {
+        StringBuilder sb = new StringBuilder(DECL);
+        sb.append("<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">");
+        tag(sb, "LastModified", formatIso(object.getLastModified()));
+        tag(sb, "ETag", "\"" + object.getEtag() + "\"");
+        return sb.append("</CopyObjectResult>").toString();
+    }
+
     public String bucketLocation(String region) {
         // AWS represents us-east-1 with an empty LocationConstraint for compatibility.
         return DECL + "<LocationConstraint xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"
@@ -35,6 +43,11 @@ public class S3XmlWriter {
 
     public String listBucketResult(S3ListPage page, String bucket, String prefix,
                                    String delimiter, int maxKeys, String continuationToken) {
+        return listBucketResult(page, bucket, prefix, delimiter, maxKeys, continuationToken, true);
+    }
+
+    public String listBucketResult(S3ListPage page, String bucket, String prefix,
+                                   String delimiter, int maxKeys, String cursor, boolean v2) {
         StringBuilder sb = new StringBuilder(DECL);
         sb.append("<ListBucketResult>");
         tag(sb, "Name", bucket);
@@ -42,15 +55,17 @@ public class S3XmlWriter {
         if (delimiter != null) {
             tag(sb, "Delimiter", delimiter);
         }
-        tag(sb, "KeyCount", String.valueOf(countKeys(page)));
+        if (v2) tag(sb, "KeyCount", String.valueOf(countKeys(page)));
+        else tag(sb, "Marker", cursor == null ? "" : cursor);
         tag(sb, "MaxKeys", String.valueOf(maxKeys));
         tag(sb, "IsTruncated", String.valueOf(page.isTruncated()));
-        if (continuationToken != null) {
-            tag(sb, "ContinuationToken", continuationToken);
+        if (v2 && cursor != null) {
+            tag(sb, "ContinuationToken", cursor);
         }
-        if (page.isTruncated() && page.getNextContinuationToken() != null) {
+        if (v2 && page.isTruncated() && page.getNextContinuationToken() != null) {
             tag(sb, "NextContinuationToken", page.getNextContinuationToken());
         }
+        if (!v2 && page.isTruncated() && page.getNextMarker() != null) tag(sb, "NextMarker", page.getNextMarker());
         List<S3ObjectMeta> contents = page.getContents();
         if (contents != null) {
             for (S3ObjectMeta meta : contents) {

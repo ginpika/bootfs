@@ -76,7 +76,7 @@ class TextFileControllerTest {
         var before = texts.read(uuid);
         search.addToFullText("{\"uuid\":\"" + uuid + "\",\"author\":\"kept\",\"nsfw\":\"1\"}");
         search.updateDocumentTags("full-text", uuid, List.of(Tag.manual("配置")));
-        S3ObjectMeta originalBinding = keys.getIndex("bootfs", uuid);
+        S3ObjectMeta originalBinding = keys.getIndex("bootfs", context.query(uuid).getFileName());
         keys.putIndex("bootfs", "config/current.yaml", new S3ObjectMeta(uuid, originalBinding.getSize(), originalBinding.getEtag(),
                 originalBinding.getLastModified(), "config/current.yaml", "text/yaml"));
         var response = controller.save(uuid, new TextFileController.SaveTextRequest("# 新配置\nport: 9090\n", before.version()), request("PUT"));
@@ -90,7 +90,7 @@ class TextFileControllerTest {
         assertEquals(List.of("manual:配置"), search.getDocumentTags("full-text", saved.uuid()).stream().map(Tag::toIndexFormat).toList());
         assertEquals(saved.size(), Files.size(Path.of(context.query(saved.uuid()).getPath())));
         assertEquals(saved.size(), context.query(saved.uuid()).getSize());
-        assertEquals(saved.uuid(), keys.getIndex("bootfs", uuid).getUuid());
+        assertEquals(saved.uuid(), keys.getIndex("bootfs", context.query(uuid).getFileName()).getUuid());
         assertEquals(saved.uuid(), keys.getIndex("bootfs", "config/current.yaml").getUuid());
         assertEquals("text/yaml", keys.getIndex("bootfs", "config/current.yaml").getContentType());
         assertNotNull(context.query(uuid)); assertNotNull(search.findDocument("full-text", uuid));
@@ -274,7 +274,7 @@ class TextFileControllerTest {
         var recovered = texts.save(uuid, "port = 443", original.version());
         assertEquals("port = 443", recovered.content()); assertEquals(1, context.STORAGE.size());
         assertTrue(routes.scan("/pending-publications/").isEmpty());
-        assertEquals(recovered.uuid(), keys.getIndex("bootfs", uuid).getUuid());
+        assertEquals(recovered.uuid(), keys.getIndex("bootfs", context.query(uuid).getFileName()).getUuid());
     }
 
     @Test void concurrentMetadataChangeRejectsSaveAndPreservesTheOriginal() throws Exception {
@@ -319,7 +319,7 @@ class TextFileControllerTest {
         assertThrows(PublicationPendingException.class, () -> texts.save(uuid, "value=updated", original.version()));
         assertEquals("value=original", texts.read(uuid).content());
         assertNull(routes.getOne("/tombstones/" + uuid));
-        assertEquals(uuid, keys.getIndex("bootfs", uuid).getUuid());
+        assertEquals(uuid, keys.getIndex("bootfs", context.query(uuid).getFileName()).getUuid());
         assertEquals(1, context.STORAGE.size()); assertEquals(1, routes.scan("/pending-publications/").size());
         FileTransferService transfers = (FileTransferService) ReflectionTestUtils.getField(files, "fileTransferService");
         when(transfers.prepareRemote(any(), anyString(), anyString(), anyString(), any(), anyInt(), any(cc.ginpika.bootfs.domain.dto.FileObject.class))).thenAnswer(call ->
@@ -328,7 +328,7 @@ class TextFileControllerTest {
         var saved = texts.save(uuid, "value=updated", original.version());
         assertEquals("value=updated", saved.content()); assertEquals(uuid, saved.uuid()); assertNotNull(context.query(uuid));
         assertTrue(routes.scan("/pending-publications/").isEmpty());
-        assertEquals(saved.uuid(), keys.getIndex("bootfs", uuid).getUuid());
+        assertEquals(saved.uuid(), keys.getIndex("bootfs", context.query(uuid).getFileName()).getUuid());
     }
 
     private String upload(String filename, String content) throws IOException {

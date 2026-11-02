@@ -49,10 +49,59 @@ public class S3KeyIndex {
         return result;
     }
 
+    /** Browser uploads keep their names without replacing another upload with the same name. */
+    public S3ObjectMeta bindFilename(String bucket, String filename, S3ObjectMeta resource) throws S3ConcurrentWriteException {
+        String base = bucketPrefix(bucket);
+        // Recover the same key after a lost publication reply, even if a name collision has since disappeared.
+        for (Map.Entry<String, String> entry : etcdService.scan(base).entrySet()) {
+            S3ObjectMeta existing = JSON.parseObject(entry.getValue(), S3ObjectMeta.class);
+            if (resource.getUuid().equals(existing.getUuid())
+                    && !entry.getKey().equals(base + resource.getUuid())) return existing;
+        }
+        String name = filename == null ? "unnamed" : filename.replace('\\', '/');
+        name = name.substring(name.lastIndexOf('/') + 1);
+        if (name.isBlank()) name = "unnamed";
+        int dot = name.lastIndexOf('.');
+        String stem = dot > 0 ? name.substring(0, dot) : name;
+        String suffix = dot > 0 ? name.substring(dot) : "";
+        for (int attempt = 0; attempt < 1000; attempt++) {
+            String key = attempt == 0 ? name : stem + " (" + resource.getUuid()
+                    + (attempt == 1 ? "" : "-" + attempt) + ")" + suffix;
+            S3ObjectMeta current = getIndex(bucket, key);
+            if (current != null && resource.getUuid().equals(current.getUuid())) return current;
+            if (current != null) continue;
+            S3ObjectMeta binding = new S3ObjectMeta(resource.getUuid(), resource.getSize(), resource.getEtag(),
+                    resource.getLastModified(), key, resource.getContentType());
+            if (compareAndSet(bucket, key, null, binding)) return binding;
+            current = getIndex(bucket, key);
+            if (current != null && resource.getUuid().equals(current.getUuid())) return current;
+            if (current == null) throw new S3ConcurrentWriteException("Filename binding changed; retry publication");
+        }
+        throw new S3ConcurrentWriteException("Cannot allocate an available object filename");
+    }
+
     /** Filter before pagination; a delimiter group consumes one result, including across pages. */
     public S3ListPage listIndex(String bucket, String prefix, String delimiter, int maxKeys, String continuationToken) {
         String requestedPrefix = prefix == null ? "" : prefix;
         String requestedDelimiter = delimiter == null ? "" : delimiter;
+        String afterKey = continuationToken == null || continuationToken.isEmpty() ? null
+                : decodeToken(continuationToken, bucket, requestedPrefix, requestedDelimiter);
+        S3ListPage page = listIndexAfterKey(bucket, requestedPrefix, requestedDelimiter, maxKeys, afterKey);
+        if (page.isTruncated()) {
+            page.setNextContinuationToken(encodeToken(bucket, requestedPrefix, requestedDelimiter, page.getNextMarker()));
+        }
+        page.setNextMarker(null);
+        return page;
+    }
+
+    /** ListObjects V1 uses the last emitted key or common prefix as its plain marker. */
+    public S3ListPage listIndexV1(String bucket, String prefix, String delimiter, int maxKeys, String marker) {
+        return listIndexAfterKey(bucket, prefix == null ? "" : prefix, delimiter == null ? "" : delimiter,
+                maxKeys, marker == null || marker.isEmpty() ? null : marker);
+    }
+
+    private S3ListPage listIndexAfterKey(String bucket, String requestedPrefix, String requestedDelimiter,
+                                        int maxKeys, String afterKey) {
         int limit = Math.max(0, Math.min(1000, maxKeys));
         TreeMap<String, S3ObjectMeta> entries = new TreeMap<>();
         String base = bucketPrefix(bucket);
@@ -70,9 +119,8 @@ public class S3KeyIndex {
             }
         });
         NavigableMap<String, S3ObjectMeta> pageEntries = entries;
-        if (continuationToken != null && !continuationToken.isEmpty()) {
-            String last = decodeToken(continuationToken, bucket, requestedPrefix, requestedDelimiter);
-            pageEntries = entries.tailMap(last, false);
+        if (afterKey != null) {
+            pageEntries = entries.tailMap(afterKey, false);
         }
         List<S3ObjectMeta> objects = new ArrayList<>();
         List<String> prefixes = new ArrayList<>();
@@ -87,7 +135,7 @@ public class S3KeyIndex {
         }
         boolean truncated = limit > 0 && pageEntries.size() > emitted;
         return S3ListPage.builder().contents(objects).commonPrefixes(prefixes).truncated(truncated)
-                .nextContinuationToken(truncated ? encodeToken(bucket, requestedPrefix, requestedDelimiter, last) : null).build();
+                .nextMarker(truncated ? last : null).build();
     }
 
     private String encodeToken(String bucket, String prefix, String delimiter, String last) {

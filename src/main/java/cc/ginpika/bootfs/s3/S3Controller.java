@@ -2,7 +2,6 @@ package cc.ginpika.bootfs.s3;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,7 +17,6 @@ import java.nio.charset.StandardCharsets;
  */
 @Slf4j
 @RestController
-@ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class S3Controller {
 

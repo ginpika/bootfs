@@ -50,6 +50,9 @@ public class FileService {
     private final ThumbnailService thumbnailService;
 
     @Autowired(required = false)
+    private cc.ginpika.bootfs.settings.NodeSettings settings;
+
+    @Autowired(required = false)
     private S3KeyIndex s3KeyIndex;
     @Value("${s3.bucket:bootfs}")
     private String s3Bucket = "bootfs";
@@ -66,12 +69,16 @@ public class FileService {
         if (!Set.of("single-local", "replicated").contains(writePolicy) || requiredCopies < 0 || prepareTimeoutMs < 1) {
             throw new IllegalArgumentException("Invalid object write policy, copies or timeout");
         }
-        if ("replicated".equals(writePolicy) && configuredCopies() < 2) {
+        if ("replicated".equals(policy()) && configuredCopies() < 2) {
             throw new IllegalArgumentException("replicated requires at least two copies including the local node");
         }
     }
 
+    private String bucket() { return settings == null ? s3Bucket : settings.current().string("s3Bucket"); }
+    private String policy() { return settings == null ? writePolicy : settings.current().string("writePolicy"); }
+    private int timeout() { return settings == null ? prepareTimeoutMs : settings.current().integer("prepareTimeoutMs"); }
     private int configuredCopies() {
+        if (settings != null) return settings.current().effectiveCopies();
         return requiredCopies > 0 ? requiredCopies : (tfsConfig.getCopies() == null ? 1 : tfsConfig.getCopies());
     }
 
@@ -146,6 +153,7 @@ public class FileService {
 
     private synchronized PublishedResource publish(InputStream input, String name, String uuid, String parent,
                                       boolean album, boolean defaultS3Binding, JSONObject s3Binding, JSONObject textReplacement) throws IOException {
+        var taskSettings = settings == null ? null : settings.current();
         Path data = Path.of(tfsConfig.getPathPrefix());
         Files.createDirectories(data);
         Path staged = Files.createTempFile(data, ".upload-", ".part");
@@ -199,7 +207,10 @@ public class FileService {
             intent.put("etag", etag); intent.put("sha256", sha256Hex);
             intent.put("stage", staged.getFileName().toString());
             intent.put("defaultS3Binding", defaultS3Binding);
-            intent.put("requiredCopies", "replicated".equals(writePolicy) ? configuredCopies() : 1);
+            intent.put("requiredCopies", taskSettings == null ? ("replicated".equals(policy()) ? configuredCopies() : 1)
+                    : ("replicated".equals(taskSettings.string("writePolicy")) ? taskSettings.effectiveCopies() : 1));
+            intent.put("prepareTimeoutMs", taskSettings == null ? timeout() : taskSettings.integer("prepareTimeoutMs"));
+            intent.put("copies", taskSettings == null ? (tfsConfig.getCopies() == null ? 1 : tfsConfig.getCopies()) : taskSettings.integer("copies"));
             intent.put("receipts", new JSONObject());
             if (s3Binding != null) intent.put("s3Binding", s3Binding);
             if (textReplacement != null) intent.put("textReplacement", textReplacement);
@@ -565,10 +576,10 @@ public class FileService {
         if (etcdService.getOne("/documents/full-text/" + uuid) == null) indexResource(resource);
         if (intent.getBooleanValue("defaultS3Binding") && s3KeyIndex != null && resource.getParent() == null) {
             S3ObjectMeta binding = new S3ObjectMeta(uuid, resource.getSize(), etag, resource.getCreatedAt() == null ? requested.getCreatedAt() : resource.getCreatedAt(), uuid, contentType(resource.getFileName()));
-            S3ObjectMeta current = s3KeyIndex.getIndex(s3Bucket, uuid);
+            S3ObjectMeta current = s3KeyIndex.getIndex(bucket(), uuid);
             if (current == null) {
-                if (!s3KeyIndex.compareAndSet(s3Bucket, uuid, null, binding)) {
-                    current = s3KeyIndex.getIndex(s3Bucket, uuid);
+                if (!s3KeyIndex.compareAndSet(bucket(), uuid, null, binding)) {
+                    current = s3KeyIndex.getIndex(bucket(), uuid);
                     if (current == null) throw new IOException("S3 UUID binding changed; publication will retry");
                 }
             }
@@ -585,7 +596,7 @@ public class FileService {
         // Completion intent is cleared only after required metadata and projection sources are durable.
         fileTransferService.publicationCommitted(uuid);
         etcdService.delete(publicationPrefix() + uuid);
-        try { replication(target.toFile(), uuid, resource.getFileName()); }
+        try { replication(target.toFile(), uuid, resource.getFileName(), intent.containsKey("copies") ? intent.getIntValue("copies") : (tfsConfig.getCopies() == null ? 1 : tfsConfig.getCopies())); }
         catch (RuntimeException optional) { log.warn("Replication scheduling needs retry for {}", uuid, optional); }
         try { thumbnailService.generateAsync(uuid); }
         catch (RuntimeException optional) { log.warn("Thumbnail scheduling needs retry for {}", uuid, optional); }
@@ -611,7 +622,8 @@ public class FileService {
         if (receipts == null) { receipts = new JSONObject(); intent.put("receipts", receipts); }
         receipts.remove(context.uuid);
         if (receipts.size() + 1 >= required) return;
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(prepareTimeoutMs);
+        int taskTimeout = intent.getIntValue("prepareTimeoutMs") > 0 ? intent.getIntValue("prepareTimeoutMs") : timeout();
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(taskTimeout);
         List<Map.Entry<String, String>> candidates = new ArrayList<>(etcdService.getNodesWithKeys().entrySet());
         candidates.removeIf(node -> node.getKey().equals(context.uuid) || stripSlash(node.getValue()).equals(stripSlash(tfsConfig.getWebEntrypoint())));
         String placementId = id;
@@ -625,7 +637,7 @@ public class FileService {
             if (remaining <= 0) break;
             try {
                 NodeObject node = NodeObject.builder().url(candidate.getValue()).build();
-                int timeout = (int)Math.min(remaining, Math.max(1,prepareTimeoutMs / Math.max(1,candidates.size())));
+                int timeout = (int)Math.min(remaining, Math.max(1,taskTimeout / Math.max(1,candidates.size())));
                 JSONObject receipt = pendingResource == null
                         ? fileTransferService.prepareRemote(target.toFile(), id, resource.getFileName(), hash, node, timeout)
                         : fileTransferService.prepareRemote(target.toFile(), id, resource.getFileName(), hash, node, timeout, pendingResource);
@@ -887,11 +899,11 @@ public class FileService {
             if (resource.getParent() != null || resource.getCopyOf() != null || bound.contains(resource.getUuid())) continue;
             if (resource.getPath() == null || etcdService.getOne("/tombstones/" + resource.getUuid()) != null) continue;
             Path path = Path.of(resource.getPath());
-            if (!Files.isRegularFile(path) || s3KeyIndex.getIndex(s3Bucket, resource.getUuid()) != null) continue;
+            if (!Files.isRegularFile(path) || s3KeyIndex.getIndex(bucket(), resource.getUuid()) != null) continue;
             try (InputStream input = Files.newInputStream(path); DigestInputStream content = new DigestInputStream(input, md5())) {
                 content.transferTo(OutputStream.nullOutputStream());
                 String etag = HexFormat.of().formatHex(content.getMessageDigest().digest());
-                s3KeyIndex.compareAndSet(s3Bucket, resource.getUuid(), null, new S3ObjectMeta(resource.getUuid(), Files.size(path),
+                s3KeyIndex.compareAndSet(bucket(), resource.getUuid(), null, new S3ObjectMeta(resource.getUuid(), Files.size(path),
                         etag, resource.getCreatedAt() == null ? Files.getLastModifiedTime(path).toMillis() : resource.getCreatedAt(),
                         resource.getUuid(), contentType(resource.getFileName())));
             } catch (IOException failure) {
@@ -925,7 +937,10 @@ public class FileService {
     private String replicationPrefix() { return "/replication-jobs/" + context.uuid + "/"; }
 
     public void replication(File file, String fileId, String originFilename) {
-        int requested = Math.max(0, (tfsConfig.getCopies() == null ? 1 : tfsConfig.getCopies()) - 1);
+        replication(file, fileId, originFilename, tfsConfig.getCopies() == null ? 1 : tfsConfig.getCopies());
+    }
+    private void replication(File file, String fileId, String originFilename, int copies) {
+        int requested = Math.max(0, copies - 1);
         if (requested == 0) return;
         JSONObject job = new JSONObject();
         job.put("uuid", fileId); job.put("filename", originFilename); job.put("replicas", requested);

@@ -12,7 +12,6 @@ import com.alibaba.fastjson2.JSONObject;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -37,7 +36,6 @@ import java.util.TimeZone;
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class S3StorageService {
 

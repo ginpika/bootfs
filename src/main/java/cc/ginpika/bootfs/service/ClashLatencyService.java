@@ -30,12 +30,19 @@ public class ClashLatencyService {
         @Override protected boolean removeEldestEntry(Map.Entry<Endpoint, ProbeResult> eldest) { return size() > 2048; }
     });
     private final EndpointProbe probe;
+    private java.util.function.BooleanSupplier privatePolicy = () -> true;
+    private boolean realProbe;
     private final int timeoutMillis;
     private final long cacheMillis;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public ClashLatencyService(@org.springframework.beans.factory.annotation.Value("${bootfs.security.allow-private-probes:false}") boolean allowPrivate) {
-        this((server, port, timeout) -> tcpProbe(server, port, timeout, allowPrivate), 8, 1200, 5000);
+    public ClashLatencyService(cc.ginpika.bootfs.settings.NodeSettings settings) {
+        this(null, 8, 1200, 5000);
+        privatePolicy = () -> settings.current().bool("allowPrivateProbes"); realProbe = true;
+    }
+    public ClashLatencyService(boolean allowPrivate) {
+        this(null, 8, 1200, 5000);
+        privatePolicy = () -> allowPrivate; realProbe = true;
     }
 
     ClashLatencyService(EndpointProbe probe, int concurrency, int timeoutMillis, long cacheMillis) {
@@ -55,13 +62,14 @@ public class ClashLatencyService {
         if (offset < 0 || offset > details.nodes().size() || limit < 1 || limit > MAX_BATCH_SIZE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "延迟检测分页无效，每批最多 16 个节点");
         }
+        boolean allowPrivate = privatePolicy.getAsBoolean();
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(REQUEST_BUDGET_MS);
         List<ClashFileService.ClashEndpoint> selected = details.nodes().subList(offset, Math.min(details.nodes().size(), offset + limit));
         Map<Endpoint, ProbeResult> results = new LinkedHashMap<>();
         Map<Endpoint, ProbeJob> pending = new LinkedHashMap<>();
         boolean allCached = true;
         for (ClashFileService.ClashEndpoint node : selected) {
-            Endpoint endpoint = new Endpoint(node.server(), node.port());
+            Endpoint endpoint = new Endpoint(node.server(), node.port(), allowPrivate);
             if (results.containsKey(endpoint) || pending.containsKey(endpoint)) continue;
             ProbeResult prior = cache.get(endpoint);
             if (prior != null && System.currentTimeMillis() - prior.checkedAt() < cacheMillis) {
@@ -107,7 +115,7 @@ public class ClashLatencyService {
         }
         List<NodeLatency> nodes = new ArrayList<>();
         for (ClashFileService.ClashEndpoint node : selected) {
-            ProbeResult result = results.get(new Endpoint(node.server(), node.port()));
+            ProbeResult result = results.get(new Endpoint(node.server(), node.port(), allowPrivate));
             nodes.add(new NodeLatency(node.id(), node.name(), node.type(), node.server(), node.port(),
                     result.latencyMs(), result.status(), result.checkedAt()));
         }
@@ -118,7 +126,8 @@ public class ClashLatencyService {
     private final class ProbeJob extends FutureTask<ProbeResult> {
         private final Endpoint endpoint;
         ProbeJob(Endpoint endpoint) {
-            super(() -> probe.probe(endpoint.server(), endpoint.port(), timeoutMillis));
+            super(() -> realProbe ? tcpProbe(endpoint.server(), endpoint.port(), timeoutMillis, endpoint.allowPrivate())
+                    : probe.probe(endpoint.server(), endpoint.port(), timeoutMillis));
             this.endpoint = endpoint;
         }
         @Override protected void done() {
@@ -164,7 +173,7 @@ public class ClashLatencyService {
 
     @PreDestroy public void close() { workers.shutdownNow(); }
 
-    record Endpoint(String server, int port) {}
+    record Endpoint(String server, int port, boolean allowPrivate) {}
     @FunctionalInterface interface EndpointProbe { ProbeResult probe(String server, int port, int timeoutMillis) throws Exception; }
     record ProbeResult(String status, Long latencyMs, long checkedAt) {
         static ProbeResult failure(String status) { return new ProbeResult(status, null, System.currentTimeMillis()); }

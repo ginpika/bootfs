@@ -1,7 +1,6 @@
 package cc.ginpika.bootfs.s3;
 
 import org.springframework.stereotype.Component;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import lombok.RequiredArgsConstructor;
 
 import javax.servlet.http.HttpServletRequest;
@@ -18,7 +17,6 @@ import java.security.MessageDigest;
  * 此处验证签名中的 payload hash；S3StorageService/FileService 在流式落盘阶段校验实际 body。
  */
 @Component
-@ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class S3SigV4Verifier {
 
@@ -30,7 +28,10 @@ public class S3SigV4Verifier {
     /**
      * @return null 表示通过,否则返回对应错误码。
      */
+    public boolean enabled() { return s3Config.isEnabled(); }
     public S3ErrorCode verify(HttpServletRequest req) {
+        var credentials = s3Config.credentials();
+        String accessKey = credentials[0], secretKey = credentials[1];
         String auth = req.getHeader("Authorization");
         if (auth == null || !auth.startsWith(ALGO + " ")) {
             return S3ErrorCode.ACCESS_DENIED;
@@ -46,7 +47,7 @@ public class S3SigV4Verifier {
         if (!"s3".equals(p.service) || !"aws4_request".equals(p.trailer)) {
             return S3ErrorCode.SIGNATURE_DOES_NOT_MATCH;
         }
-        if (s3Config.getAccessKey() == null || !s3Config.getAccessKey().equals(p.accessKey)) {
+        if (accessKey == null || !accessKey.equals(p.accessKey)) {
             return S3ErrorCode.ACCESS_DENIED;
         }
 
@@ -72,7 +73,7 @@ public class S3SigV4Verifier {
                 + p.date + "/" + p.region + "/s3/aws4_request\n"
                 + S3CryptoUtils.sha256Hex(canonicalRequest);
 
-        byte[] kDate = S3CryptoUtils.hmacSha256(("AWS4" + s3Config.getSecretKey()).getBytes(StandardCharsets.UTF_8), p.date);
+        byte[] kDate = S3CryptoUtils.hmacSha256(("AWS4" + secretKey).getBytes(StandardCharsets.UTF_8), p.date);
         byte[] kRegion = S3CryptoUtils.hmacSha256(kDate, p.region);
         byte[] kService = S3CryptoUtils.hmacSha256(kRegion, "s3");
         byte[] kSigning = S3CryptoUtils.hmacSha256(kService, "aws4_request");

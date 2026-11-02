@@ -4,7 +4,7 @@ This branch now embeds RocksDB, Apache Ratis and Lucene. The older deployment in
 
 [中文](./README.md)
 
-Security defaults: only the SSO `admin` role can access this shared application. Files, thumbnails, subscriptions and media require login unless `BOOTFS_PUBLIC_SHARING_ENABLED=true` explicitly enables anonymous sharing. See the [security audit](./docs/security-audit.md) for configuration changes, the endpoint inventory and remaining production risks.
+New installations start with SSO off, unrestricted authenticated roles, public reads, direct loopback access and private probes enabled. S3 starts disabled. Manage this node’s database configuration at `/settings`; see [node settings and migration](./docs/node-settings.md) and the [security audit](./docs/security-audit.md).
 
 <details>
   <summary>UI Preview</summary>
@@ -59,18 +59,18 @@ When running `mvn spring-boot:run` directly, set `JAVA_HOME` to JDK 17 and confi
 
 HostID is a lightweight account foundation based on email, serving as a personal mailbox while managing small-scale sites like personal blogs and small forums.
 
-SSO authentication based on HostID is enabled by default. To disable it, please refer to application.properties & Dockerfile and configure .env.
+SSO starts disabled on new installations. Configure and test HostID in `/settings` before enabling it; initialized database settings persist across restarts.
 
-To keep remote SSO while allowing trusted direct loopback access, set `SSO_LOCAL_BYPASS_ENABLED=true` (default: `false`) with `SSO_ENABLED=true`. Docker gateway and forwarded requests remain subject to SSO. See [local access](./docs/local-access.md) for deployment limits and the header required for command-line writes.
+To keep remote SSO while allowing trusted direct loopback access, enable SSO in Settings and retain “Allow direct local access” (enabled on new installations). Docker gateway and forwarded requests remain subject to SSO. See [local access](./docs/local-access.md) for deployment limits and the header required for command-line writes.
 
-**Prerequisite (recommend): [Hostid](https://github.com/ginpika/hostid)**
+**Optional SSO provider: [Hostid](https://github.com/ginpika/hostid)**
 
 ```Shell
 # Find a place
 mkdir bootfs
 # Get compose.yaml
 wget -O compose.yaml https://raw.githubusercontent.com/ginpika/bootfs/refs/heads/main/docker-compose.ghcr.yml
-# Write .env based on application.properties & Dockerfile
+# Optional startup mode only; ordinary settings live at /settings
 cp .env.example .env
 # Launch with one click
 docker compose up -d

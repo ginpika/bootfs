@@ -11,6 +11,10 @@ import java.nio.file.Path;
 @ConfigurationProperties(prefix = "tfs")
 @Data
 public class TfsConfig {
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private cc.ginpika.bootfs.settings.NodeSettings settings;
+    public String getWebEntrypoint() { return settings == null ? webEntrypoint : settings.current().string("webEntrypoint"); }
+    public Integer getCopies() { return settings == null ? copies : settings.current().integer("copies"); }
     private String rootPath;
     private String webEntrypoint;
     private String uniqueId;

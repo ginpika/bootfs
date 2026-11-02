@@ -58,6 +58,11 @@ public final class ClusterCredentials {
         }
     }
     public String token() { return token; }
+    /** Rotate only the owner/legacy transfer token; keep signing identity and peer capabilities. */
+    public synchronized void rotate() throws IOException {
+        String replacement = newToken(); persist(replacement); token = replacement;
+        code = null; redeemedBy = null; expiresAt = 0;
+    }
     public boolean accepts(String supplied) { return supplied != null && equal(token, supplied); }
     private static boolean equal(String a, String b) {
         return MessageDigest.isEqual(a.getBytes(StandardCharsets.UTF_8), b.getBytes(StandardCharsets.UTF_8));

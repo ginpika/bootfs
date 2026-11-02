@@ -6,29 +6,31 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 /**
- * S3 兼容层配置。s3.enabled=false 时整层不加载。
+ * S3 兼容层始终加载；请求入口按节点数据库设置启停。
  */
 @Configuration
 @ConfigurationProperties(prefix = "s3")
-@ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
 @Data
+@lombok.ToString(exclude={"accessKey","secretKey","settings"})
 public class S3Config {
 
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private cc.ginpika.bootfs.settings.NodeSettings settings;
+    public boolean isEnabled() { return settings == null ? enabled : settings.current().bool("s3Enabled"); }
+    public String getAccessKey() { return settings == null ? accessKey : settings.current().string("s3AccessKey"); }
+    public String getSecretKey() { return settings == null ? secretKey : settings.current().string("s3SecretKey"); }
+    public String getBucket() { return settings == null ? bucket : settings.current().string("s3Bucket"); }
+    public String[] credentials() {
+        var snapshot = settings == null ? null : settings.current();
+        return snapshot == null ? new String[]{accessKey,secretKey} : new String[]{snapshot.string("s3AccessKey"),snapshot.string("s3SecretKey")};
+    }
     private boolean enabled = false;
     private String accessKey;
     private String secretKey;
     private String region = "us-east-1";
     private String bucket = "bootfs";
-
-    @javax.annotation.PostConstruct
-    public void validateCredentials() {
-        if (accessKey == null || accessKey.isBlank() || secretKey == null || secretKey.isBlank()) {
-            throw new IllegalArgumentException("Enabled S3 requires explicit access-key and secret-key");
-        }
-    }
 
     @Bean
     public FilterRegistrationBean<S3AuthFilter> s3AuthFilterRegistration(S3AuthFilter s3AuthFilter) {

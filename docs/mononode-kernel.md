@@ -13,7 +13,7 @@ java -jar target/bootfs-v1.0.0-beta.1.jar \
   --tfs.web-entrypoint=http://localhost:8181
 ```
 
-`dev` 默认关闭 SSO，只适合可信环境。生产默认启用 SSO，配置 `SSO_SERVER_URL`、`SSO_INFO_URL`。媒体处理另需 FFmpeg。
+新安装在所有 profile 默认关闭 SSO，普通业务配置在 `/settings` 管理；已有数据库配置不会被 profile 或环境变量覆盖。媒体处理另需 FFmpeg。见 [节点设置](node-settings.md)。
 
 ```sh
 cp .env.example .env
@@ -46,9 +46,9 @@ docker compose up --build -d
 
 ## 副本策略
 
-- `BOOTFS_OBJECT_WRITE_POLICY=single-local`：默认。本机完整文件和本机元数据耐久后发布。`TFS_COPIES` 可驱动后台整文件副本制作。
-- `BOOTFS_OBJECT_WRITE_POLICY=replicated`：发布前需 k 个不同节点确认（包括本机）。`BOOTFS_OBJECT_REQUIRED_COPIES=k`，0 时沿用 `TFS_COPIES`，至少 2。
-- `BOOTFS_OBJECT_PREPARE_TIMEOUT_MS=30000` 控制每轮远端准备预算；本机 fsync 另有自身耗时。
+- 设置页写入策略 `single-local`：默认。本机完整文件和本机元数据耐久后发布。设置页副本份数 可驱动后台整文件副本制作。
+- 设置页写入策略 `replicated`：发布前需 k 个不同节点确认（包括本机）。同步复制所需份数 k，0 时沿用 设置页副本份数，至少 2。
+- 设置页准备超时（默认 30000ms） 控制每轮远端准备预算；本机 fsync 另有自身耗时。
 
 副本保存整文件、完整必要元数据和来源快照。源节点提交发布后显式通知接收端建立本机清单和检索源；通知持久重试。准备状态不等于公开发布，不自动回收响应不确定的内容。
 

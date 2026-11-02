@@ -109,8 +109,7 @@ public class SsoInterceptor implements HandlerInterceptor {
 
             if (session != null && session.isAuthenticated()) {
                 SsoUser user = session.getUser();
-                if (user == null || user.getRole() == null || Arrays.stream(config.getAllowedRoles().split(","))
-                        .map(String::trim).noneMatch(role -> !role.isEmpty() && role.equals(user.getRole()))) {
+                if (user == null || !config.permitsRole(user.getRole())) {
                     return deny(response, 403, "Application administrator role required");
                 }
                 boolean navigation = read && !path.equals("/api/logout")

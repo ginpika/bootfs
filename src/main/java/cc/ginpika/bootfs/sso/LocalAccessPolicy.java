@@ -38,6 +38,10 @@ public class LocalAccessPolicy {
         request.setAttribute(CONNECTION, new Connection(direct, origin));
     }
 
+    public static boolean directAccess(HttpServletRequest request) {
+        return request.getAttribute(CONNECTION) instanceof Connection c && c.direct() && safeContext(request,c.origin());
+    }
+
     public boolean authenticate(HttpServletRequest request, HttpServletResponse response) {
         if (!config.isEnabled() || !config.isLocalBypassEnabled()
                 || !(request.getAttribute(CONNECTION) instanceof Connection connection)

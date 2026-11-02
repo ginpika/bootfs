@@ -53,6 +53,23 @@ class KernelBackupTest {
         try (var store = new RocksMetadataStore(source.resolve("kernel/metadata"))) { assertEquals(original, store.scan("")); }
         assertThrows(IOException.class, () -> KernelBackup.restore(backup, seed, "new", "http://new"));
     }
+    @Test void portableSettingsAreChecksummedRestoredAndExcludeNodeSecrets() throws Exception {
+        var env = new org.springframework.mock.env.MockEnvironment().withProperty("tfs.root-path",source.toString())
+                .withProperty("S3_ACCESS_KEY","backup-access").withProperty("S3_SECRET_KEY","backup-secret-value")
+                .withProperty("SERVER_FORWARD_HEADERS_STRATEGY","native").withProperty("TFS_COPIES","3");
+        try (var settings = new cc.ginpika.bootfs.settings.NodeSettings(env)) { assertEquals(3,settings.current().integer("copies")); }
+        KernelBackup.export(List.of(source),backup,true);
+        String manifestText=Files.readString(backup.resolve("manifest.json"));
+        assertFalse(manifestText.contains("backup-secret-value")); assertFalse(manifestText.contains("backup-access"));
+        assertFalse(manifestText.contains("internalProxies")); assertFalse(manifestText.contains("signingPrivate"));
+        assertEquals(3,KernelBackup.verify(backup).getJSONObject("nodeSettings").getJSONObject("old").getIntValue("copies"));
+        Path seed=temporary.resolve("settings-seed"); KernelBackup.restore(backup,seed,"new","http://new");
+        try (var settings=new cc.ginpika.bootfs.settings.NodeSettings(new org.springframework.mock.env.MockEnvironment().withProperty("tfs.root-path",seed.toString()))) {
+            assertEquals(3,settings.current().integer("copies")); assertEquals("http://new",settings.current().string("webEntrypoint"));
+            assertEquals("none",settings.current().string("forwardHeadersStrategy")); assertFalse(settings.current().bool("ssoEnabled")); assertFalse(settings.current().bool("s3Enabled"));
+            assertEquals("",settings.current().string("s3SecretKey"));
+        }
+    }
     @Test void corruptContentCannotBeRestoredAndLeavesNoDestination() throws Exception {
         KernelBackup.export(List.of(source), backup, true);
         JSONObject manifest = KernelBackup.verify(backup);

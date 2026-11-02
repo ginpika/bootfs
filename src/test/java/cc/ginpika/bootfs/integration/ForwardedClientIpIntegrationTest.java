@@ -28,7 +28,7 @@ class ForwardedClientIpIntegrationTest {
 
     private ConfigurableApplicationContext start(String... extra) {
         List<String> args = new ArrayList<>(List.of(
-                "--server.port=0", "--server.address=127.0.0.1", "--tfs.root-path=" + root,
+                "--server.port=0", "--server.address=127.0.0.1", "--tfs.root-path=" + root.resolve(java.util.UUID.randomUUID().toString()),
                 "--tfs.unique-id=proxy-test", "--tfs.web-entrypoint=http://127.0.0.1:8181",
                 "--sso.enabled=false", "--s3.enabled=false", "--tfs.ffmpeg-url=/nonexistent-ffmpeg",
                 "--spring.main.banner-mode=off"));

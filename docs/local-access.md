@@ -1,24 +1,14 @@
 # 本机直连免 SSO
 
-文件和媒体现在默认需要登录，公开读取需显式设置 `BOOTFS_PUBLIC_SHARING_ENABLED=true`。本机免登录身份可读取默认受保护的文件；下文“公开媒体”指开启公开分享的情形。参见 [安全审查](./security-audit.md)。
+新安装默认关闭 SSO、开启公开读取和本机直连。需要远程认证时，在 `/settings` 配置并测试 SSO，然后开启登录认证；「允许本机直接访问」可运行时切换。已有数据库设置优先于遗留启动变量。见 [节点设置](node-settings.md)。
 
-默认关闭。需要在保留远程 SSO 的同时允许本机直连时，设置环境变量后重启应用：
-
-```sh
-export SSO_ENABLED=true
-export SSO_LOCAL_BYPASS_ENABLED=true
-java -jar target/bootfs-v1.0.0-beta.1.jar
-```
-
-也可通过 Spring 属性 `sso.local-bypass.enabled=true` 配置。`dev` 默认关闭 SSO；要验证本特性，应同时设置 `SSO_ENABLED=true`。直接启动 Java 不会自动读取 `.env`。
-
-Docker Compose 用户在 `.env` 设置 `SSO_LOCAL_BYPASS_ENABLED=true`，两个 Compose 文件都会传入该变量；使用包含此特性的新构建或镜像重建容器后生效。该开关不会把 Docker 网关视为可信本机，因此宿主机通过发布端口访问容器时，仍可能需要 SSO。
+Docker 网关及代理请求不属于本机连接，即便发布端口绑定回环也不会因此获得豁免。保存设置后立即作用于新请求。
 
 ## 放行条件
 
 所有条件均需满足：
 
-- `SSO_ENABLED=true` 且 `SSO_LOCAL_BYPASS_ENABLED=true`。
+- 设置页中 SSO 与本机直接访问均开启。
 - Tomcat 在解析代理头之前记录的原始来源地址和目标地址，均为 `127.0.0.1` 或 IPv6 回环 `::1`（含展开形式）。不做 DNS 解析，不信任其他私网或网关地址。
 - 原始 `Host` 是 `localhost`、`127.0.0.1` 或 `[::1]`（含 IPv6 展开形式），端口与实际监听端口一致。
 - 原始请求没有 `Forwarded`、任何 `X-Forwarded-*`、`X-Real-IP`、`Via`、`CF-Connecting-IP`、`True-Client-IP`，也没有 Tomcat 配置的自定义代理头。头值即使为空也不放行。

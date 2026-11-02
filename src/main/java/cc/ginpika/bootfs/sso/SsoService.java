@@ -15,17 +15,28 @@ import java.util.Map;
 @Service
 public class SsoService {
     
-    private final WebClient webClient;
+    private volatile WebClient webClient;
+    private volatile String clientUrl;
     private final SsoConfig ssoConfig;
     
     public SsoService(WebClient ssoWebClient, SsoConfig ssoConfig) {
         this.webClient = ssoWebClient;
         this.ssoConfig = ssoConfig;
+        this.clientUrl = ssoConfig.getServerUrl();
     }
     
+    private synchronized WebClient client() {
+        String url = ssoConfig.getServerUrl();
+        if (!java.util.Objects.equals(url, clientUrl)) {
+            webClient = WebClient.builder().baseUrl(url).build();
+            clientUrl = url;
+        }
+        return webClient;
+    }
+
     @SuppressWarnings("null")
     public Mono<SsoSession> checkSession(String token) {
-        return webClient.get()
+        return client().get()
                 .uri("/api/sso/session")
                 .cookie(ssoConfig.getCookieName(), token)
                 .retrieve()
@@ -34,7 +45,7 @@ public class SsoService {
     
     @SuppressWarnings("null")
     public Mono<SsoLoginResponse> login(String username, String password) {
-        return webClient.post()
+        return client().post()
                 .uri("/api/sso/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(Map.of("username", username, "password", password))
@@ -44,7 +55,7 @@ public class SsoService {
     
     @SuppressWarnings("null")
     public Mono<Void> logout(String token) {
-        return webClient.post()
+        return client().post()
                 .uri("/api/sso/logout")
                 .cookie(ssoConfig.getCookieName(), token)
                 .retrieve()

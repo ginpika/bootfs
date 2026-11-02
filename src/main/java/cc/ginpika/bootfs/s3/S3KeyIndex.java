@@ -4,7 +4,6 @@ import cc.ginpika.bootfs.service.etcd.EtcdService;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -12,7 +11,6 @@ import java.util.*;
 
 /** Protocol bindings only. Resource publication and deletion live in FileService. */
 @Component
-@ConditionalOnProperty(prefix = "s3", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class S3KeyIndex {
     private final EtcdService etcdService;

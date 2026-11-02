@@ -4,7 +4,7 @@
 
 当前分支正在演进为内置 mononode：RocksDB + Apache Ratis + Lucene。运行、旧数据迁移和实现边界请先阅读 [内核指南](./docs/mononode-kernel.md)。
 
-安全默认：SSO 仅允许 `admin` 角色访问共享后台，文件、缩略图、订阅和媒体读取默认需要登录；公开分享须显式设置 `BOOTFS_PUBLIC_SHARING_ENABLED=true`。升级配置、逐接口清单与未解决的生产风险见 [安全审查报告](./docs/security-audit.md)。
+新安装默认关闭 SSO、不限角色，开启公开读取、本机直连和内网检测；S3 默认关闭。首页「设置」管理当前节点的数据库配置，无需填写普通业务环境变量。升级导入、生效方式与备份边界见 [节点设置](./docs/node-settings.md)，接口边界见 [安全审查报告](./docs/security-audit.md)。
 
 <details>
   <summary>界面预览</summary>
@@ -79,15 +79,15 @@ mvn package -DskipTests
 java -jar target/bootfs-v1.0.0-beta.1.jar --spring.profiles.active=dev
 ```
 
-开发配置默认关闭 SSO。旧数据目录需要显式迁移，不能直接将本地文件清单当作外部搜索元数据的完整备份。
+新安装在所有 profile 默认关闭 SSO，已有数据库设置保持不变。旧数据目录需要显式迁移，不能直接将本地文件清单当作外部搜索元数据的完整备份。
 
-需要保留远程 SSO、仅让可信本机直连免登录时，设置 `SSO_LOCAL_BYPASS_ENABLED=true`（默认 `false`），并保持 `SSO_ENABLED=true`。Docker 网关与代理请求不享受此豁免；使用限制和命令行写请求方式见[本地访问说明](./docs/local-access.md)。
+需要保留远程 SSO、仅让可信本机直连免登录时，在设置页开启 SSO 并保留「允许本机直接访问」（新安装默认开启）。Docker 网关与代理请求不享受此豁免；使用限制和命令行写请求方式见[本地访问说明](./docs/local-access.md)。
 
 ## 部署
 
 ```shell
 cp .env.example .env
-# 配置站点入口、SSO 和可选 S3 凭据
+# 启动后打开 /settings 配置节点入口、SSO 和可选 S3
 docker compose up --build -d
 ```
 

@@ -29,7 +29,7 @@ class FederationIntegrationTest {
             url="http://127.0.0.1:"+port;
             List<String> arguments = new ArrayList<>(List.of(
                     "--server.port="+port,"--server.address=127.0.0.1","--tfs.root-path="+root.resolve(id),"--tfs.unique-id="+id,
-                    "--tfs.web-entrypoint="+url,"--tfs.copies="+(replicated?2:1),"--sso.enabled=false","--s3.enabled=false",
+                    "--tfs.web-entrypoint="+url,"--tfs.copies="+(replicated?2:1),"--sso.enabled=false","--sso.local-bypass.enabled=false","--s3.enabled=false",
                     "--bootfs.security.public-sharing.enabled=true",
                     "--tfs.ffmpeg-url=/nonexistent-ffmpeg","--bootfs.objects.write-policy="+(replicated?"replicated":"single-local"),
                     "--bootfs.objects.required-copies="+(replicated?2:0),"--bootfs.cluster.transition-interval-ms=600000",
@@ -39,6 +39,11 @@ class FederationIntegrationTest {
             nodes.add(this);
         }
         <T> T bean(Class<T> type) { return app.getBean(type); }
+        void setSso(boolean enabled) throws Exception {
+            var settings=bean(cc.ginpika.bootfs.settings.NodeSettings.class);
+            var next=new LinkedHashMap<>(settings.current().map()); next.put("ssoEnabled",enabled);
+            settings.update(((Number)settings.view().get("revision")).longValue(),new cc.ginpika.bootfs.settings.SettingsValues(next),false,false,store());
+        }
         DynamicMetadataStore store() { return (DynamicMetadataStore)bean(MetadataStore.class); }
         String upload(String name,String content) throws Exception { return bean(FileService.class).publish(new java.io.ByteArrayInputStream(content.getBytes(java.nio.charset.StandardCharsets.UTF_8)),name,false).file().getUuid(); }
         @Override public void close() { if(app!=null) { app.close(); app=null; } }
@@ -72,13 +77,13 @@ class FederationIntegrationTest {
                 cc.ginpika.bootfs.metrics.RequestCategory.FILE, "GET", "/only-b", 200, 200, 10, "2001:db8::2");
 
         // The dashboard must use signed peer requests even when the target requires SSO.
-        b.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(true);
+        b.setSso(true);
         assertEquals(302, request(b, "GET", "/api/dashboard/node-stats", null, null).statusCode());
         assertDashboardNodes(a, a.id, b.id);
-        b.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(false);
-        a.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(true);
+        b.setSso(false);
+        a.setSso(true);
         assertDashboardNodes(b, b.id, a.id);
-        a.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(false);
+        a.setSso(false);
 
         b.close();
         JSONObject stats = JSON.parseObject(request(a, "GET", "/api/dashboard/stats", null, null).body());
@@ -137,7 +142,7 @@ class FederationIntegrationTest {
         JSONObject canonical = owner.bean(MeiliSearchService.class).findDocument("full-text", id);
         JSONArray storedPages = canonical.getJSONArray("resources");
         assertEquals(2, storedPages.size());
-        owner.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(true);
+        owner.setSso(true);
 
         URI ownerAlbum = URI.create(owner.url + "/api/album/" + id);
         String token = frontend.store().tokenFor(owner.url);
@@ -185,7 +190,7 @@ class FederationIntegrationTest {
         String id = owner.bean(FileService.class).publish(new java.io.ByteArrayInputStream(yaml.getBytes(gbk)), "gbk-clash.yaml", false).file().getUuid();
         owner.bean(MeiliSearchService.class).updateDocumentTags("full-text", id,
                 List.of(cc.ginpika.bootfs.domain.dto.Tag.manual("clash")));
-        owner.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(true);
+        owner.setSso(true);
         var read = request(frontend, "GET", "/api/file/" + id + "/text", null, null);
         assertEquals(200, read.statusCode(), read.body());
         JSONObject original = JSON.parseObject(read.body());
@@ -231,7 +236,7 @@ class FederationIntegrationTest {
             String id = owner.upload("clash.yaml", yaml);
             owner.bean(MeiliSearchService.class).updateDocumentTags("full-text", id,
                     List.of(cc.ginpika.bootfs.domain.dto.Tag.manual("clash")));
-            owner.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(true);
+            owner.setSso(true);
             assertEquals(302, request(owner, "GET", "/api/file/" + id + "/clash", null, null).statusCode());
             assertEquals(302, request(owner, "POST", "/api/file/" + id + "/clash/latency", null, null).statusCode());
             var details = request(frontend, "GET", "/api/file/" + id + "/clash", null, null);
@@ -262,7 +267,7 @@ class FederationIntegrationTest {
         Node owner = new Node("text-owner", false), frontend = new Node("text-frontend", false);
         join(frontend, owner);
         String id = owner.upload("settings.yaml", "port: 80\n");
-        owner.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(true);
+        owner.setSso(true);
         assertEquals(302, request(owner, "GET", "/api/file/" + id + "/text", null, null).statusCode());
         assertEquals(302, request(owner, "PUT", "/api/file/" + id + "/text", "{}", null).statusCode());
         String token = frontend.store().tokenFor(owner.url);
@@ -292,7 +297,7 @@ class FederationIntegrationTest {
         join(frontend, owner);
         String content = "# 中文配置\r\nport: 80\r\nproxies: []\r\n";
         String id = owner.upload("clash.yaml", content);
-        owner.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(true);
+        owner.setSso(true);
         String browserCodecs = "gzip, deflate, br, zstd";
 
         // Check that this test really exercises a gzip-compressing owner, with peer authentication.

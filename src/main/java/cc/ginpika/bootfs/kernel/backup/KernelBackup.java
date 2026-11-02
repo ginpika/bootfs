@@ -112,6 +112,19 @@ public final class KernelBackup {
             }
             validateInventory(entries, inventory);
             JSONObject manifest = new JSONObject(); manifest.put("formatVersion", 1); manifest.put("sourceRevision", revision);
+            JSONObject nodeSettings = new JSONObject();
+            for (var source : roots.entrySet()) {
+                if (Files.exists(source.getValue().resolve("kernel/settings/CURRENT"))) {
+                    try (var settings = new cc.ginpika.bootfs.settings.SettingsDatabase(source.getValue())) {
+                        var state = settings.read();
+                        if (state != null) {
+                            if (state.containsKey("pending")) throw new IOException("Complete or cancel pending settings transitions before backup");
+                            nodeSettings.put(source.getKey(), new cc.ginpika.bootfs.settings.SettingsValues(state.getJSONObject("values")).portable());
+                        }
+                    }
+                }
+            }
+            manifest.put("nodeSettings", nodeSettings);
             manifest.put("nodes", roots.keySet()); manifest.put("metadataSha256", ContentHash.sha256(staging.resolve("metadata.json"))); manifest.put("files", files);
             write(staging.resolve("manifest.json"), manifest.toJSONString());
             write(staging.resolve("manifest.sha256"), ContentHash.sha256(staging.resolve("manifest.json")));
@@ -221,9 +234,19 @@ public final class KernelBackup {
                     if (!entry.getString("sha256").equals(ContentHash.sha256(target))) throw new IOException("Content changed while restoring");
                 }
             }
+            JSONObject nodeSettings = manifest.getJSONObject("nodeSettings");
+            if (nodeSettings != null && !nodeSettings.isEmpty()) {
+                JSONObject selected = nodeSettings.getJSONObject(nodeId);
+                if (selected == null && nodeSettings.size() == 1) selected = nodeSettings.getJSONObject(nodeSettings.keySet().iterator().next());
+                if (selected != null) {
+                    // Revalidate and re-sanitize portable data, including backups made by older code.
+                    var portable = new cc.ginpika.bootfs.settings.SettingsValues(selected).portable();
+                    write(staging.resolve("settings-portable.json"), new JSONObject(portable).toJSONString());
+                }
+            }
             write(staging.resolve("uuid"), nodeId);
             JSONObject plan = new JSONObject(); plan.put("formatVersion", 1); plan.put("sourceRevision", manifest.getLongValue("sourceRevision"));
-            plan.put("backupSha256", Files.readString(backup.resolve("manifest.sha256")).trim()); plan.put("entries", restored);
+            plan.put("endpoint", endpoint); plan.put("backupSha256", Files.readString(backup.resolve("manifest.sha256")).trim()); plan.put("entries", restored);
             write(staging.resolve("restore-plan.json"), plan.toJSONString());
             try (var walk = Files.walk(staging)) {
                 for (Path directory : walk.filter(Files::isDirectory).sorted(Comparator.reverseOrder()).toList()) DurableFiles.syncDirectory(directory);

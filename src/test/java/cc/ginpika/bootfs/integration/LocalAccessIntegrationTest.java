@@ -27,12 +27,13 @@ class LocalAccessIntegrationTest {
 
     private ConfigurableApplicationContext start(String... extra) {
         List<String> args = new ArrayList<>(List.of(
-                "--server.port=0", "--server.address=127.0.0.1", "--tfs.root-path=" + root,
+                "--server.port=0", "--server.address=127.0.0.1", "--tfs.root-path=" + root.resolve(java.util.UUID.randomUUID().toString()),
                 "--tfs.unique-id=local-test", "--tfs.web-entrypoint=http://127.0.0.1:8181",
-                "--sso.enabled=true", "--sso.server-url=http://127.0.0.1:1", "--s3.enabled=true",
+                "--sso.enabled=true", "--sso.local-bypass.enabled=false", "--bootfs.security.public-sharing.enabled=false", "--sso.server-url=http://127.0.0.1:1", "--s3.enabled=true",
                 "--s3.access-key=test-key", "--s3.secret-key=test-secret",
                 "--tfs.ffmpeg-url=/nonexistent-ffmpeg", "--bootfs.cluster.token=test-cluster-token",
                 "--spring.main.banner-mode=off"));
+        if (java.util.Arrays.stream(extra).anyMatch(v -> v.startsWith("--sso.local-bypass.enabled="))) args.removeIf(v -> v.startsWith("--sso.local-bypass.enabled="));
         args.addAll(List.of(extra));
         return new SpringApplicationBuilder(BootFS.class).logStartupInfo(false).run(args.toArray(String[]::new));
     }
@@ -57,7 +58,7 @@ class LocalAccessIntegrationTest {
         return http.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    @Test @Timeout(60) void bypassIsDisabledByDefaultEvenForRealLoopbackConnections() throws Exception {
+    @Test @Timeout(60) void explicitlyDisabledBypassRejectsRealLoopbackConnections() throws Exception {
         try (var app = start()) {
             assertEquals("false", app.getEnvironment().getProperty("sso.local-bypass.enabled"));
             assertEquals(302, send(app, "/", "GET").statusCode());

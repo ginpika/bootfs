@@ -18,22 +18,9 @@ Linux 上通过 `/proc` 采集 RSS、宿主机内存及 CPU 信息，通过标�
 
 Caddy 默认设置 `X-Forwarded-For`、`X-Forwarded-Proto` 和 `X-Forwarded-Host`，并忽略不可信客户端传入的这些头，通常不需要手写 `header_up`。[Caddy 官方文档](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy#defaults)
 
-BootFS 默认关闭代理头解析。若容器当前看到 Caddy 的连接地址为 `172.18.0.1`，在部署用的 `.env` 中设置以下两项；两个 Compose 文件均已支持传入：
+BootFS 默认关闭代理头解析。若容器看到 Caddy 的连接来源为 `172.18.0.1`，在当前节点 `/settings` 的「节点与反向代理」中选择 `native`，可信代理填写 `172[.]18[.]0[.]1`，保存后重启。数据库设置在下次启动绑定 Tomcat 之前加载，Compose 不再注入这些环境变量。
 
-```dotenv
-SERVER_FORWARD_HEADERS_STRATEGY=native
-SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES=172[.]18[.]0[.]1
-```
-
-第二项是匹配可信代理源地址的正则表达式，需使用 **BootFS 实际看到的 Caddy 连接地址**；更换 Docker 网络后地址可能变化。不要留空或写成 `.*`。Spring Boot 的原生 Tomcat 代理头解析在请求进入统计 Filter 前运行，因此 `getRemoteAddr()` 和新增的请求记录会得到还原后的客户端 IP；已有记录不会被改写。[Spring Boot 2.7 官方文档](https://docs.spring.io/spring-boot/docs/2.7.x/reference/html/howto.html#howto.webserver.use-behind-a-proxy-server)
-
-更新镜像/构建后重建容器，使环境变量生效，例如本地构建部署：
-
-```sh
-docker compose up -d --build --force-recreate app
-```
-
-使用 GHCR 部署时，先选用包含本次修改的新镜像，再执行 `docker compose -f docker-compose.ghcr.yml up -d --force-recreate app`。
+地址正则必须匹配 BootFS 实际看到的代理来源。更换 Docker 网络后地址可能变化；限制后端直连，不要将所有来源设为可信。本机免登录使用解析前的原始连接，代理解析不会使网关成为本机。
 
 宿主机上的 Caddy 可使用普通反代配置：
 

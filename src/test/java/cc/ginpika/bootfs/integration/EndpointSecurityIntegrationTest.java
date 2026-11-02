@@ -23,7 +23,7 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties = {"sso.enabled=true", "s3.enabled=false", "tfs.ffmpeg-url=/nonexistent-ffmpeg"})
+@SpringBootTest(properties = {"sso.enabled=true", "sso.allowed-roles=admin", "bootfs.security.public-sharing.enabled=false", "sso.local-bypass.enabled=false", "s3.enabled=false", "tfs.ffmpeg-url=/nonexistent-ffmpeg"})
 @AutoConfigureMockMvc
 @DirtiesContext
 class EndpointSecurityIntegrationTest {
@@ -61,7 +61,7 @@ class EndpointSecurityIntegrationTest {
                         if (!expression.isNegated()) request.param(expression.getName(), expression.getValue() == null ? "1" : expression.getValue());
                     }
                     int status = mvc.perform(request).andReturn().getResponse().getStatus();
-                    assertTrue(status == 302 || status == 401, verb + " " + pattern + " returned " + status);
+                    assertTrue(status == 302 || status == 401 || (path.equals("/s3") || path.startsWith("/s3/")) && status == 404, verb + " " + pattern + " returned " + status);
                     checked++;
                 }
             }

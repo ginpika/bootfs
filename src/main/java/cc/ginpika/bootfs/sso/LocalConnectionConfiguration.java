@@ -8,7 +8,6 @@ import javax.servlet.ServletException;
 import org.apache.catalina.connector.Request;
 import org.apache.catalina.connector.Response;
 import org.apache.catalina.valves.ValveBase;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.web.ServerProperties;
 import org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory;
 import org.springframework.boot.web.server.WebServerFactoryCustomizer;
@@ -16,7 +15,6 @@ import org.springframework.core.Ordered;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConditionalOnProperty(name = "sso.local-bypass.enabled", havingValue = "true")
 public class LocalConnectionConfiguration implements WebServerFactoryCustomizer<TomcatServletWebServerFactory>, Ordered {
     private final List<String> proxyHeaders;
 

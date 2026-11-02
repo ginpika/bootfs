@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>节点设置 · BootFS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&amp;family=Outfit:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/themes.css">
+  <link rel="stylesheet" href="/settings.css?v=2">
+  <script>try { var t = localStorage.getItem('tfs-theme'); document.documentElement.classList.add('theme-'+(['light','dark','sakura','starry-night','forest','ocean','sunset','lavender'].includes(t) ? t : 'light')); } catch(e) { document.documentElement.classList.add('theme-light'); }</script>
+  <script src="/settings.js" defer></script>
+  <script src="/settings-appearance.js?v=2" defer></script>
+</head>
+<body class="settings-page">
+<svg class="settings-icon-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs><symbol id="settings-icon-back" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7m-7 7h16"/></symbol><symbol id="settings-icon-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></symbol><symbol id="settings-icon-login" viewBox="0 0 24 24"><rect x="9" y="3" width="12" height="18" rx="2"/><path d="M3 12h12m-4-4 4 4-4 4"/></symbol><symbol id="settings-icon-box" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 5v9l9 5 9-5V8m-9 5v9M7.5 5.5l9 5"/></symbol><symbol id="settings-icon-storage" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01"/></symbol><symbol id="settings-icon-node" viewBox="0 0 24 24"><rect x="8" y="3" width="8" height="6" rx="1"/><rect x="2" y="16" width="8" height="5" rx="1"/><rect x="14" y="16" width="8" height="5" rx="1"/><path d="M12 9v4m-6 3v-3h12v3"/></symbol><symbol id="settings-icon-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.5-1L20 9M4 15l2.4 3A7 7 0 0 0 17.9 17"/></symbol><symbol id="settings-icon-save" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2Z"/><path d="M7 3v6h10V3M7 21v-8h10v8"/></symbol><symbol id="settings-icon-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18h1.5a2.5 2.5 0 0 0 1.8-4.2 1 1 0 0 1 .7-1.8h1A4 4 0 0 0 21 11a8.5 8.5 0 0 0-9-8Z"/><path d="M7.5 10h.01M10 6.5h.01M15 7h.01M17 10.5h.01"/></symbol><symbol id="settings-icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol><symbol id="settings-icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></symbol></defs></svg>
+<header class="settings-header">
+  <div class="settings-header-title">
+    <a href="/" class="theme-icon-btn" aria-label="返回文件库" title="返回文件库"><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-back"/></svg></a>
+    <h1>节点设置</h1>
+  </div>
+  <div class="settings-header-actions">
+    <a href="/dashboard" class="theme-btn-secondary settings-dashboard-link"><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-node"/></svg>系统仪表盘</a>
+    <div class="settings-theme-picker">
+      <button type="button" id="settingsThemeButton" class="theme-icon-btn" aria-label="切换主题" title="主题" aria-expanded="false" aria-controls="settingsThemeMenu"><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-palette"/></svg></button>
+      <div id="settingsThemeMenu" class="settings-theme-menu theme-card" hidden>
+        <p class="settings-theme-title">选择主题</p>
+        <div class="settings-theme-options" role="group" aria-label="页面主题">
+          <button type="button" class="settings-theme-option theme-option" data-settings-theme="light" aria-pressed="false"><span class="settings-theme-swatch theme-light"></span><span>浅色模式</span><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-check"/></svg></button>
+          <button type="button" class="settings-theme-option theme-option" data-settings-theme="dark" aria-pressed="false"><span class="settings-theme-swatch theme-dark"></span><span>深色模式</span><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-check"/></svg></button>
+          <button type="button" class="settings-theme-option theme-option" data-settings-theme="sakura" aria-pressed="false"><span class="settings-theme-swatch theme-sakura"></span><span>樱花</span><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-check"/></svg></button>
+          <button type="button" class="settings-theme-option theme-option" data-settings-theme="starry-night" aria-pressed="false"><span class="settings-theme-swatch theme-starry-night"></span><span>星空夜景</span><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-check"/></svg></button>
+          <button type="button" class="settings-theme-option theme-option" data-settings-theme="forest" aria-pressed="false"><span class="settings-theme-swatch theme-forest"></span><span>森林</span><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-check"/></svg></button>
+          <button type="button" class="settings-theme-option theme-option" data-settings-theme="ocean" aria-pressed="false"><span class="settings-theme-swatch theme-ocean"></span><span>海洋</span><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-check"/></svg></button>
+          <button type="button" class="settings-theme-option theme-option" data-settings-theme="sunset" aria-pressed="false"><span class="settings-theme-swatch theme-sunset"></span><span>日落</span><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-check"/></svg></button>
+          <button type="button" class="settings-theme-option theme-option" data-settings-theme="lavender" aria-pressed="false"><span class="settings-theme-swatch theme-lavender"></span><span>薰衣草</span><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-check"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+<form id="settingsForm" class="settings-form">
+<main id="settingsScroller" class="settings-scroll">
+<div class="settings-content">
+  <div class="settings-overview theme-card">
+    <span class="settings-overview-icon"><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-node"/></svg></span>
+    <div class="settings-overview-copy"><h2>当前节点</h2><p>设置仅保存在此节点，不会更改其他节点的配置。</p></div>
+    <span class="node-badge" id="nodeAddress">读取节点信息…</span>
+  </div>
+  <div id="feedback" role="status" aria-live="polite">正在加载设置…</div>
+  <fieldset id="settingsFields" disabled>
+  <div class="layout">
+    <aside class="settings-sidebar">
+      <nav class="settings-nav theme-card" aria-label="设置分类">
+        <p class="settings-nav-title">设置分类</p>
+        <a href="#access" class="settings-nav-link" aria-current="location"><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-shield"/></svg><span>访问权限</span></a>
+        <a href="#login" class="settings-nav-link"><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-login"/></svg><span>登录认证</span></a>
+        <a href="#s3" class="settings-nav-link"><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-box"/></svg><span>S3 服务</span></a>
+        <a href="#storage" class="settings-nav-link"><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-storage"/></svg><span>存储与副本</span></a>
+        <a href="#node" class="settings-nav-link"><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-node"/></svg><span>节点与反向代理</span></a>
+      </nav>
+      <p class="settings-sidebar-note"><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-info"/></svg>各项设置的生效时间见分组说明。</p>
+    </aside>
+    <div class="sections">
+    <section class="settings-section theme-card" id="access"><div class="section-heading"><h2>访问权限</h2><span class="badge">立即生效</span></div>
+      <label class="toggle"><span><strong>允许公开读取</strong><small>开放现有文件链接、缩略图、预览及播放读取入口。</small></span><input type="checkbox" name="publicSharingEnabled" role="switch"></label>
+      <label class="toggle"><span><strong>允许内网节点延迟检测</strong><small>允许 Clash 检测访问内网地址；用于新的检测任务。</small></span><input type="checkbox" name="allowPrivateProbes" role="switch"></label>
+    </section>
+    <section class="settings-section theme-card" id="login"><div class="section-heading"><h2>登录认证</h2><span class="badge">立即生效</span></div>
+      <label class="toggle"><span><strong>使用 SSO 登录认证</strong><small>开启前先测试服务，并确保当前登录会话可通过新设置。本机直连保留访问时也可开启。</small></span><input type="checkbox" name="ssoEnabled" role="switch"></label>
+      <label class="field">认证服务地址<div class="inline"><input type="url" name="ssoServerUrl" placeholder="https://auth.example.com" class="theme-input"><button type="button" class="theme-btn-secondary" id="testSso">测试连接</button></div></label>
+      <p id="ssoTestResult" class="hint" aria-live="polite">测试会访问认证服务的会话接口。</p>
+      <label class="field">允许登录的角色<input type="text" name="allowedRoles" placeholder="不限角色；多个角色用逗号分隔" class="theme-input"><small>留空允许所有已认证用户，不再使用角色白名单。星号不是不限模式。</small></label>
+      <label class="toggle"><span><strong>允许本机直接访问</strong><small>仅接受原始回环连接和可信浏览器来源；Docker 网关及反向代理不属于本机连接。</small></span><input type="checkbox" name="localBypassEnabled" role="switch"></label>
+      <label class="field">用户中心链接<input type="url" name="ssoInfoUrl" placeholder="可留空" class="theme-input"><small>显示在用户菜单中，不用于验证登录。</small></label>
+    </section>
+    <section class="settings-section theme-card" id="s3"><div class="section-heading"><h2>S3 服务</h2><span class="badge">新请求生效</span></div>
+      <label class="toggle"><span><strong>开启 S3 兼容服务</strong><small>填写完整凭证后可开启；请求继续使用 SigV4 校验。</small></span><input type="checkbox" name="s3Enabled" role="switch"></label>
+      <div class="columns"><label class="field">访问密钥<input type="text" name="s3AccessKey" autocomplete="off" class="theme-input"></label>
+      <label class="field">秘密密钥<input type="password" name="s3SecretKey" autocomplete="new-password" placeholder="留空保留已存密钥" class="theme-input"><small id="secretState">尚未设置</small></label></div>
+      <div class="inline"><button type="button" class="theme-btn-secondary" id="generateS3">生成新凭证</button><button type="button" class="theme-btn-secondary" id="revealSecret">显示本次输入</button><label class="compact"><input type="checkbox" id="clearSecret">清除已存秘密密钥</label></div>
+      <p class="hint">保存后秘密密钥不回显。生成后请先复制到客户端；保存新凭证会使旧凭证对新请求失效。</p>
+      <label class="field">桶名<input type="text" name="s3Bucket" required minlength="3" maxlength="63" class="theme-input"><small>受控变更：先保存关闭 S3，完成上传与复制，再确认迁移。下次重启迁移全部对象绑定，失败保留原桶；成功后重新开启 S3。</small></label>
+      <label class="compact"><input type="checkbox" id="confirmBucketChange">我已准备好在下次重启迁移桶绑定</label>
+    </section>
+    <section class="settings-section theme-card" id="storage"><div class="section-heading"><h2>存储与副本</h2><span class="badge">新上传任务生效</span></div>
+      <div class="columns"><label class="field">副本份数（包括本机）<input type="number" name="copies" min="1" max="100" required class="theme-input"></label>
+      <label class="field">写入策略<select name="writePolicy" class="theme-input"><option value="single-local">本机写入，后台修复副本</option><option value="replicated">同步复制，达到份数后发布</option></select></label>
+      <label class="field">同步复制所需份数<input type="number" name="requiredCopies" min="0" max="100" required class="theme-input"><small>0 沿用副本份数；同步复制至少 2 份。</small></label>
+      <label class="field">准备超时（毫秒）<input type="number" name="prepareTimeoutMs" min="100" max="600000" required class="theme-input"></label></div>
+    </section>
+    <section class="settings-section theme-card" id="node"><div class="section-heading"><h2>节点与反向代理</h2><span class="badge restart">重启 / 受控变更</span></div>
+      <label class="field">节点访问地址<input type="url" name="webEntrypoint" required class="theme-input"><small>组网前填写其他节点可达的地址。修改前须离开集群，完成成员通知、配对及上传任务。重启时同时迁移节点身份与资源路由。</small></label>
+      <label class="compact"><input type="checkbox" id="confirmAddressChange">我已确认新地址可达，并准备重启当前节点</label>
+      <p class="hint">待变更尚未生效时仍使用旧地址。取消待变更：恢复原地址 / 桶名后保存。重启检查失败时保留原配置并显示原因。</p>
+      <div class="columns"><label class="field">转发头策略<select name="forwardHeadersStrategy" class="theme-input"><option value="none">不解析转发头（默认）</option><option value="native">Tomcat 原生解析</option><option value="framework">Spring Framework 解析</option></select></label>
+      <label class="field">可信代理来源地址（正则）<input type="text" name="internalProxies" required class="theme-input"><small>原生解析只信任该正则匹配的代理。Framework 模式须由边缘代理清理转发头，并限制后端直接访问。</small></label></div>
+      <p id="activeProxy" class="hint"></p>
+      <div class="credential"><div><strong>节点管理凭证</strong><p class="hint">系统自动生成并在本机持久化。轮换使旧管理 / 旧传输 token 失效，保留签名身份及已配对节点授权。</p></div><button type="button" class="theme-btn-secondary" id="rotateNode">轮换凭证</button></div>
+    </section>
+    </div>
+  </div>
+  </fieldset>
+  </div>
+</main>
+  <footer class="settings-footer"><div class="settings-footer-inner">
+    <div class="settings-save-status"><span class="settings-status-dot" aria-hidden="true"></span><span id="saveHint">更改完成后统一保存</span></div>
+    <div class="settings-footer-actions"><button type="button" class="theme-btn-secondary" id="reload"><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-refresh"/></svg>重新加载</button><button type="submit" class="theme-btn-primary" id="save" disabled><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-save"/></svg>保存设置</button></div>
+  </div></footer>
+</form>
+<dialog id="rotateDialog" class="settings-dialog theme-card" aria-labelledby="rotateTitle"><div class="settings-dialog-body"><h2 id="rotateTitle">轮换节点管理凭证</h2><p>旧管理及旧传输 token 将失效。节点签名身份和配对授权保持有效。</p><div class="inline"><button type="button" class="theme-btn-secondary" id="cancelRotate">取消</button><button type="button" class="theme-btn-primary" id="confirmRotate">确认轮换</button></div></div></dialog>
+</body></html>

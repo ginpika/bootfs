@@ -51,7 +51,7 @@ public class TrafficStatsFilter implements Filter {
                 long duration = System.currentTimeMillis() - start;
                 RequestCategory cat = RequestCategory.from(req.getRequestURI());
                 requestStatsService.record(cat, req.getMethod(), req.getRequestURI(),
-                        status, bytes, duration);
+                        status, bytes, duration, req.getRemoteAddr());
             } catch (Exception rec) {
                 log.debug("记录请求统计失败: {}", rec.getMessage());
             }

@@ -53,6 +53,64 @@ class FederationIntegrationTest {
     void flush() throws Exception { for(int i=0;i<3;i++) for(Node n:nodes) if(n.app!=null) n.store().advance(); }
     @AfterEach void close() { for(Node n:nodes) n.close(); }
 
+    @Test @Timeout(90) void dashboardFromEitherNodeContainsIndependentPeerStatsAndHandlesAnOfflinePeer() throws Exception {
+        Node a = new Node("dashboard-a", false), b = new Node("dashboard-b", false);
+        join(b, a);
+        a.upload("a.txt", "a");
+        b.upload("b1.txt", "b1");
+        b.upload("b2.txt", "b2");
+        a.bean(cc.ginpika.bootfs.metrics.RequestStatsService.class).record(
+                cc.ginpika.bootfs.metrics.RequestCategory.FILE, "GET", "/only-a", 200, 100, 5, "192.0.2.1");
+        b.bean(cc.ginpika.bootfs.metrics.RequestStatsService.class).record(
+                cc.ginpika.bootfs.metrics.RequestCategory.FILE, "GET", "/only-b", 200, 200, 10, "2001:db8::2");
+
+        // The dashboard must use signed peer requests even when the target requires SSO.
+        b.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(true);
+        assertEquals(302, request(b, "GET", "/api/dashboard/node-stats", null, null).statusCode());
+        assertDashboardNodes(a, a.id, b.id);
+        b.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(false);
+        a.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(true);
+        assertDashboardNodes(b, b.id, a.id);
+        a.bean(cc.ginpika.bootfs.sso.SsoConfig.class).setEnabled(false);
+
+        b.close();
+        JSONObject stats = JSON.parseObject(request(a, "GET", "/api/dashboard/stats", null, null).body());
+        assertTrue(stats.getBooleanValue("succeed"), stats.toJSONString());
+        JSONObject offline = stats.getJSONObject("data").getJSONArray("nodes").getJSONObject(1);
+        assertEquals(b.id, offline.getString("nodeId"));
+        assertFalse(offline.getBooleanValue("online"));
+        assertFalse(offline.containsKey("system"));
+        assertFalse(offline.containsKey("requests"));
+    }
+
+    private void assertDashboardNodes(Node entry, String currentId, String remoteId) throws Exception {
+        var response = request(entry, "GET", "/api/dashboard/stats", null, null);
+        assertEquals(200, response.statusCode(), response.body());
+        JSONObject result = JSON.parseObject(response.body());
+        assertTrue(result.getBooleanValue("succeed"), response.body());
+        JSONArray members = result.getJSONObject("data").getJSONArray("nodes");
+        assertEquals(2, members.size());
+        assertEquals(currentId, members.getJSONObject(0).getString("nodeId"));
+        assertTrue(members.getJSONObject(0).getBooleanValue("isCurrent"));
+        assertEquals(remoteId, members.getJSONObject(1).getString("nodeId"));
+        for (int i = 0; i < members.size(); i++) {
+            JSONObject member = members.getJSONObject(i);
+            boolean isA = "dashboard-a".equals(member.getString("nodeId"));
+            assertTrue(member.getBooleanValue("online"));
+            assertNotNull(member.getJSONObject("system").getString("runtime"));
+            assertTrue(member.getJSONObject("system").getJSONObject("memory").getLongValue("heapUsedBytes") > 0);
+            assertEquals(isA ? 1 : 2, member.getJSONObject("resources").getIntValue("total"));
+            assertTrue(member.getLongValue("appStartTime") > 0);
+            assertNotNull(member.getJSONObject("traffic"));
+            JSONArray recent = member.getJSONObject("requests").getJSONArray("recent");
+            assertTrue(recent.stream().map(value -> (JSONObject) value).anyMatch(log ->
+                    (isA ? "/only-a" : "/only-b").equals(log.getString("uri"))
+                            && (isA ? "192.0.2.1" : "2001:db8::2").equals(log.getString("clientIp"))));
+            assertFalse(recent.stream().map(value -> (JSONObject) value).anyMatch(log ->
+                    (isA ? "/only-b" : "/only-a").equals(log.getString("uri"))));
+        }
+    }
+
     @Test @Timeout(90) void remoteAlbumKeepsItsPagesAndThumbnailsAccessibleThroughTheFrontend() throws Exception {
         Node owner = new Node("album-owner", false), frontend = new Node("album-frontend", false);
         join(frontend, owner);

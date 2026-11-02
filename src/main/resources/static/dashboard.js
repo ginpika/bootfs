@@ -14,6 +14,10 @@ var CATEGORY_LABELS = {
     OTHER: '静态资源和其他'
 };
 
+var dashboardNodes = [];
+var selectedNodeId = new URLSearchParams(window.location.search).get('node');
+var statsLoading = false;
+
 function setTheme(theme) {
     document.documentElement.classList.forEach(function (c) {
         if (c.startsWith('theme-')) document.documentElement.classList.remove(c);
@@ -79,26 +83,99 @@ function renderNodes(nodes) {
         return;
     }
     grid.innerHTML = nodes.map(function (n) {
-        var cardStyle = n.isCurrent ? 'border-color: var(--color-accent-primary); border-width: 2px;' : '';
-        var cardOpacity = n.online ? '' : 'opacity: 0.55;';
-        var cardCls = 'theme-card theme-rounded-xl theme-shadow p-4 w-[340px] max-w-full';
+        var cardOpacity = n.online ? '' : 'opacity: 0.65;';
+        var cardCls = 'dashboard-node theme-card theme-rounded-xl theme-shadow p-4 w-[340px] max-w-full';
+        var attributes = ' role="button" tabindex="0" aria-pressed="' + (n.nodeId === selectedNodeId) +
+            '" data-node-id="' + escapeHtml(n.nodeId) + '" aria-label="查看节点 ' + escapeHtml(n.nodeId) + ' 的统计"';
 
         var header = renderNodeHeader(n);
 
         if (!n.online) {
-            return '<div class="' + cardCls + '" style="' + cardStyle + cardOpacity + '">' +
+            return '<div class="' + cardCls + '"' + attributes + ' style="' + cardOpacity + '">' +
                 header +
-                '<p class="text-sm text-center py-6" style="color: var(--color-text-muted);">节点离线，无法获取数据</p>' +
+                '<p class="text-sm text-center py-6" style="color: var(--color-text-muted);">节点不可达，无法获取数据</p>' +
             '</div>';
         }
 
-        return '<div class="' + cardCls + '" style="' + cardStyle + cardOpacity + '">' +
+        return '<div class="' + cardCls + '"' + attributes + ' style="' + cardOpacity + '">' +
             header +
             renderNodeDisk(n.disk) +
             renderNodeResources(n.resources) +
             renderNodeFileTypes(n.fileTypes) +
         '</div>';
     }).join('');
+}
+
+function selectNode(nodeId) {
+    if (!dashboardNodes.some(function (node) { return node.nodeId === nodeId; })) return;
+    selectedNodeId = nodeId;
+    var url = new URL(window.location.href);
+    url.searchParams.set('node', nodeId);
+    window.history.replaceState(null, '', url);
+    // 更新选中态时保留键盘焦点；轮询时才重绘卡片内容。
+    document.querySelectorAll('#nodesGrid [data-node-id]').forEach(function (card) {
+        card.setAttribute('aria-pressed', String(card.dataset.nodeId === nodeId));
+    });
+    renderSelectedNode();
+}
+
+function renderSelectedNode() {
+    var node = dashboardNodes.find(function (item) { return item.nodeId === selectedNodeId; });
+    var available = node && node.online;
+    document.getElementById('selectedNodeTitle').textContent = node ? '节点统计 · ' + node.nodeId : '节点统计';
+    document.getElementById('selectedNodeStatus').textContent = !node ? '暂无节点数据' :
+        (node.isCurrent ? '当前访问节点 · ' : '远程节点 · ') + (node.url || '') +
+        (!available ? ' · 节点不可达，统计暂不可用' :
+            (!node.requests ? ' · 该节点未提供流量与请求数据，请升级节点' :
+                ' · 统计仅属于此节点 · 最近刷新 ' + new Date().toLocaleTimeString()));
+    renderSystem(available ? node.system : null, available ? '该节点未提供系统信息，请升级节点' : '节点不可达，系统信息暂不可用');
+    renderTraffic(available ? node.traffic : null);
+    renderRequests(available ? node.requests : null,
+        available ? '该节点未提供请求统计' : '节点不可达，请求统计暂不可用');
+    renderUptime(available ? node.appStartTime : null);
+}
+
+function systemRow(label, value) {
+    return '<div class="flex justify-between items-start gap-3 py-1 text-xs">' +
+        '<dt class="shrink-0" style="color: var(--color-text-muted);">' + escapeHtml(label) + '</dt>' +
+        '<dd class="text-right break-words min-w-0" style="color: var(--color-text-primary);">' + escapeHtml(value == null ? '--' : String(value)) + '</dd></div>';
+}
+
+function systemCard(title, content) {
+    return '<div class="theme-card theme-rounded-xl theme-shadow p-4"><h3 class="text-sm font-semibold font-display mb-3" ' +
+        'style="color: var(--color-text-primary);">' + escapeHtml(title) + '</h3>' + content + '</div>';
+}
+
+function renderSystem(system, emptyMessage) {
+    var container = document.getElementById('systemStats');
+    if (!system) {
+        container.innerHTML = systemCard('系统资源', '<p class="text-xs" style="color: var(--color-text-muted);">' + escapeHtml(emptyMessage) + '</p>');
+        return;
+    }
+    var memory = system.memory || {};
+    var percent = memory.processHostPercent;
+    var runtimeLabels = {docker: 'Docker', systemd: 'systemd', container: '容器', standalone: '直接运行'};
+    var jvm = '<p class="text-2xl font-bold font-display" style="color: var(--color-accent-primary);">' + formatBytes(memory.processRssBytes) + '</p>' +
+        '<p class="text-xs mb-3" style="color: var(--color-text-muted);">进程实际驻留内存（RSS） · 占宿主机 ' +
+        (percent == null ? '--' : Number(percent).toFixed(2) + '%') + '</p>' +
+        '<dl>' + systemRow('堆已用 / 上限', formatBytes(memory.heapUsedBytes) + ' / ' + formatBytes(memory.heapMaxBytes)) +
+        systemRow('堆已提交', formatBytes(memory.heapCommittedBytes)) +
+        systemRow('非堆已用', formatBytes(memory.nonHeapUsedBytes)) + '</dl>' +
+        '<p class="text-xs mt-2" style="color: var(--color-text-muted);">RSS 包含堆、非堆及本地内存等；无法采集的指标显示 --。</p>';
+    var host = '<dl>' + systemRow('CPU 型号', system.cpuModel) +
+        systemRow('架构 / 宿主机逻辑 CPU', (system.architecture || '--') + ' / ' + (system.logicalProcessors || '--')) +
+        systemRow('JVM 可用 CPU', system.availableProcessors) +
+        systemRow('宿主机内存总量', formatBytes(memory.hostTotalBytes)) +
+        systemRow('宿主机已用 / 可用', formatBytes(memory.hostUsedBytes) + ' / ' + formatBytes(memory.hostAvailableBytes));
+    if (memory.containerLimitBytes != null || memory.containerUsedBytes != null || ['docker', 'container'].includes(system.runtime)) {
+        host += systemRow('cgroup 内存用量', formatBytes(memory.containerUsedBytes)) +
+            systemRow('cgroup 内存限额', memory.containerLimitBytes == null ? '未限制或不可用' : formatBytes(memory.containerLimitBytes));
+    }
+    host += '</dl>';
+    var runtime = '<dl>' + systemRow('运行环境', runtimeLabels[system.runtime] || system.runtime) +
+        systemRow('操作系统', (system.os || '--') + ' ' + (system.osVersion || '')) +
+        systemRow('Java 版本', system.javaVersion) + systemRow('虚拟机', system.jvmName) + systemRow('进程 PID', system.pid) + '</dl>';
+    container.innerHTML = systemCard('JVM 进程内存', jvm) + systemCard('硬件与内存资源', host) + systemCard('节点运行环境', runtime);
 }
 
 function renderNodeHeader(n) {
@@ -178,12 +255,11 @@ function renderNodeFileTypes(fileTypes) {
 // ============ Section 3: 本节点流量与请求 ============
 
 function renderTraffic(traffic) {
-    if (!traffic) return;
-    document.getElementById('trafficTotal').textContent = formatBytes(traffic.totalBytesOut);
-    document.getElementById('trafficTotalReqs').textContent = traffic.totalRequests;
+    document.getElementById('trafficTotal').textContent = formatBytes(traffic && traffic.totalBytesOut);
+    document.getElementById('trafficTotalReqs').textContent = traffic ? traffic.totalRequests : '--';
 
     var list = document.getElementById('trafficCategoryList');
-    var cats = traffic.byCategory || [];
+    var cats = traffic && traffic.byCategory || [];
     if (cats.length === 0) {
         list.innerHTML = '<p class="text-sm" style="color: var(--color-text-muted);">暂无数据</p>';
         return;
@@ -206,13 +282,12 @@ function renderTraffic(traffic) {
     }).join('');
 }
 
-function renderRequests(reqs) {
-    if (!reqs) return;
-    document.getElementById('reqTotal24h').textContent = reqs.total24h;
-    document.getElementById('reqBytes24h').textContent = formatBytes(reqs.bytes24h);
+function renderRequests(reqs, emptyMessage) {
+    document.getElementById('reqTotal24h').textContent = reqs ? reqs.total24h : '--';
+    document.getElementById('reqBytes24h').textContent = formatBytes(reqs && reqs.bytes24h);
 
     var chart = document.getElementById('reqHourlyChart');
-    var hourly = reqs.hourly || [];
+    var hourly = reqs && reqs.hourly || [];
     var maxCount = 1;
     hourly.forEach(function (h) { if (h.count > maxCount) maxCount = h.count; });
     if (hourly.length === 0) {
@@ -226,9 +301,10 @@ function renderRequests(reqs) {
     }
 
     var tbody = document.getElementById('recentReqBody');
-    var recent = reqs.recent || [];
+    var recent = reqs && reqs.recent || [];
     if (recent.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-8 text-center" style="color: var(--color-text-muted);">暂无请求记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="px-3 py-8 text-center" style="color: var(--color-text-muted);">' +
+            escapeHtml(reqs ? '暂无请求记录' : (emptyMessage || '请求统计暂不可用')) + '</td></tr>';
         return;
     }
     tbody.innerHTML = recent.map(function (r) {
@@ -237,6 +313,7 @@ function renderRequests(reqs) {
         return '<tr class="border-t" style="border-color: var(--color-border-primary);">' +
             '<td class="px-2 py-1 font-mono text-xs whitespace-nowrap" style="color: var(--color-text-muted);">' + escapeHtml(r.time) + '</td>' +
             '<td class="px-2 py-1 text-xs whitespace-nowrap" style="color: var(--color-text-secondary);">' + escapeHtml(r.method) + '</td>' +
+            '<td class="px-2 py-1 font-mono text-xs whitespace-nowrap" style="color: var(--color-text-secondary);">' + escapeHtml(r.clientIp || '--') + '</td>' +
             '<td class="px-2 py-1 font-mono text-xs truncate" style="color: var(--color-accent-primary); max-width: 260px;" title="' + escapeHtml(r.uri) + '">' + escapeHtml(r.uri) + '</td>' +
             '<td class="px-2 py-1 text-xs whitespace-nowrap" style="color: var(--color-text-secondary);">' + escapeHtml(catLabel) + '</td>' +
             '<td class="px-2 py-1 text-right text-xs font-medium whitespace-nowrap" style="color: ' + statusColor + ';">' + r.status + '</td>' +
@@ -252,10 +329,14 @@ var uptimeStartTime = 0;
 var uptimeTimer = null;
 
 function renderUptime(startTime) {
-    if (!startTime) return;
-    uptimeStartTime = startTime;
+    uptimeStartTime = startTime || 0;
     if (uptimeTimer) {
         clearInterval(uptimeTimer);
+        uptimeTimer = null;
+    }
+    if (!startTime) {
+        document.getElementById('uptimeText').textContent = '运行时长暂不可用';
+        return;
     }
     updateUptimeText();
     uptimeTimer = setInterval(updateUptimeText, 1000);
@@ -286,27 +367,46 @@ function formatUptime(ms) {
 // ============ 数据加载 ============
 
 function loadStats() {
-    if (window.bootfsClusterAvailable === false) return;
+    if (window.bootfsClusterAvailable === false || statsLoading) return;
+    statsLoading = true;
     hideError();
-    fetch('/api/dashboard/stats')
+    return fetch('/api/dashboard/stats')
         .then(function (r) { return r.json(); })
         .then(function (res) {
             if (!res.succeed) {
                 showError(res.message);
                 return;
             }
-            var data = res.data;
-            renderNodes(data.nodes || []);
-            renderTraffic(data.traffic);
-            renderRequests(data.requests);
-            renderUptime(data.appStartTime);
+            dashboardNodes = res.data.nodes || [];
+            if (!dashboardNodes.some(function (node) { return node.nodeId === selectedNodeId; })) {
+                var current = dashboardNodes.find(function (node) { return node.isCurrent; }) || dashboardNodes[0];
+                selectedNodeId = current ? current.nodeId : null;
+            }
+            var focused = document.activeElement && document.activeElement.dataset.nodeId;
+            renderNodes(dashboardNodes);
+            if (focused) {
+                var card = Array.from(document.querySelectorAll('#nodesGrid [data-node-id]')).find(function (item) { return item.dataset.nodeId === focused; });
+                if (card) card.focus();
+            }
+            renderSelectedNode();
         })
         .catch(function () {
             showError('请求失败');
-        });
+        })
+        .finally(function () { statsLoading = false; });
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+    var nodesGrid = document.getElementById('nodesGrid');
+    nodesGrid.addEventListener('click', function (event) {
+        var card = event.target.closest('[data-node-id]');
+        if (card) selectNode(card.dataset.nodeId);
+    });
+    nodesGrid.addEventListener('keydown', function (event) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        var card = event.target.closest('[data-node-id]');
+        if (card) { event.preventDefault(); selectNode(card.dataset.nodeId); }
+    });
     document.getElementById('themeMenuBtn').addEventListener('click', function (e) {
         e.stopPropagation();
         document.getElementById('themeDropdown').classList.toggle('hidden');
@@ -318,4 +418,5 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
     loadStats();
+    setInterval(function () { if (!document.hidden) loadStats(); }, 15000);
 });

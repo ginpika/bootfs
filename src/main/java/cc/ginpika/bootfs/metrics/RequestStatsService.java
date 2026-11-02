@@ -40,6 +40,11 @@ public class RequestStatsService {
 
     public void record(RequestCategory cat, String method, String uri, int status,
                        long bytes, long durationMs) {
+        record(cat, method, uri, status, bytes, durationMs, null);
+    }
+
+    public void record(RequestCategory cat, String method, String uri, int status,
+                       long bytes, long durationMs, String clientIp) {
         totalRequests.incrementAndGet();
         totalBytesOut.addAndGet(bytes);
         requestsByCategory.get(cat).incrementAndGet();
@@ -52,7 +57,7 @@ public class RequestStatsService {
         String truncatedUri = uri != null && uri.length() > 120 ? uri.substring(0, 120) + "..." : uri;
         RequestLogEntry entry = new RequestLogEntry(
                 TIME_FMT.format(Instant.ofEpochMilli(now)),
-                method, truncatedUri, status, bytes, durationMs, cat.name());
+                method, truncatedUri, status, bytes, durationMs, cat.name(), clientIp);
         synchronized (recent) {
             recent.addFirst(entry);
             while (recent.size() > MAX_RECENT) {

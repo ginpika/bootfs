@@ -5,6 +5,7 @@ import cc.ginpika.bootfs.core.Context;
 import cc.ginpika.bootfs.domain.dto.FileObject;
 import cc.ginpika.bootfs.metrics.AppStartupTracker;
 import cc.ginpika.bootfs.metrics.RequestStatsService;
+import cc.ginpika.bootfs.metrics.SystemStatsService;
 import cc.ginpika.bootfs.service.etcd.EtcdService;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
@@ -36,22 +37,30 @@ public class DashboardApiController {
     private final ObjectProvider<EtcdService> etcdServiceProvider;
     private final RequestStatsService requestStatsService;
     private final AppStartupTracker appStartupTracker;
+    private final SystemStatsService systemStatsService;
 
     private static final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(3))
             .build();
 
-    private static final ExecutorService clusterFetchExecutor = Executors.newFixedThreadPool(8);
+    private final ExecutorService clusterFetchExecutor = Executors.newFixedThreadPool(8);
+
+    @javax.annotation.PreDestroy
+    public void close() {
+        clusterFetchExecutor.shutdownNow();
+    }
 
     public DashboardApiController(Context context, TfsConfig tfsConfig,
                                   ObjectProvider<EtcdService> etcdServiceProvider,
                                   RequestStatsService requestStatsService,
-                                  AppStartupTracker appStartupTracker) {
+                                  AppStartupTracker appStartupTracker,
+                                  SystemStatsService systemStatsService) {
         this.context = context;
         this.tfsConfig = tfsConfig;
         this.etcdServiceProvider = etcdServiceProvider;
         this.requestStatsService = requestStatsService;
         this.appStartupTracker = appStartupTracker;
+        this.systemStatsService = systemStatsService;
     }
 
     @GetMapping("/stats")
@@ -75,11 +84,7 @@ public class DashboardApiController {
     public Map<String, Object> nodeStats() {
         Map<String, Object> result = new LinkedHashMap<>();
         try {
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("nodeId", context.uuid);
-            data.put("disk", buildDiskStats());
-            data.put("resources", buildResourceStats());
-            data.put("fileTypes", buildFileTypeStats());
+            Map<String, Object> data = buildLocalNodeStats();
             result.put("succeed", true);
             result.put("data", data);
         } catch (Exception e) {
@@ -95,20 +100,20 @@ public class DashboardApiController {
 
         // 获取集群所有节点 URL
         List<NodeInfo> clusterNodes = getClusterNodes();
-        clusterNodes.forEach(node -> {
-            log.info("buildStats 获取到节点: {}", node);
-        });
         // 并行拉取其他节点的统计数据
         Map<String, Map<String, Object>> remoteStats = fetchAllRemoteNodeStats(clusterNodes);
 
         // 本节点统计（构建一次，复用于节点列表与聚合，避免重复计算）
-        Map<String, Object> localDisk = buildDiskStats();
-        localDisk.put("nodeId", context.uuid);
-        Map<String, Object> localResources = buildResourceStats();
-        List<Map<String, Object>> localFileTypes = buildFileTypeStats();
+        Map<String, Object> local = buildLocalNodeStats();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> localDisk = (Map<String, Object>) local.get("disk");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> localResources = (Map<String, Object>) local.get("resources");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> localFileTypes = (List<Map<String, Object>>) local.get("fileTypes");
 
         // 节点列表（逐节点详情：当前节点 + 全部远程节点）
-        data.put("nodes", buildNodesList(localDisk, localResources, localFileTypes, remoteStats));
+        data.put("nodes", buildNodesList(local, clusterNodes, remoteStats));
 
         // 聚合磁盘
         data.put("disk", localDisk);
@@ -165,9 +170,10 @@ public class DashboardApiController {
         // 集群信息
         data.put("cluster", buildClusterStats());
 
-        // 流量和请求统计（仅本地）
-        data.putAll(requestStatsService.buildStats());
-        data.put("appStartTime", appStartupTracker.getReadyTime());
+        // 保留本机顶层字段，逐节点视图使用 nodes 中的完整快照。
+        for (String key : List.of("traffic", "requests", "appStartTime", "system")) {
+            data.put(key, local.get(key));
+        }
         return data;
     }
 
@@ -175,58 +181,44 @@ public class DashboardApiController {
      * 构建逐节点详情列表：当前节点 + 全部远程节点（含离线节点）。
      * 当前节点用本地统计；远程节点从已拉取的 remoteStats 取数据，取不到则标记为离线。
      */
-    private List<Map<String, Object>> buildNodesList(Map<String, Object> localDisk,
-                                                     Map<String, Object> localResources,
-                                                     List<Map<String, Object>> localFileTypes,
+    private List<Map<String, Object>> buildNodesList(Map<String, Object> local,
+                                                     List<NodeInfo> clusterNodes,
                                                      Map<String, Map<String, Object>> remoteStats) {
         List<Map<String, Object>> nodes = new ArrayList<>();
 
         // 当前节点
-        Map<String, Object> current = new LinkedHashMap<>();
-        current.put("nodeId", context.uuid);
+        Map<String, Object> current = new LinkedHashMap<>(local);
         current.put("isCurrent", true);
         current.put("online", true);
         current.put("url", tfsConfig.getWebEntrypoint());
-        current.put("disk", localDisk);
-        current.put("resources", localResources);
-        current.put("fileTypes", localFileTypes);
         nodes.add(current);
 
-        // 远程节点（来自 etcd 全量节点列表，含离线节点）
-        Map<String, String> allNodes = Collections.emptyMap();
-        try {
-            EtcdService etcdService = etcdServiceProvider.getIfAvailable();
-            if (etcdService != null) {
-                Map<String, String> nwk = etcdService.getNodesWithKeys();
-                if (nwk != null) allNodes = nwk;
-            }
-        } catch (Exception e) {
-            log.warn("获取集群节点列表失败: {}", e.getMessage());
-        }
-
-        for (Map.Entry<String, String> entry : allNodes.entrySet()) {
-            String uuid = entry.getKey();
-            String url = entry.getValue();
-            if (context.uuid.equals(uuid)) continue;
-
-            Map<String, Object> node = new LinkedHashMap<>();
-            node.put("nodeId", uuid);
+        // 复用同一次成员快照，避免拉取期间成员变化导致详情与目录不一致。
+        for (NodeInfo member : clusterNodes) {
+            Map<String, Object> remote = remoteStats.get(member.nodeId);
+            Map<String, Object> node = remote == null ? new LinkedHashMap<>() : new LinkedHashMap<>(remote);
+            node.put("nodeId", member.nodeId);
             node.put("isCurrent", false);
-            node.put("url", url);
-
-            Map<String, Object> remoteData = remoteStats.get(uuid);
-            if (remoteData != null) {
-                node.put("online", true);
-                node.put("disk", remoteData.get("disk"));
-                node.put("resources", remoteData.get("resources"));
-                node.put("fileTypes", remoteData.get("fileTypes"));
-            } else {
-                node.put("online", false);
-            }
+            node.put("url", member.url);
+            node.put("online", remote != null);
             nodes.add(node);
         }
 
         return nodes;
+    }
+
+    private Map<String, Object> buildLocalNodeStats() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("nodeId", context.uuid);
+        Map<String, Object> disk = buildDiskStats();
+        disk.put("nodeId", context.uuid);
+        data.put("disk", disk);
+        data.put("resources", buildResourceStats());
+        data.put("fileTypes", buildFileTypeStats());
+        data.put("system", systemStatsService.buildStats());
+        data.putAll(requestStatsService.buildStats());
+        data.put("appStartTime", appStartupTracker.getReadyTime());
+        return data;
     }
 
     // ---- 集群节点信息 ----
@@ -290,9 +282,8 @@ public class DashboardApiController {
                     .get(5, TimeUnit.SECONDS);
         } catch (Exception e) {
             log.warn("等待远程节点统计数据超时或失败: {}", e.getMessage());
-            e.printStackTrace();
         }
-        return results;
+        return new LinkedHashMap<>(results);
     }
 
     private Map<String, Object> fetchNodeStats(String nodeUrl) {

@@ -224,15 +224,24 @@
                             aria-haspopup="dialog" aria-controls="clusterLinkDialog">连接 BootFS 节点</button>
                     </div>
                     <p id="clusterSummary" role="status" aria-live="polite" class="text-sm mb-3" style="color: var(--color-text-secondary);">正在读取组网状态…</p>
+                    <p class="text-xs mb-3" style="color: var(--color-text-muted);">点击节点卡片，查看对应节点的系统资源、流量与请求。每 15 秒自动刷新。</p>
                     <div id="nodesGrid" class="flex flex-wrap gap-4">
                         <p class="text-sm w-full" style="color: var(--color-text-muted);">加载中...</p>
                     </div>
                 </section>
 
-                <!-- Section 3: 本节点流量与请求（bento 非对称） -->
+                <section class="mb-5" aria-labelledby="selectedNodeTitle">
+                    <h2 id="selectedNodeTitle" class="text-sm font-semibold font-display mb-1"
+                        style="color: var(--color-text-primary);">节点统计</h2>
+                    <p id="selectedNodeStatus" role="status" aria-live="polite" class="text-xs mb-3 break-words"
+                        style="color: var(--color-text-muted);">请选择节点</p>
+                    <div id="systemStats" class="grid grid-cols-1 lg:grid-cols-3 gap-4"></div>
+                </section>
+
+                <!-- 所选节点流量与请求 -->
                 <section>
                     <h2 class="text-xs font-semibold font-display uppercase tracking-wider mb-3"
-                        style="color: var(--color-text-muted);">本节点流量与请求</h2>
+                        style="color: var(--color-text-muted);">所选节点流量与请求</h2>
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
                         <!-- 左列：24h 图表 + 流量统计 堆叠 -->
                         <div class="lg:col-span-1 space-y-4">
@@ -301,6 +310,8 @@
                                             <th class="px-2 py-1.5 text-left font-medium"
                                                 style="color: var(--color-text-secondary);">方法</th>
                                             <th class="px-2 py-1.5 text-left font-medium"
+                                                style="color: var(--color-text-secondary);">请求者 IP</th>
+                                            <th class="px-2 py-1.5 text-left font-medium"
                                                 style="color: var(--color-text-secondary);">路径</th>
                                             <th class="px-2 py-1.5 text-left font-medium"
                                                 style="color: var(--color-text-secondary);">类别</th>
@@ -314,7 +325,7 @@
                                     </thead>
                                     <tbody id="recentReqBody">
                                         <tr>
-                                            <td colspan="7" class="px-2 py-6 text-center"
+                                            <td colspan="8" class="px-2 py-6 text-center"
                                                 style="color: var(--color-text-muted);">加载中...</td>
                                         </tr>
                                     </tbody>
@@ -359,7 +370,12 @@
             </div>
         </form>
     </dialog>
-    <style>#clusterLinkDialog::backdrop { background: rgba(0, 0, 0, 0.5); }</style>
+    <style>
+        #clusterLinkDialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+        .dashboard-node { cursor: pointer; border: 2px solid transparent; text-align: left; }
+        .dashboard-node:hover, .dashboard-node:focus-visible { outline: 2px solid var(--color-accent-primary); outline-offset: 3px; }
+        .dashboard-node[aria-pressed="true"] { border-color: var(--color-accent-primary); }
+    </style>
     <script src="/dashboard.js"></script>
     <script src="/dashboard-cluster.js"></script>
 </body>

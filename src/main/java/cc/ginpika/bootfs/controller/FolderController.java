@@ -43,12 +43,13 @@ public class FolderController {
         String directives = search.toLowerCase(Locale.ROOT);
         boolean includeAll = directives.contains("meta:all");
         boolean local = directives.contains("meta:local");
+        Set<String> localResourceIds = etcdService.localResourceIds();
         Map<String, JSONObject> resources = new LinkedHashMap<>();
         Set<String> archived = new HashSet<>();
         etcdService.scan("/documents/full-text/").forEach((key, raw) -> {
             JSONObject document = JSONObject.parseObject(raw);
             String uuid = document.getString("uuid");
-            if (uuid == null) return;
+            if (uuid == null || (localResourceIds != null && !localResourceIds.contains(uuid))) return;
             if (document.getBooleanValue("_bootfsDeleted")) { archived.add(uuid); return; }
             JSONObject row = new JSONObject(document);
             row.put("fileName", document.getString("fileName") == null ? document.getString("title") : document.getString("fileName"));
@@ -58,18 +59,28 @@ public class FolderController {
             row.put("url", context.buildUrl(uuid));
             resources.put(uuid, row);
         });
-        context.STORAGE.forEach((uuid, file) -> resources.putIfAbsent(uuid, JSONObject.from(file)));
+        context.STORAGE.forEach((uuid, file) -> {
+            if (localResourceIds == null || localResourceIds.contains(uuid)) resources.putIfAbsent(uuid, JSONObject.from(file));
+        });
         Map<String, String> bindings = new TreeMap<>();
+        Set<String> legacyUuidBindings = new HashSet<>();
+        Set<String> namedResources = new HashSet<>();
         String bucketPrefix = "/s3/" + s3Config.getBucket() + "/";
         etcdService.scan(bucketPrefix).forEach((key, raw) -> {
             JSONObject binding = JSONObject.parseObject(raw);
             String uuid = binding.getString("uuid");
-            if (uuid == null) return;
+            if (uuid == null || (localResourceIds != null && !localResourceIds.contains(uuid))) return;
             String objectKey = key.substring(bucketPrefix.length());
             bindings.put(objectKey, uuid);
+            if (!objectKey.equals(uuid)) namedResources.add(uuid);
+            else if (uuid.equals(binding.getString("key"))) legacyUuidBindings.add(uuid);
             resources.computeIfAbsent(uuid, id -> new JSONObject(Map.of("uuid", id, "fileName", objectKey,
                     "size", binding.getLongValue("size"), "createdAt", binding.getLongValue("lastModified"))));
         });
+        // An old automatic UUID key and its replacement filename are one browser entry.
+        // Filter before grouping and pagination without modifying either durable S3 binding.
+        bindings.entrySet().removeIf(entry -> entry.getKey().equals(entry.getValue())
+                && legacyUuidBindings.contains(entry.getValue()) && namedResources.contains(entry.getValue()));
         Set<String> deleted = new HashSet<>(archived);
         etcdService.scan("/tombstones/").keySet().forEach(key -> deleted.add(key.substring("/tombstones/".length())));
         Set<String> bound = new HashSet<>(bindings.values());

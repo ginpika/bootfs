@@ -34,6 +34,14 @@ public class EtcdService {
     public boolean delete(String key) { return store.delete(key); }
     public boolean compareAndSet(String key, String expected, String replacement) { return store.compareAndSet(key,expected,replacement); }
     public boolean compareAndWrite(Map<String,String> expected,Map<String,String> puts,Set<String> deletes) { return store.compareAndWrite(expected,puts,deletes); }
+    /** Autonomous nodes list only their durable catalog; null leaves legacy shared metadata unrestricted. */
+    public Set<String> localResourceIds() {
+        if (!(store instanceof cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore local)) return null;
+        String prefix = "/nodes/" + local.nodeId() + "/catalog/";
+        Set<String> ids = new HashSet<>();
+        scan(prefix).keySet().forEach(key -> ids.add(key.substring(prefix.length())));
+        return ids;
+    }
     public void ping() { store.revision(); }
     public List<String> getAllNodes() { return new ArrayList<>(getNodesWithKeys().values()); }
     public Map<String,String> getNodesWithKeys() {

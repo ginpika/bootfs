@@ -5,10 +5,10 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 function ui() {
-    const context = vm.createContext({URL, TextEncoder, console, localStorage: {getItem() {return null;}},
+    const context = vm.createContext({URL, URLSearchParams, TextEncoder, console, localStorage: {getItem() {return null;}},
         document: {addEventListener() {}, getElementById() {return {addEventListener() {}};}}});
     context.window = context;
-    context.location = {href: 'https://files.example/'};
+    context.location = {href: 'https://files.example/', search: ''};
     context.addEventListener = () => {};
     for (const name of ['security-utils.js', 'text-editor.js', 'clash-files.js', 'admin-dashboard.js']) {
         vm.runInContext(fs.readFileSync(path.join(__dirname, '../../main/resources/static', name), 'utf8'), context);

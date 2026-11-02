@@ -330,6 +330,31 @@ class FederationIntegrationTest {
         assertEquals(updated, JSON.parseObject(reread.body()).getString("content"));
     }
 
+    @Test @Timeout(90) void folderListingDoesNotDuplicateImportedRemoteMetadataAsALocalResource() throws Exception {
+        Node owner = new Node("folder-owner", false), frontend = new Node("folder-frontend", false);
+        String id = owner.bean(FileService.class).publish(new java.io.ByteArrayInputStream(new byte[]{1, 2, 3}),
+                "legacy-remote.txt", true).file().getUuid();
+        String documentKey = "/documents/full-text/" + id, bindingKey = "/s3/bootfs/legacy-remote.txt";
+        String document = owner.store().get(documentKey), binding = owner.store().get(bindingKey);
+        // Legacy imports may contain cluster-wide sources without this node's durable catalog entry.
+        frontend.store().put(documentKey, document);
+        frontend.store().put(bindingKey, binding);
+        assertNull(frontend.bean(Context.class).query(id));
+        join(frontend, owner);
+
+        JSONObject search = JSON.parseObject(request(frontend, "GET", "/queryPageOffset?pageSize=20", null, null).body());
+        assertEquals(1, search.getIntValue("total"));
+        JSONObject folders = JSON.parseObject(request(frontend, "GET", "/api/folders?pageSize=20", null, null).body());
+        assertEquals(1, folders.getIntValue("total"), folders.toJSONString());
+        JSONObject row = folders.getJSONArray("rows").getJSONObject(0);
+        assertEquals(id, row.getString("uuid"));
+        assertEquals(owner.url + "/f/" + id, row.getString("url"));
+        assertEquals(0, JSON.parseObject(request(frontend, "GET", "/api/folders?search=meta:local", null, null).body())
+                .getIntValue("total"));
+        assertEquals(document, frontend.store().get(documentKey));
+        assertEquals(binding, frontend.store().get(bindingKey));
+    }
+
     @Test @Timeout(90) void federatedQueryAndMutationRunAtTheOwnerAndDepartingNodeKeepsAllOfItsData() throws Exception {
         Node a=new Node("alpha",false),x=new Node("portable",false),b=new Node("beta",false);
         String own=x.upload("own.txt","portable original"),other=a.upload("other.txt","alpha original"); b.upload("b.txt","beta original");

@@ -45,6 +45,7 @@ class FolderControllerTest {
         context = new Context(config, mock(ContextIO.class), identity);
         S3Config s3 = new S3Config();
         controller = new FolderController(context, files, etcd, s3);
+        when(etcd.localResourceIds()).thenReturn(null);
         when(etcd.getOne(anyString())).thenAnswer(call -> metadata.get(call.getArgument(0)));
         when(etcd.scan(anyString())).thenAnswer(call -> metadata.entrySet().stream()
                 .filter(entry -> entry.getKey().startsWith(call.getArgument(0)))
@@ -103,6 +104,76 @@ class FolderControllerTest {
         assertEquals("old.txt", result.getString("fileName"));
         assertFalse(result.containsKey("path"));
         assertEquals("/private/object", file.getPath());
+    }
+
+    @Test void localCatalogOwnershipFiltersImportedDocumentsBindingsAndStaleCacheBeforeGrouping() {
+        object("owned/file.txt", "owned");
+        object("foreign/file.txt", "foreign");
+        metadata.put("/documents/full-text/unbound-foreign", "{\"uuid\":\"unbound-foreign\",\"fileName\":\"unbound.txt\"}");
+        context.STORAGE.put("stale", new FileObject("/private/stale", "stale", "stale.txt", 4L));
+        context.STORAGE.put("cached", new FileObject("/private/cached", "cached", "cached.txt", 4L));
+        when(etcd.localResourceIds()).thenReturn(Set.of("owned", "cached"));
+
+        JSONObject page = controller.list("", 0, 10, "");
+        assertEquals(2, page.getIntValue("total"));
+        assertEquals("owned/", page.getJSONArray("rows").getJSONObject(0).getString("folderPath"));
+        assertEquals("cached", page.getJSONArray("rows").getJSONObject(1).getString("uuid"));
+        assertEquals(1, controller.list("owned/", 0, 10, "").getIntValue("total"));
+        assertEquals(0, controller.list("foreign/", 0, 10, "").getIntValue("total"));
+
+        when(etcd.localResourceIds()).thenReturn(Set.of());
+        assertEquals(0, controller.list("", 0, 10, "").getIntValue("total"));
+    }
+
+    @Test void legacyUuidAliasDoesNotDuplicateNamedResourceOrChangePaginationTotals() {
+        object("alpha.txt", "first");
+        object("beta.txt", "second");
+        metadata.put("/s3/bootfs/first", new JSONObject(Map.of("uuid", "first", "key", "first",
+                "size", 4, "lastModified", 12)).toJSONString());
+        Map<String, String> before = new LinkedHashMap<>(metadata);
+
+        JSONObject first = controller.list("", 0, 1, "");
+        assertEquals(2, first.getIntValue("total"));
+        assertEquals("alpha.txt", first.getJSONArray("rows").getJSONObject(0).getString("objectKey"));
+        JSONObject second = controller.list("", 1, 1, "");
+        assertEquals(2, second.getIntValue("total"));
+        assertEquals("beta.txt", second.getJSONArray("rows").getJSONObject(0).getString("objectKey"));
+        assertTrue(controller.list("", 2, 1, "").getJSONArray("rows").isEmpty());
+        assertEquals(before, metadata);
+    }
+
+    @Test void legacyUuidAliasDoesNotLeaveRootFileForResourceInNamedFolder() {
+        object("docs/report.txt", "nested");
+        metadata.put("/s3/bootfs/nested", new JSONObject(Map.of("uuid", "nested", "key", "nested",
+                "size", 4, "lastModified", 12)).toJSONString());
+
+        JSONObject root = controller.list("", 0, 10, "");
+        assertEquals(1, root.getIntValue("total"));
+        assertEquals("docs/", root.getJSONArray("rows").getJSONObject(0).getString("folderPath"));
+        JSONObject child = controller.list("docs/", 0, 10, "");
+        assertEquals(1, child.getIntValue("total"));
+        assertEquals("nested", child.getJSONArray("rows").getJSONObject(0).getString("uuid"));
+        assertEquals("docs/report.txt", child.getJSONArray("rows").getJSONObject(0).getString("objectKey"));
+    }
+
+    @Test void uuidOnlyBindingsDistinctResourcesAndExplicitAliasesRemainVisible() {
+        object("only", "only");
+        metadata.put("/s3/bootfs/only", new JSONObject(Map.of("uuid", "only", "key", "only",
+                "size", 4, "lastModified", 12)).toJSONString());
+        object("first.txt", "first");
+        object("second.txt", "second");
+        metadata.put("/documents/full-text/first", "{\"uuid\":\"first\",\"fileName\":\"same.txt\"}");
+        metadata.put("/documents/full-text/second", "{\"uuid\":\"second\",\"fileName\":\"same.txt\"}");
+        metadata.put("/s3/bootfs/alias.txt", new JSONObject(Map.of("uuid", "first", "key", "alias.txt",
+                "size", 4, "lastModified", 12)).toJSONString());
+
+        JSONObject result = controller.list("", 0, 10, "");
+        assertEquals(4, result.getIntValue("total"));
+        Set<String> paths = result.getJSONArray("rows").stream().map(JSONObject::from)
+                .map(row -> row.getString("objectKey")).collect(Collectors.toSet());
+        assertEquals(Set.of("only", "first.txt", "second.txt", "alias.txt"), paths);
+        assertEquals(2, result.getJSONArray("rows").stream().map(JSONObject::from)
+                .filter(row -> "first".equals(row.getString("uuid"))).count());
     }
 
     @Test void browserRenamesRemainVisibleWhileObjectPathsAndArchivedResourcesArePreserved() {

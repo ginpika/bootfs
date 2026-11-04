@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./src/main/resources/static/favicon.ico" alt="BootFS" width="96" height="96">
+<img src="./docs/logo.webp" alt="BootFS" width="96" height="96">
 
 # BootFS
 
@@ -20,7 +20,7 @@
 
 <a id="preview"></a>
 
-![BootFS 双栏界面：左侧管理资源，右侧浏览本地文件](./docs/preview3.png)
+![BootFS 媒体网格：照片、插画、视频封面与标签](./docs/preview2.png)
 
 <details>
 <summary>更多界面预览</summary>
@@ -29,9 +29,9 @@
 
 ![BootFS 文件列表](./docs/preview1.png)
 
-**媒体网格。**
+**双栏上传。**
 
-![BootFS 媒体网格与瀑布流预览](./docs/preview2.png)
+![BootFS 双栏界面：左侧管理资源，右侧浏览本地 Studio imports 文件夹](./docs/preview3.png)
 
 </details>
 

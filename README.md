@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./src/main/resources/static/favicon.ico" alt="BootFS" width="96" height="96">
+<img src="./docs/logo.webp" alt="BootFS" width="96" height="96">
 
 # BootFS
 
@@ -20,7 +20,7 @@ Browse, organize and share your images, videos, audio and creative work. Run one
 
 <a id="preview"></a>
 
-![BootFS dual-pane view: manage resources on the left and browse local files on the right](./docs/preview3.png)
+![BootFS media grid with photos, illustrations, video covers and tags](./docs/preview2.png)
 
 <details>
 <summary>More screenshots</summary>
@@ -29,9 +29,9 @@ Browse, organize and share your images, videos, audio and creative work. Run one
 
 ![BootFS file list](./docs/preview1.png)
 
-**Media grid.**
+**Dual-pane upload.**
 
-![BootFS media grid and waterfall preview](./docs/preview2.png)
+![BootFS resource list alongside a local Studio imports folder](./docs/preview3.png)
 
 </details>
 

@@ -1,5 +1,7 @@
 # BootFS 本地内核
 
+先了解设计思路与核心概念，可阅读[去中心化设计](decentralization-zh-CN.md)（[English](decentralization.md)）。本文说明实际存储、发布与迁移边界。
+
 BootFS 使用 Java 17、RocksDB 和 Lucene；不需要外部 etcd 或 MeiliSearch。新内核中，每个节点独立管理自己的完整文件、权威元数据和索引，组网不增加本机读写的多数派依赖。历史 `EtcdService`、`MeiliSearchService` 和管理 URL 为兼容门面，当前不代表外部服务。
 
 ## 运行

@@ -4,7 +4,7 @@
 
 # BootFS
 
-**自托管的多媒体文件管理与存储。**
+**自托管、去中心化的多媒体文件管理与存储。**
 
 浏览、整理和分享你的图片、视频、音频与创作产物。单节点独立运行，也能按需连接其他 BootFS 节点。
 
@@ -14,7 +14,7 @@
 
 [English](./README.md) · **简体中文**
 
-[界面预览](#preview) · [为什么需要 BootFS](#why-bootfs) · [动态组网](#nodes) · [功能](#features) · [快速开始](#quick-start) · [文档](#documentation)
+[界面预览](#preview) · [为什么需要 BootFS](#why-bootfs) · [去中心化设计](#decentralization) · [功能](#features) · [快速开始](#quick-start) · [文档](#documentation)
 
 </div>
 
@@ -50,17 +50,20 @@
 - 你需要找到一个更全面的数字资产管理软件
 
 <a id="nodes"></a>
+<a id="decentralization"></a>
 
-## 独立节点与动态组网
+## 去中心化设计
 
-每个 BootFS 节点都保存自己的完整文件、元数据和搜索索引。一个应用容器加一个数据卷即可运行，无需外部 etcd 或 MeiliSearch。
+BootFS 采用**自治节点组成的联邦**：每个节点都是完整的文件服务，保存自己的文件、权威元数据和搜索索引。节点连接起来共同查找和访问资源，同时保留对本机收藏的控制。一个应用容器加一个数据卷即可运行，无需外部 etcd 或 MeiliSearch。
 
 - **自己的数据，留在自己的节点。** 文件、标签、描述和索引由持有节点管理，加入组网不会合并其他节点的文件数据库，也不会改写原有资源 UUID。
 - **用验证码连接。** 在系统仪表盘生成验证码，另一端填写节点 URL 和验证码即可连接，无需手工交换密钥。
 - **一起查找，按需访问。** 联合查询检索可达成员的资源，修改请求转发到实际持有节点；部分节点离线时，列表会提示结果不完整。
 - **离开后继续使用。** 退出组网后，本机文件、元数据和索引仍可读写，重启后保持独立，也能再加入其他组网。
 
-默认上传策略是 `single-local`，本机持久保存后即可发布；也可配置完整副本，或选择发布前需要多个节点确认的 `replicated(k)`。组网本身不会自动搬迁所有文件，源节点离线后的读取取决于可达节点是否持有完整副本。详见[动态组网](./docs/mononode-dynamic-cluster.md)与[内核指南](./docs/mononode-kernel.md)。
+成员协调节点管理组网目录的变更，文件权威仍属于实际持有节点。普通本地读写无需取得组内多数派批准；默认上传采用 `single-local`，选择 `replicated(k)` 才会增加发布前的多节点耐久确认条件。加入组网不会自动复制或搬迁全部文件，源节点离线后的读取需要可达节点已经持有发布完成的完整副本。
+
+[去中心化设计](./docs/decentralization-zh-CN.md)介绍了核心概念、节点示意图，以及加入、退出和故障场景；实际操作见[动态组网](./docs/mononode-dynamic-cluster.md)与[内核指南](./docs/mononode-kernel.md)。
 
 <a id="features"></a>
 
@@ -181,6 +184,7 @@ java -jar target/bootfs-v1.0.0-beta.1.jar --spring.profiles.active=dev
 
 | 你正在做的事 | 从这里开始 |
 | --- | --- |
+| 理解去中心化、节点归属与完整副本 | [去中心化设计](./docs/decentralization-zh-CN.md) |
 | 配置节点、登录、公开读取或 S3 | [节点设置与升级](./docs/node-settings.md) |
 | 理解本机数据、上传策略和当前边界 | [本地内核](./docs/mononode-kernel.md) |
 | 部署多个节点 | [集群部署](./docs/cluster-deploy.md) |

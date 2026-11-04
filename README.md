@@ -4,7 +4,7 @@
 
 # BootFS
 
-**Self-hosted file management and storage for your media.**
+**Self-hosted media management and storage, decentralized by design.**
 
 Browse, organize and share your images, videos, audio and creative work. Run one node independently, or connect it to other BootFS nodes when you need to.
 
@@ -14,7 +14,7 @@ Browse, organize and share your images, videos, audio and creative work. Run one
 
 **English** · [简体中文](./README-zh-CN.md)
 
-[Preview](#preview) · [Why BootFS](#why-bootfs) · [Networking](#nodes) · [Features](#features) · [Quick start](#quick-start) · [Documentation](#documentation)
+[Preview](#preview) · [Why BootFS](#why-bootfs) · [Decentralization](#decentralization) · [Features](#features) · [Quick start](#quick-start) · [Documentation](#documentation)
 
 </div>
 
@@ -50,17 +50,20 @@ The answer may be one of the following, and I happen to satisfy all of them pers
 - You need to find a more comprehensive digital asset management software.
 
 <a id="nodes"></a>
+<a id="decentralization"></a>
 
-## Independent nodes and dynamic networking
+## Decentralized by design
 
-Each BootFS node keeps its own complete files, metadata and search index. One application container and one data volume are enough to run it, without external etcd or MeiliSearch services.
+BootFS is a **federation of autonomous nodes**. Each node is a complete file service with its own files, authoritative metadata and search index. Nodes connect to find and access resources together while keeping local control of their collections. One application container and one data volume are enough to run a node, without external etcd or MeiliSearch services.
 
 - **Your data stays on your node.** The node holding a resource manages its files, tags, descriptions and index. Joining a group does not merge resource databases or rewrite existing resource UUIDs.
 - **Connect with a verification code.** Generate a code in the system dashboard, then enter the node URL and code on the other end. No manual key exchange is needed.
 - **Search together, access as needed.** Federated queries search reachable members; changes are forwarded to the node holding the resource. The list indicates incomplete results when some nodes are offline.
 - **Keep working after leaving.** Local files, metadata and indexes remain readable and writable after leaving a group. The node stays independent across restarts and can join another group later.
 
-Uploads default to `single-local`: a resource can be published once it is durable locally. You can also configure complete replicas, or choose `replicated(k)` to require acknowledgements from multiple nodes before publication. Joining a group does not automatically move every file. Reading a resource after its source node goes offline depends on whether a reachable node holds a complete replica. See [dynamic networking](./docs/mononode-dynamic-cluster.md) and the [kernel guide](./docs/mononode-kernel.md).
+A membership coordinator manages changes to the group directory; file authority stays with the holding nodes. Ordinary local reads and writes do not require a group-wide majority. Uploads default to `single-local`; choosing `replicated(k)` adds an explicit requirement for durable copies on multiple nodes before publication. Joining alone does not copy or move every file, and reading after a source goes offline requires a reachable, published complete replica.
+
+Read [Decentralized design](./docs/decentralization.md) for the core concepts, a node diagram and examples of joining, leaving and handling failures. For operation details, see [dynamic networking](./docs/mononode-dynamic-cluster.md) and the [kernel guide](./docs/mononode-kernel.md).
 
 <a id="features"></a>
 
@@ -183,9 +186,10 @@ Most linked guides are currently in Simplified Chinese.
 
 | What you're doing | Where to start |
 | --- | --- |
+| Understanding decentralization, node ownership and complete replicas | [Decentralized design](./docs/decentralization.md) |
 | Configuring a node, sign-in, public reads or S3 | [Node settings and upgrades](./docs/node-settings.md) |
 | Understanding local data, upload policies and current limits | [Local kernel](./docs/mononode-kernel.md) |
-| Deploying multiple nodes | [Cluster deployment](./docs/cluster-deploy-en.md) |
+| Deploying multiple nodes | [Current cluster deployment](./docs/cluster-deploy.md) |
 | Pairing, leaving a group or querying remote resources | [Autonomous nodes and dynamic networking](./docs/mononode-dynamic-cluster.md) |
 | Backing up, verifying, restoring or migrating legacy data | [Backup and restore](./docs/mononode-backup.md) |
 | Configuring the dashboard and reverse proxy | [System dashboard](./docs/dashboard.md) |

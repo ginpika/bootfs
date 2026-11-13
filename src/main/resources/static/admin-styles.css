@@ -742,19 +742,21 @@ input[type="checkbox"]:checked {
     background: transparent;
     color: inherit;
     cursor: default;
+    pointer-events: none;
 }
 
-.icon-item:hover {
+/* The cell is a drop target, while only its visible contents start a file drag. */
+.icon-item:not(.is-dragging) :is(.icon-glyph > *, .icon-name) {
+    pointer-events: auto;
+}
+
+.icon-item:hover .icon-name {
     background: var(--color-bg-tertiary);
 }
 
-.icon-item:focus-visible {
+.icon-item:focus-visible .icon-name {
     outline: 2px solid var(--color-accent-primary);
-    outline-offset: -2px;
-}
-
-.icon-item.selected {
-    background: var(--color-accent-muted);
+    outline-offset: 1px;
 }
 
 .icon-item.selected .icon-name {
@@ -770,7 +772,6 @@ input[type="checkbox"]:checked {
 
 .icon-item.is-dragging {
     opacity: 0.45;
-    pointer-events: none;
 }
 
 .icon-glyph { position: relative; }
@@ -807,7 +808,6 @@ input[type="checkbox"]:checked {
     max-height: 72px;
     object-fit: contain;
     border-radius: 4px;
-    pointer-events: none;
 }
 
 .icon-folder-svg,
@@ -824,7 +824,7 @@ input[type="checkbox"]:checked {
 }
 
 .icon-name {
-    width: 100%;
+    max-width: 100%;
     max-height: 2.6em;
     overflow: hidden;
     display: -webkit-box;

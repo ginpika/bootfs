@@ -4317,7 +4317,10 @@ function loadIconView(reset = false) {
                 iconRecords.set(item.dataset.key, file);
                 if (isImage(file) || isVideo(file)) previewMediaFiles.push(file);
                 applyNsfwBlurToItem(item);
-                fragment.appendChild(item);
+                const cell = document.createElement('div');
+                cell.className = 'icon-cell';
+                cell.appendChild(item);
+                fragment.appendChild(cell);
             });
             grid.appendChild(fragment);
             syncIconSelection();
@@ -4595,8 +4598,10 @@ function applyMarqueeSelection(rect, state) {
         state.baseFolders.forEach(path => selectedFolders.add(path));
     }
     iconItems().forEach(item => {
-        const bounds = item.getBoundingClientRect();
-        const hit = rect.left < bounds.right && rect.right > bounds.left && rect.top < bounds.bottom && rect.bottom > bounds.top;
+        const hit = Array.from(item.querySelectorAll('.icon-glyph > *, .icon-name')).some(part => {
+            const bounds = part.getBoundingClientRect();
+            return rect.left < bounds.right && rect.right > bounds.left && rect.top < bounds.bottom && rect.bottom > bounds.top;
+        });
         if (hit) addIconToSelection(item);
     });
     updateSelectedToolbar();
@@ -4621,7 +4626,7 @@ function dropTargetAt(x, y) {
     const elements = document.elementsFromPoint ? document.elementsFromPoint(x, y) : [document.elementFromPoint(x, y)];
     for (const element of elements) {
         if (!element || !element.closest) continue;
-        const item = element.closest('.icon-item');
+        const item = element.closest('.icon-cell')?.firstElementChild;
         if (item && item.dataset.kind === 'folder' && !item.classList.contains('is-dragging')) {
             return {destination: item.dataset.folderPath || '', element: item, managed: item.dataset.managed !== 'false'};
         }

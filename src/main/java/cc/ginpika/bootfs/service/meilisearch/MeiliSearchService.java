@@ -165,6 +165,7 @@ public class MeiliSearchService {
         } else throw new IllegalArgumentException("Expected a document or document array");
     }
     public String querySetu() { return search.randomPoster(IMAGE_HOST_INDEX); }
+    public List<String> querySetu(int count) { return search.randomPosters(IMAGE_HOST_INDEX, count); }
     public void rebuildIndexes() { search.rebuild(); }
     public long visibleRevision() { return search.visibleRevision(); }
     private SearchResult asLegacyResult(EmbeddedSearchEngine.SearchPage page, String query) {

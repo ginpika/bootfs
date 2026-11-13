@@ -246,6 +246,27 @@ class EmbeddedSearchEngineTest {
         }
     }
 
+    @Test void galleryBatchSamplesLivePostersOnceAndRepeatsAShortPool() throws Exception {
+        try (RocksMetadataStore metadata = new RocksMetadataStore(temp.resolve("metadata"));
+             EmbeddedSearchEngine engine = new EmbeddedSearchEngine(metadata, temp.resolve("search"))) {
+            MeiliSearchService catalog = new MeiliSearchService(engine);
+            catalog.addToFullText("{\"uuid\":\"a\",\"title\":\"a.jpg\"}");
+            catalog.addToFullText("{\"uuid\":\"b\",\"title\":\"b.jpg\"}");
+            catalog.addToFullText("{\"uuid\":\"secret\",\"title\":\"secret.jpg\"}");
+            catalog.setResourcePublic("a", true, "/p/a");
+            catalog.setResourcePublic("b", true, "/p/b");
+            List<String> batch = catalog.querySetu(5);
+            assertEquals(5, batch.size());
+            assertEquals(Set.of("/p/a", "/p/b"), new HashSet<>(batch));
+            catalog.setResourcePublic("a", false, null);
+            assertEquals(List.of("/p/b", "/p/b", "/p/b"), catalog.querySetu(3));
+            catalog.deleteDocumentFromIndex("image-host", "b");
+            assertTrue(catalog.querySetu(4).isEmpty());
+            assertThrows(IllegalArgumentException.class, () -> catalog.querySetu(0));
+            assertThrows(IllegalArgumentException.class, () -> catalog.querySetu(481));
+        }
+    }
+
     @Test void legacyGalleryOnlyFieldsAreAdoptedWithoutOverwritingCanonicalOrRevivingRevokedPolicy() throws Exception {
         Path metadataPath = temp.resolve("metadata"), indexPath = temp.resolve("search");
         try (RocksMetadataStore metadata = new RocksMetadataStore(metadataPath)) {

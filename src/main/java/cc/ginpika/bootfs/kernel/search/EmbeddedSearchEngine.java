@@ -318,6 +318,46 @@ public class EmbeddedSearchEngine implements AutoCloseable {
         return chosen;
     }
 
+    /**
+     * Sample {@code count} live posters in one projection pass. The gallery wall asks for more
+     * cells than a library may contain, so a short pool is repeated after a shuffle.
+     */
+    public synchronized List<String> randomPosters(String index, int count) {
+        if (count < 1 || count > 480) throw new IllegalArgumentException("Poster count must be between 1 and 480");
+        synchronizeProjection();
+        String prefix = SOURCE_PREFIX + validateIndex(index) + "/";
+        List<String> ids = new ArrayList<>();
+        for (Map.Entry<String, String> entry : projectedSources.entrySet()) {
+            if (!entry.getKey().startsWith(prefix)) continue;
+            JSONObject doc = JSON.parseObject(entry.getValue());
+            if (doc.getBooleanValue(DELETED) || isResourceDeleted(doc, resourceTombstones)) continue;
+            String poster = doc.getString("poster");
+            String id = doc.getString("uuid");
+            if (id == null || poster == null || poster.isBlank()) continue;
+            ids.add(id);
+        }
+        if (ids.isEmpty()) return List.of();
+        Collections.shuffle(ids, ThreadLocalRandom.current());
+        List<String> live = new ArrayList<>();
+        for (String id : ids) {
+            String poster;
+            if ("image-host".equals(index)) {
+                JSONObject current = get("image-host", id);
+                poster = current == null ? null : current.getString("poster");
+            } else {
+                JSONObject doc = JSON.parseObject(projectedSources.get(prefix + id));
+                poster = doc == null ? null : doc.getString("poster");
+            }
+            if (poster == null || poster.isBlank()) continue;
+            live.add(poster);
+            if (live.size() == count) break;
+        }
+        if (live.isEmpty()) return List.of();
+        List<String> chosen = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) chosen.add(live.get(i % live.size()));
+        return chosen;
+    }
+
     @Scheduled(fixedDelayString = "${bootfs.search.refresh-ms:500}")
     public void refreshInBackground() {
         try {

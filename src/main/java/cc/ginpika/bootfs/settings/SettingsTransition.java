@@ -109,6 +109,8 @@ public final class SettingsTransition {
             return version.toJSONString();
         }
         if (key.startsWith("/documents/") || key.startsWith("/nodes/")) {
+            // Completion markers such as /nodes/<id>/migration/db-json-v1 are the literal string "complete".
+            if (!jsonObject(raw)) return raw;
             JSONObject doc=JSON.parseObject(raw);
             for (String field:List.of("url","poster","thumbUrl","resources")) {
                 Object value=doc.get(field);
@@ -118,6 +120,10 @@ public final class SettingsTransition {
             return doc.toJSONString();
         }
         return raw;
+    }
+    private static boolean jsonObject(String raw) {
+        for (int i=0;i<raw.length();i++) if (raw.charAt(i)>' ') return raw.charAt(i)=='{';
+        return false;
     }
     private static String url(String s,String old,String next) {
         return s.startsWith(old+"/") && s.substring(old.length()).matches("/(f|p|thumb|hls)/.*") ? next+s.substring(old.length()) : s;

@@ -101,6 +101,31 @@ class SettingsDatabaseTest {
             }
         }
     }
+    @Test void addressChangeSkipsPlainMigrationMarkerAndStillRewritesJsonRoutes() throws Exception {
+        String node;
+        try (var s=new NodeSettings(env()); var metadata=new DynamicMetadataStore(files())) {
+            node=metadata.nodeId();
+            metadata.put("/cluster/node/"+node,"http://localhost:8181");
+            metadata.put("/nodes/"+node+"/migration/db-json-v1","complete");
+            metadata.put("/nodes/"+node+"/catalog/file","{\"uuid\":\"file\",\"url\":\"http://localhost:8181/f/file\",\"thumbUrl\":\"http://localhost:8181/thumb/file.webp\",\"title\":\"keep\"}");
+            s.update(1,changed(s.current(),"webEntrypoint","https://new.example"),true,false,metadata);
+            assertEquals("http://localhost:8181",s.current().string("webEntrypoint"));
+        }
+        new SettingsEnvironment().postProcessEnvironment(env(),null);
+        try (var s=new NodeSettings(env())) {
+            var config=files(); config.setWebEntrypoint(s.current().string("webEntrypoint"));
+            try (var metadata=new DynamicMetadataStore(config)) {
+                assertEquals("https://new.example",s.current().string("webEntrypoint"));
+                assertTrue(((Map<?,?>)s.view().get("pending")).isEmpty());
+                assertEquals("complete",metadata.get("/nodes/"+node+"/migration/db-json-v1"));
+                assertEquals("https://new.example",metadata.get("/cluster/node/"+node));
+                String catalog=metadata.get("/nodes/"+node+"/catalog/file");
+                assertTrue(catalog.contains("https://new.example/f/file"));
+                assertTrue(catalog.contains("https://new.example/thumb/file.webp"));
+                assertTrue(catalog.contains("\"title\":\"keep\""));
+            }
+        }
+    }
     @Test void bucketChangeMovesAllBindingsOnlyAfterRestart() throws Exception {
         try (var s=new NodeSettings(env()); var metadata=new RocksMetadataStore(root.resolve("kernel/metadata"))) {
             metadata.put("/s3/bootfs/key","{\"uuid\":\"file\",\"key\":\"key\"}");

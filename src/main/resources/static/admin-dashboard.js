@@ -120,9 +120,9 @@ function restoreViewState() {
 // Initialize event listeners
 function initializeEventListeners() {
     // View toggle
-    document.getElementById('gridViewBtn').addEventListener('click', () => switchView('grid'));
-    document.getElementById('listViewBtn').addEventListener('click', () => switchView('list'));
-    document.getElementById('iconViewBtn').addEventListener('click', () => switchView('icons'));
+    document.querySelectorAll('.view-toggle-btn').forEach(button => {
+        button.addEventListener('click', () => switchView(button.dataset.view));
+    });
     
     // NSFW toggle
     const nsfwToggleBtn = document.getElementById('nsfwToggleBtn');
@@ -1685,7 +1685,7 @@ function applyViewChrome(view, restorePanel = true) {
     if (iconView) iconView.classList.toggle('hidden', view !== 'icons');
     if (paginationRow) paginationRow.classList.toggle('hidden', view !== 'list');
     document.querySelectorAll('.view-toggle-btn').forEach(button => {
-        button.classList.toggle('active', button.dataset.view === view);
+        button.setAttribute('aria-pressed', String(button.dataset.view === view));
     });
     const listModeActions = document.getElementById('listModeActions');
     if (listModeActions) listModeActions.classList.toggle('view-hidden', view !== 'list');
@@ -3443,7 +3443,7 @@ async function restoreLocalPanel() {
         if (perm === 'granted') {
             dirStack = [storedDirHandle];
             await renderLocalDir();
-            showLocalFolderPanel(true);
+            if (currentView === 'list') showLocalFolderPanel(true);
         }
     } catch (_) {}
 }
@@ -4242,6 +4242,21 @@ const ICON_PAGE_SIZE = 200;
 function initializeIconBrowser() {
     const view = document.getElementById('iconView');
     if (!view) return;
+    view.addEventListener('dblclick', event => {
+        const item = event.target.closest('.icon-item');
+        if (item) openIconItem(item);
+    });
+    view.addEventListener('click', event => {
+        const item = event.target.closest('.icon-item');
+        if (item && (event.detail === 0 || event.pointerType === 'touch')) openIconItem(item);
+    });
+    view.addEventListener('keydown', event => {
+        const item = event.target.closest('.icon-item');
+        if (item && event.key === ' ') {
+            event.preventDefault();
+            if (!event.repeat) toggleIcon(item);
+        }
+    });
     view.addEventListener('pointerdown', onIconPointerDown);
     view.addEventListener('pointermove', onIconPointerMove);
     view.addEventListener('pointerup', onIconPointerUp);
@@ -4330,7 +4345,8 @@ function loadIconView(reset = false) {
 }
 
 function createIconItem(file) {
-    const item = document.createElement('div');
+    const item = document.createElement('button');
+    item.type = 'button';
     const folder = !!file.folder;
     item.className = 'icon-item';
     item.dataset.kind = folder ? 'folder' : 'file';
@@ -4343,10 +4359,9 @@ function createIconItem(file) {
     item.dataset.tags = (file.tags || []).map(tag => {
         return tag.namespace && tag.namespace !== 'manual' ? `${tag.namespace}:${tag.name}` : tag.name;
     }).join('\n');
-    item.setAttribute('role', 'gridcell');
     item.title = file.fileName || '';
 
-    const glyph = document.createElement('div');
+    const glyph = document.createElement('span');
     glyph.className = 'icon-glyph';
     if (folder) {
         glyph.appendChild(iconFolderGlyph());
@@ -4364,7 +4379,7 @@ function createIconItem(file) {
         const kind = isImage(file) || isAlbum(file) ? 'image' : isVideo(file) ? 'video' : isAudio(file) ? 'audio' : 'file';
         glyph.appendChild(iconFileGlyph(kind));
     }
-    const name = document.createElement('div');
+    const name = document.createElement('span');
     name.className = 'icon-name';
     name.textContent = file.fileName || (folder ? '文件夹' : '未命名');
     item.append(glyph, name);
@@ -4457,7 +4472,7 @@ function syncIconSelection() {
             ? selectedFolders.has(item.dataset.folderPath)
             : selectedFiles.has(item.dataset.uuid);
         item.classList.toggle('selected', selected);
-        item.setAttribute('aria-selected', selected ? 'true' : 'false');
+        item.setAttribute('aria-pressed', String(selected));
     });
 }
 
@@ -4465,19 +4480,17 @@ function openIconItem(item) {
     const file = iconRecords.get(item.dataset.key);
     if (!file) return;
     if (file.folder) openFolder(file.folderPath);
-    else previewFile(file);
+    else if (isImage(file) || isVideo(file) || isAudio(file) || isAlbum(file)) previewFile(file);
+    else if (file.uuid) showFileDetail(file.uuid);
 }
 
 function onIconPointerDown(event) {
     if (event.button !== 0 || event.pointerType === 'touch') return;
-    if (event.target.closest('button, a, input, textarea')) return;
     const view = document.getElementById('iconView');
     const item = event.target.closest('.icon-item');
-    if (item && event.detail === 2) {
-        openIconItem(item);
-        return;
-    }
+    if (!item && event.target.closest('button, a, input, textarea')) return;
     if (item) {
+        item.focus({preventScroll: true});
         const additive = event.metaKey || event.ctrlKey;
         const wasSelected = item.classList.contains('selected');
         if (event.shiftKey) selectIconRange(item);
@@ -4500,7 +4513,7 @@ function onIconPointerDown(event) {
             baseFolders: new Set(selectedFolders)
         };
     }
-    view.setPointerCapture(event.pointerId);
+    (item || view).setPointerCapture(event.pointerId);
     event.preventDefault();
 }
 
@@ -4531,14 +4544,15 @@ function onIconPointerUp(event) {
     iconPointer = null;
     const marquee = document.getElementById('iconMarquee');
     if (marquee) marquee.classList.add('hidden');
+    const target = state.mode === 'drag' && event.type === 'pointerup'
+        ? dropTargetAt(event.clientX, event.clientY) : null;
+    clearIconDragVisuals();
+    if (event.type === 'pointercancel') return;
     if (state.mode === 'drag') {
-        const target = dropTargetAt(event.clientX, event.clientY);
-        clearIconDragVisuals();
         if (target && canDropInto(target.destination, target.managed)) moveSelectionTo(target.destination);
         else if (target && !target.managed) showToast('请在来源节点移动这些项目', 'warning');
         return;
     }
-    clearIconDragVisuals();
     if (!state.moved && state.mode === 'maybe-marquee' && !state.additive) clearSelection();
     if (!state.moved && state.collapseOnClick && state.item) selectOnlyIcon(state.item);
 }

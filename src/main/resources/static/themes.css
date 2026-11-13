@@ -432,22 +432,61 @@ input[type="checkbox"]:focus {
   box-shadow: 0 0 0 2px var(--color-accent-muted);
 }
 
+.view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-bg-tertiary);
+}
+
 .view-toggle-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
   background-color: transparent;
   color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.view-toggle-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .view-toggle-btn:hover {
+  background-color: var(--color-accent-muted);
   color: var(--color-text-primary);
 }
 
-.view-toggle-btn.active {
-  background-color: var(--color-accent-primary);
-  color: var(--color-accent-text);
+.view-toggle-btn[aria-pressed="true"] {
+  border-color: var(--color-border-secondary);
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
 }
 
-.view-toggle-btn.active:hover {
-  background-color: var(--color-accent-secondary);
+.view-toggle-btn:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: -2px;
+}
+
+@media (pointer: coarse) {
+  .view-toggle-btn {
+    width: 44px;
+    height: 44px;
+  }
 }
 
 .theme-btn-success {

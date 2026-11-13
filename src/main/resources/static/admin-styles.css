@@ -748,6 +748,11 @@ input[type="checkbox"]:checked {
     background: var(--color-bg-tertiary);
 }
 
+.icon-item:focus-visible {
+    outline: 2px solid var(--color-accent-primary);
+    outline-offset: -2px;
+}
+
 .icon-item.selected {
     background: var(--color-accent-muted);
 }

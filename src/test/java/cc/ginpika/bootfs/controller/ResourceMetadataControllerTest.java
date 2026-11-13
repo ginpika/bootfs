@@ -43,8 +43,12 @@ class ResourceMetadataControllerTest {
             when(context.buildProxyUrl("remote")).thenReturn("/p/remote");
             assertEquals(200, controller.setPublicAccess("remote", true).getStatusCodeValue());
             assertEquals("/p/remote", catalog.querySetu());
+            assertEquals(List.of("/p/remote", "/p/remote"), controller.randomPictureUrls(2).getBody());
+            assertEquals(400, controller.randomPictureUrls(0).getStatusCodeValue());
+            assertEquals(400, controller.randomPictureUrls(481).getStatusCodeValue());
             assertEquals(200, controller.setPublicAccess("remote", false).getStatusCodeValue());
             assertNull(catalog.querySetu());
+            assertEquals(404, controller.randomPictureUrls(2).getStatusCodeValue());
             verify(localInventory,atLeastOnce()).update(eq("remote"),same(local));
             verifyNoInteractions(proxy);
             assertEquals(404, controller.getTags("missing").getStatusCodeValue());

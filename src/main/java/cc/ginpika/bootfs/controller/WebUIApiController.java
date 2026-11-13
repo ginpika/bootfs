@@ -24,6 +24,7 @@ import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -306,6 +307,15 @@ public class WebUIApiController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok().body(url);
+    }
+
+    /** One round trip for the public wall. Each {@code /setu-url} call otherwise rescans the gallery. */
+    @GetMapping("/setu-urls")
+    public ResponseEntity<List<String>> randomPictureUrls(@RequestParam(value = "count", defaultValue = "240") int count) {
+        if (count < 1 || count > 480) return ResponseEntity.badRequest().build();
+        List<String> urls = meiliSearchService.querySetu(count);
+        if (urls.isEmpty()) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(urls);
     }
 
     // ======================== 标签管理 API ========================

@@ -85,7 +85,7 @@ public class SsoInterceptor implements HandlerInterceptor {
             response.setStatus(401); response.setContentType("application/json");
             response.getWriter().write("{\"error\":\"Pairing authorization required\"}"); return false;
         }
-        boolean publicRead = Set.of("/f/{uuid}", "/p/{uuid}", "/thumb/{uuid}", "/setu", "/setu-url",
+        boolean publicRead = Set.of("/f/{uuid}", "/p/{uuid}", "/thumb/{uuid}", "/setu", "/setu-url", "/setu-urls",
                 "/video-player", "/album/**", "/gallery", "/tv", "/tv/", "/tv/status", "/tv/playlist.m3u8",
                 "/tv/ts/{uuid}/{fileName}", "/hls/{folder}/{file}").contains(path);
         if (read && config.isPublicSharingEnabled() && publicRead) return true;

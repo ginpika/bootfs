@@ -2,47 +2,25 @@
 <html lang="zh-CN">
 
 <head>
-    <script src="/security-utils.js"></script>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gallery</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="/themes.css">
     <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    borderRadius: {
-                        none: '0px',
-                        sm: '4px',
-                        DEFAULT: '6px',
-                        md: '6px',
-                        lg: '6px',
-                        xl: '8px',
-                        '2xl': '8px',
-                        '3xl': '8px',
-                        full: '9999px',
-                    },
-                    fontFamily: {
-                        display: ['Space Grotesk', 'system-ui', 'sans-serif'],
-                        body: ['Outfit', 'system-ui', 'sans-serif'],
-                    }
-                }
-            }
-        }
-        
         function initTheme() {
             const savedTheme = localStorage.getItem('tfs-theme') || 'light';
             const root = document.documentElement;
             root.className = '';
             root.classList.add(`theme-${savedTheme}`);
         }
-        
+
         initTheme();
+        window.__galleryUrls = fetch('/setu-urls?count=240', { headers: { Accept: 'application/json' } });
     </script>
+    <script src="/security-utils.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gallery</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/themes.css">
     <style>
         * {
             margin: 0;
@@ -208,23 +186,68 @@
             justify-content: center;
         }
 
+        #empty-state {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--color-bg-primary);
+        }
+
+        #empty-state.hidden { display: none; }
+
+        #empty-state .empty-copy { text-align: center; }
+
+        #empty-state .hero {
+            width: 6rem;
+            height: 6rem;
+            margin: 0 auto;
+            color: var(--color-text-quaternary);
+        }
+
+        #empty-state h3 {
+            margin-top: 1.5rem;
+            font-family: 'Space Grotesk', system-ui, sans-serif;
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+            color: var(--color-text-primary);
+        }
+
+        #empty-state p {
+            margin-top: 0.75rem;
+            max-width: 28rem;
+            font-size: 0.875rem;
+            color: var(--color-text-tertiary);
+        }
+
+        #empty-state .empty-action { margin-top: 2rem; }
+
+        #empty-state .theme-btn-primary svg {
+            width: 1.25rem;
+            height: 1.25rem;
+            margin-right: 0.5rem;
+        }
+
     </style>
     <link rel="icon" href="/favicon.ico" sizes="any">
-    <script src="https://cdn.jsdelivr.net/npm/bigpicture@2.6.2/dist/BigPicture.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/spotlight.js@0.7.8/dist/spotlight.bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bigpicture@2.6.2/dist/BigPicture.min.js" defer></script>
 </head>
 
 <body>
-<div id="empty-state" class="hidden fixed inset-0 flex flex-col items-center justify-center z-50" style="background-color: var(--color-bg-primary);">
-    <div class="text-center">
-        <svg class="mx-auto h-24 w-24" style="color: var(--color-text-quaternary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<div id="empty-state" class="hidden">
+    <div class="empty-copy">
+        <svg class="hero" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
         </svg>
-        <h3 class="mt-6 text-xl font-semibold font-display tracking-tight" style="color: var(--color-text-primary);">暂无公开图片</h3>
-        <p class="mt-3 text-sm max-w-md" style="color: var(--color-text-tertiary);">还没有公开的图片，快去管理页面上传并发布一些吧！</p>
-        <div class="mt-8">
+        <h3>暂无公开图片</h3>
+        <p>还没有公开的图片，快去管理页面上传并发布一些吧！</p>
+        <div class="empty-action">
             <a href="/" class="theme-btn-primary">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
                 </svg>
                 前往管理页面
@@ -244,15 +267,13 @@
 <footer>
     <script src="/jquery.min.js"></script>
     <script>
-        window.addEventListener('load', function () {
+        (function () {
             const gallery = document.getElementById('gallery');
-
-            // 图片API配置
-            const IMAGE_API = '/setu-url';
 
             // 列配置
             const COLUMN_COUNT = 8;
             const IMAGES_PER_COLUMN = 30;
+            const TOTAL = COLUMN_COUNT * IMAGES_PER_COLUMN;
             const SCROLL_SPEED = 0.2; // 像素/帧
 
             // 状态管理
@@ -290,90 +311,74 @@
                         bouncing: false
                     });
 
-                    // 加载图片
-                    loadImagesForColumn(i);
                 }
             }
 
-            // 为列加载图片
-            function loadImagesForColumn(columnIndex) {
-                const imageScroll = document.getElementById(`imageScroll-${columnIndex}`);
+            function failedTile() {
+                const errorDiv = document.createElement('div');
+                errorDiv.textContent = '加载失败';
+                errorDiv.style.color = '#e74c3c';
+                errorDiv.style.textAlign = 'center';
+                errorDiv.style.padding = '20px';
+                return errorDiv;
+            }
 
-                for (let j = 0; j < IMAGES_PER_COLUMN; j++) {
-                    const imageContainer = document.createElement('div');
-                    imageContainer.className = 'image-container';
+            // 地址一次取齐，缩略图同时开始下载。先出来的几张就揭开画廊，其余格子继续填。
+            function mountImages(urls) {
+                let settled = 0;
+                let revealed = false;
+                const revealAt = Math.min(COLUMN_COUNT, urls.length);
 
-                    // 创建加载动画
+                function reveal() {
+                    if (revealed) return;
+                    revealed = true;
+                    $($(".container")[0]).fadeIn(600);
+                    $("#loader").hide();
+                }
+
+                urls.forEach((res, index) => {
+                    const columnIndex = Math.floor(index / IMAGES_PER_COLUMN);
+                    const imageScroll = document.getElementById(`imageScroll-${columnIndex}`);
+                    const container = document.createElement('div');
+                    container.className = 'image-container';
                     const spinner = document.createElement('div');
                     spinner.className = 'loading-spinner';
-                    imageContainer.appendChild(spinner);
+                    container.appendChild(spinner);
+                    imageScroll.appendChild(container);
 
-                    imageScroll.appendChild(imageContainer);
-
-                    // 使用AJAX加载图片
-                    loadRandomImage(imageContainer, columnIndex, j);
-                }
-            }
-
-            // 使用AJAX加载随机图片
-            function loadRandomImage(container, col, row) {
-                const imgUrl = `${IMAGE_API}`;
-                $.get(imgUrl).done(res => {
-                    const uuid = res.substring(res.lastIndexOf('/') + 1);
-                    const thumbUrl = '/thumb/' + uuid;
+                    const uuid = res.substring(res.lastIndexOf('/') + 1).split(/[?#]/)[0];
                     const img = new Image();
+                    img.decoding = 'async';
+                    img.alt = '随机图片';
+                    if (index < COLUMN_COUNT) img.fetchPriority = 'high';
+
+                    function settle() {
+                        if (++settled >= revealAt) reveal();
+                    }
 
                     img.onload = function () {
-                        while (container.firstChild) {
-                            container.removeChild(container.firstChild);
-                        }
-
-                        container.appendChild(img);
-
-                        if (col === COLUMN_COUNT - 1 && row === IMAGES_PER_COLUMN - 1) {
-                            $($(".container")[0]).fadeIn(600)
-                            $("#loader").hide();
-                        }
+                        container.replaceChildren(img);
+                        settle();
                     };
 
                     img.onerror = function () {
-                        if (img.src.indexOf('/thumb/') !== -1) {
+                        if (!img.dataset.fallback && res.indexOf('/thumb/') === -1) {
+                            img.dataset.fallback = '1';
                             img.src = res;
                             return;
                         }
-                        while (container.firstChild) {
-                            container.removeChild(container.firstChild);
-                        }
-
-                        const errorDiv = document.createElement('div');
-                        errorDiv.textContent = '加载失败';
-                        errorDiv.style.color = '#e74c3c';
-                        errorDiv.style.textAlign = 'center';
-                        errorDiv.style.padding = '20px';
-                        container.appendChild(errorDiv);
+                        container.replaceChildren(failedTile());
+                        settle();
                     };
 
                     img.onclick = function () {
-                        BigPicture({ el: this, imgSrc: res });
-                    }
+                        if (typeof BigPicture === 'function') BigPicture({ el: this, imgSrc: res });
+                    };
 
-                    img.src = thumbUrl;
-                    img.alt = '随机图片';
-                }).fail(function(xhr) {
-                    if (xhr.status === 404) {
-                        showEmptyState();
-                    } else {
-                        while (container.firstChild) {
-                            container.removeChild(container.firstChild);
-                        }
-                        const errorDiv = document.createElement('div');
-                        errorDiv.textContent = '加载失败';
-                        errorDiv.style.color = '#e74c3c';
-                        errorDiv.style.textAlign = 'center';
-                        errorDiv.style.padding = '20px';
-                        container.appendChild(errorDiv);
-                    }
+                    img.src = '/thumb/' + uuid;
                 });
+
+                setTimeout(reveal, 800);
             }
 
             function showEmptyState() {
@@ -454,10 +459,32 @@
                 requestAnimationFrame(animate);
             }
 
-            // 初始化
             createColumns();
             animate();
-        });
+
+            const pending = window.__galleryUrls || fetch('/setu-urls?count=' + TOTAL, { headers: { Accept: 'application/json' } });
+            pending
+                .then(function (response) {
+                    if (response.status === 404) {
+                        showEmptyState();
+                        return null;
+                    }
+                    if (!response.ok) throw new Error('gallery');
+                    return response.json();
+                })
+                .then(function (urls) {
+                    if (!urls) return;
+                    if (!urls.length) {
+                        showEmptyState();
+                        return;
+                    }
+                    mountImages(urls.slice(0, TOTAL));
+                })
+                .catch(function () {
+                    const label = document.querySelector('#loader p');
+                    if (label) label.textContent = '画廊加载失败';
+                });
+        })();
     </script>
 </footer>
 </html>

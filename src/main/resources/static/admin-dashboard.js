@@ -75,7 +75,6 @@ const GRID_PAGE_SIZE = 10;
 
 const GRID_TARGET_COUNT = 10;
 const WATERFALL_COLUMNS = 6;
-let columnHeights = new Array(WATERFALL_COLUMNS).fill(0);
 let gridTotal = 0;
 
 // NSFW blur toggle state (true = blurred/hidden by default)
@@ -581,10 +580,6 @@ function loadFileList() {
 function loadListView() {
     const requestVersion = ++folderRequestVersion;
     renderFolderBreadcrumbs();
-    const startTime = Date.now();
-    const minLoadingTime = 800; // 最小加载时间 0.8s
-    
-    // 显示加载动画
     showLoadingOverlay();
     
     const params = new URLSearchParams({
@@ -592,8 +587,6 @@ function loadListView() {
         pageSize: pageSize,
         search: searchQuery
     });
-    
-    console.log('Loading list view with params:', params.toString());
     
     fetch(fileListUrl(params))
         .then(response => {
@@ -603,24 +596,7 @@ function loadListView() {
             return response.json().then(normalizeFolderRows);
         })
         .then(data => {
-            console.log('Received data:', data);
-            
-            // 确保至少显示 0.8s 的加载动画
-            const elapsed = Date.now() - startTime;
-            const remainingTime = Math.max(0, minLoadingTime - elapsed);
-            
-            return new Promise(resolve => {
-                setTimeout(() => {
-                    resolve(data);
-                }, remainingTime);
-            });
-        })
-        .then(data => {
-            // 隐藏加载动画
             if (requestVersion !== folderRequestVersion) return;
-            hideLoadingOverlay();
-            
-            // 渲染内容
             if (data && data.rows) {
                 renderFileList(data);
                 updateStats(data);
@@ -632,10 +608,12 @@ function loadListView() {
         .catch(error => {
             if (requestVersion !== folderRequestVersion) return;
             console.error('Error loading files:', error);
-            hideLoadingOverlay();
             if (error.message && !error.message.includes('Cannot read properties')) {
                 showToast('加载文件列表失败', 'error');
             }
+        })
+        .finally(() => {
+            if (requestVersion === folderRequestVersion) hideLoadingOverlay();
         });
 }
 
@@ -650,7 +628,6 @@ function loadGridView(reset = false) {
         gridHasMore = true;
         gridLoading = false;
         gridTotal = 0;
-        columnHeights = new Array(WATERFALL_COLUMNS).fill(0);
         previewMediaFiles = [];
         
         const container = document.getElementById('waterfallContainer');
@@ -659,7 +636,6 @@ function loadGridView(reset = false) {
             for (let i = 0; i < WATERFALL_COLUMNS; i++) {
                 const column = document.createElement('div');
                 column.className = 'flex-1 min-w-0 flex flex-col gap-4';
-                column.id = `waterfall-column-${i}`;
                 container.appendChild(column);
             }
         }
@@ -731,10 +707,6 @@ async function loadMediaFilesRecursively(needCount) {
         search: searchQuery
     });
 
-    // console.log(`${params}`)
-    
-    // console.log(`Loading grid: need ${needCount} more, offset ${gridPage * GRID_PAGE_SIZE}, limit ${Math.min(needCount, GRID_PAGE_SIZE)}`);
-    
     try {
         const response = await fetch(fileListUrl(params));
         if (!response.ok) {
@@ -749,10 +721,7 @@ async function loadMediaFilesRecursively(needCount) {
             const mediaFiles = data.rows.filter(file => file.folder || isImage(file) || isVideo(file) || isAlbum(file));
             previewMediaFiles = previewMediaFiles.concat(mediaFiles.filter(file => isImage(file) || isVideo(file)));
             
-            if (mediaFiles.length > 0) {
-                await appendToWaterfallAsync(mediaFiles, requestVersion);
-            }
-            if (requestVersion !== folderRequestVersion) return;
+            if (mediaFiles.length > 0) appendToWaterfall(mediaFiles, requestVersion);
             
             gridPage++;
             
@@ -760,15 +729,13 @@ async function loadMediaFilesRecursively(needCount) {
             const remainingNeed = needCount - mediaFiles.length;
             
             gridHasMore = (gridPage * GRID_PAGE_SIZE) < gridTotal && fetchedCount > 0;
+            updateStats(data);
             
             if (remainingNeed > 0 && gridHasMore) {
-                console.log(`Got ${mediaFiles.length} media files, need ${remainingNeed} more, loading next batch...`);
                 await loadMediaFilesRecursively(remainingNeed);
             } else {
                 finishLoading();
             }
-            
-            updateStats(data);
         } else {
             gridHasMore = false;
             finishLoading();
@@ -832,119 +799,82 @@ function finishLoading() {
     }
 }
 
-async function appendToWaterfallAsync(files, requestVersion = folderRequestVersion) {
-    const columns = [];
-    for (let i = 0; i < WATERFALL_COLUMNS; i++) {
-        const column = document.getElementById(`waterfall-column-${i}`);
-        if (column) {
-            columns.push(column);
-        }
-    }
-    
-    if (columns.length === 0) {
-        console.error('Waterfall columns not found');
-        return;
-    }
-    
-    function getShortestColumnIndex() {
-        let minHeight = columnHeights[0];
-        let minIndex = 0;
-        for (let i = 1; i < columnHeights.length; i++) {
-            if (columnHeights[i] < minHeight) {
-                minHeight = columnHeights[i];
-                minIndex = i;
-            }
-        }
-        return minIndex;
-    }
-    
-    for (let index = 0; index < files.length; index++) {
-        if (requestVersion !== folderRequestVersion) return;
-        const file = files[index];
-        await new Promise((resolve) => {
-            const targetColumnIndex = getShortestColumnIndex();
-            const targetColumn = columns[targetColumnIndex];
-            
-            const cardWrapper = document.createElement('div');
-            cardWrapper.innerHTML = createWaterfallCard(file);
-            const card = cardWrapper.firstElementChild;
-            
-            if (card && targetColumn) {
-                card.addEventListener('click', () => {
-                    if (file.folder) openFolder(file.folderPath);
-                    else previewFile(file);
-                });
-                if (file.folder) card.addEventListener('keydown', event => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        openFolder(file.folderPath);
-                    }
-                });
-                
-                const deleteBtn = card.querySelector('.waterfall-delete-btn');
-                if (deleteBtn) {
-                    deleteBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        selectedFiles.clear();
-                        selectedFiles.add(file.uuid);
-                        showDeleteConfirm();
-                    });
-                }
-                
-                card.dataset.initialized = 'true';
-                card.classList.add('fade-in-card');
-                card.style.animationDelay = `${index * 50}ms`;
-                
-                targetColumn.appendChild(card);
-                
-                applyNsfwBlurToItem(card);
+function appendToWaterfall(files, requestVersion) {
+    const container = document.getElementById('waterfallContainer');
+    if (!container) return;
+    const columns = Array.from(container.children);
+    if (columns.length === 0) return;
+    const gap = parseFloat(getComputedStyle(columns[0]).rowGap) || 0;
+    const heights = columns.map(column => column.childElementCount ? column.offsetHeight + gap : 0);
+    const template = document.createElement('template');
+    template.innerHTML = files.map(createWaterfallCard).join('');
+    const cards = Array.from(template.content.children);
 
-                const albumCover = card.querySelector('.album-cover');
-                if (albumCover && isAlbum(file)) {
-                    fetchAlbumPoster(file.uuid).then(posterUrl => {
-                        if (posterUrl) {
-                            albumCover.innerHTML = `
-                                <img src="${BootFSSecurity.html(BootFSSecurity.url(posterUrl))}"
-                                     alt="${BootFSSecurity.html(file.fileName)}"
-                                     class="w-full h-full object-cover"
-                                     loading="lazy"
-                                     onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center\\' style=\\'background-color: var(--color-bg-tertiary);\\'><svg class=\\'w-16 h-16\\' style=\\'color: var(--color-text-muted);\\' fill=\\'none\\' stroke=\\'currentColor\\' viewBox=\\'0 0 24 24\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' stroke-width=\\'2\\' d=\\'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z\\'></path></svg></div>';">
-                            `;
-                            // Re-apply NSFW blur after poster loads
-                            applyNsfwBlurToItem(card);
-                        }
-                    });
-                }
-                
-                const img = card.querySelector('img');
-                
-                const updateHeight = () => {
-                    if (requestVersion !== folderRequestVersion) { resolve(); return; }
-                    const cardHeight = card.offsetHeight;
-                    columnHeights[targetColumnIndex] += cardHeight;
-                    resolve();
-                };
-                
-                if (img) {
-                    if (img.complete) {
-                        updateHeight();
-                    } else {
-                        img.onload = updateHeight;
-                        img.onerror = updateHeight;
-                    }
-                } else {
-                    updateHeight();
-                }
-            } else {
-                resolve();
+    // Measure the whole batch in one layout pass before assigning columns in file order.
+    columns[0].appendChild(template.content);
+    const cardHeights = cards.map(card => card.offsetHeight);
+    const fragments = columns.map(() => document.createDocumentFragment());
+    cards.forEach((card, index) => {
+        const file = files[index];
+        const columnIndex = heights.indexOf(Math.min(...heights));
+        heights[columnIndex] += cardHeights[index] + gap;
+        card.addEventListener('click', () => {
+            if (file.folder) openFolder(file.folderPath);
+            else previewFile(file);
+        });
+        if (file.folder) card.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                openFolder(file.folderPath);
             }
         });
+        card.querySelector('.waterfall-delete-btn')?.addEventListener('click', event => {
+            event.stopPropagation();
+            selectedFiles.clear();
+            selectedFiles.add(file.uuid);
+            showDeleteConfirm();
+        });
+        card.classList.add('fade-in-card');
+        applyNsfwBlurToItem(card);
+        fragments[columnIndex].appendChild(card);
+        const cover = card.querySelector('.album-cover');
+        if (cover) loadWaterfallAlbumCover(cover, file, requestVersion);
+    });
+    columns.forEach((column, index) => column.appendChild(fragments[index]));
+}
+
+function loadWaterfallAlbumCover(cover, file, requestVersion) {
+    const placeholder = cover.querySelector('.album-cover-placeholder');
+    const initialImage = cover.querySelector('img');
+    async function loadPoster() {
+        const poster = await fetchAlbumPoster(file.uuid);
+        if (requestVersion !== folderRequestVersion) return;
+        const url = poster && BootFSSecurity.url(poster);
+        if (!url || url === initialImage?.src) return;
+        const image = document.createElement('img');
+        image.alt = file.fileName || '';
+        image.className = 'w-full h-full object-cover';
+        image.loading = 'lazy';
+        image.decoding = 'async';
+        image.addEventListener('load', () => placeholder.classList.add('hidden'), {once: true});
+        image.addEventListener('error', () => image.remove(), {once: true});
+        cover.prepend(image);
+        image.src = url;
+    }
+
+    if (initialImage) {
+        initialImage.addEventListener('error', () => {
+            initialImage.remove();
+            placeholder.classList.remove('hidden');
+            if (requestVersion === folderRequestVersion) loadPoster();
+        }, {once: true});
+    } else {
+        loadPoster();
     }
 }
 
 // Render file list
 function renderFileList(data) {
-    const gridContainer = document.getElementById('gridView');
     const listContainer = document.getElementById('fileListTableBody');
     
     previewMediaFiles = (data && data.rows) ? data.rows.filter(file => isImage(file) || isVideo(file)) : [];
@@ -1039,31 +969,33 @@ function createWaterfallCard(file) {
     const isImageFile = isImage(file);
     const isVideoFile = isVideo(file);
     const isAlbumFile = isAlbum(file);
+    const thumbnail = hasThumb(file) ? BootFSSecurity.url(getThumbUrl(file)) : '';
+    const albumCover = isAlbumFile && (file.thumbUrl || file.poster);
+    const albumCoverUrl = albumCover ? BootFSSecurity.url(albumCover) : '';
     
     return `
         <div class="waterfall-card theme-card theme-rounded-xl overflow-hidden cursor-pointer group" data-uuid="${file.uuid}" data-type="${isAlbumFile ? 'album' : (isImageFile ? 'image' : 'video')}">
             <div class="relative w-full">
                 ${isAlbumFile ? `
                     <div class="relative w-full aspect-[3/4] album-cover" style="background-color: var(--color-bg-tertiary);" data-album-uuid="${file.uuid}">
-                        ${file.thumbUrl ? `
-                            <img src="${BootFSSecurity.html(BootFSSecurity.url(file.thumbUrl))}"
+                        ${albumCoverUrl ? `
+                            <img src="${BootFSSecurity.html(albumCoverUrl)}"
                                  alt="${BootFSSecurity.html(file.fileName)}"
                                  class="w-full h-full object-cover"
-                                 loading="lazy">
-                        ` : `
-                            <div class="w-full h-full flex items-center justify-center" style="background-color: var(--color-bg-hover);">
-                                <svg class="w-16 h-16" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                </svg>
-                            </div>
-                        `}
+                                 loading="lazy" decoding="async">
+                        ` : ''}
+                        <div class="album-cover-placeholder absolute inset-0 flex items-center justify-center ${albumCoverUrl ? 'hidden' : ''}" style="background-color: var(--color-bg-hover);">
+                            <svg class="w-16 h-16" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                        </div>
                     </div>
                 ` : isImageFile ? `
-                    ${hasThumb(file) ? `
-                        <img src="${BootFSSecurity.html(BootFSSecurity.url(getThumbUrl(file)))}"
+                    ${thumbnail ? `
+                        <img src="${BootFSSecurity.html(thumbnail)}"
                              alt="${BootFSSecurity.html(file.fileName)}"
-                             class="w-full h-auto object-cover"
-                             loading="lazy"
+                             class="waterfall-image w-full h-auto object-cover"
+                             width="3" height="4" loading="lazy" decoding="async"
                              onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
                     ` : `
                         <div class="w-full aspect-[3/4] flex items-center justify-center" style="background-color: var(--color-bg-tertiary);">
@@ -1074,14 +1006,14 @@ function createWaterfallCard(file) {
                     `}
                 ` : isVideoFile ? `
                     <div class="relative w-full aspect-video video-card-container" data-video-uuid="${file.uuid}" style="background-color: var(--color-bg-tertiary);">
-                        ${hasThumb(file) ? `
-                            <img src="${BootFSSecurity.html(BootFSSecurity.url(getThumbUrl(file)))}"
+                        ${thumbnail ? `
+                            <img src="${BootFSSecurity.html(thumbnail)}"
                                  alt="${BootFSSecurity.html(file.fileName)}"
                                  class="w-full h-full object-cover video-thumbnail"
-                                 loading="lazy"
+                                 loading="lazy" decoding="async"
                                  onerror="this.style.display='none';this.parentElement.querySelector('.video-placeholder').style.display='flex';">
                         ` : ''}
-                        <div class="video-placeholder w-full h-full items-center justify-center ${hasThumb(file) ? 'hidden' : 'flex'}" style="background-color: var(--color-bg-tertiary);">
+                        <div class="video-placeholder w-full h-full items-center justify-center ${thumbnail ? 'hidden' : 'flex'}" style="background-color: var(--color-bg-tertiary);">
                             <svg class="w-16 h-16 theme-page-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -1262,7 +1194,7 @@ function createListRow(file) {
                             ${hasThumb(file) ? `
                                 <img class="h-10 w-10 theme-rounded-lg object-cover"
                                      src="${BootFSSecurity.html(BootFSSecurity.url(getThumbUrl(file)))}"
-                                     alt=""
+                                     alt="" width="40" height="40" loading="lazy" decoding="async"
                                      onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 24 22%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/%3E%3Ccircle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/%3E%3Cpolyline points=%2221 15 16 10 5 21%22/%3E%3C/svg%3E';">
                             ` : `
                                 <div class="h-10 w-10 theme-rounded-lg flex items-center justify-center" style="background-color: var(--color-bg-tertiary);">
@@ -1683,6 +1615,7 @@ function applyViewChrome(view, restorePanel = true) {
     if (gridView) gridView.classList.toggle('hidden', view !== 'grid');
     if (listView) listView.classList.toggle('hidden', view !== 'list');
     if (iconView) iconView.classList.toggle('hidden', view !== 'icons');
+    if (view !== 'icons') iconThumbnailObserver?.disconnect();
     if (paginationRow) paginationRow.classList.toggle('hidden', view !== 'list');
     document.querySelectorAll('.view-toggle-btn').forEach(button => {
         button.setAttribute('aria-pressed', String(button.dataset.view === view));
@@ -4237,6 +4170,7 @@ let iconRecords = new Map();
 let iconAnchorKey = null;
 let iconPointer = null;
 let iconMoveLock = false;
+let iconThumbnailObserver;
 const ICON_PAGE_SIZE = 200;
 
 function initializeIconBrowser() {
@@ -4265,6 +4199,16 @@ function initializeIconBrowser() {
     if (loadMore) loadMore.addEventListener('click', () => loadIconView(false));
     const main = document.getElementById('mainView');
     if (main) {
+        if ('IntersectionObserver' in window) {
+            iconThumbnailObserver = new IntersectionObserver((entries, observer) => {
+                for (const {target, isIntersecting} of entries) {
+                    if (!isIntersecting) continue;
+                    observer.unobserve(target);
+                    target.src = target.dataset.src;
+                    delete target.dataset.src;
+                }
+            }, {root: main, rootMargin: '320px 0px'});
+        }
         main.addEventListener('scroll', () => {
             if (currentView !== 'icons' || iconLoading || !iconHasMore) return;
             if (main.scrollTop + main.clientHeight >= main.scrollHeight - 280) loadIconView(false);
@@ -4280,6 +4224,7 @@ function loadIconView(reset = false) {
     const loadMore = document.getElementById('iconLoadMore');
     const loadMoreButton = document.getElementById('iconLoadMoreButton');
     if (reset) {
+        iconThumbnailObserver?.disconnect();
         iconPage = 0;
         iconHasMore = true;
         iconLoading = false;
@@ -4366,20 +4311,33 @@ function createIconItem(file) {
 
     const glyph = document.createElement('span');
     glyph.className = 'icon-glyph';
+    const kind = isImage(file) || isAlbum(file) ? 'image' : isVideo(file) ? 'video' : isAudio(file) ? 'audio' : 'file';
+    const thumbnail = (kind === 'image' || kind === 'video') && hasThumb(file)
+        ? BootFSSecurity.url(getThumbUrl(file)) : '';
     if (folder) {
         glyph.appendChild(iconFolderGlyph());
-    } else if ((isImage(file) || isVideo(file) || isAlbum(file)) && hasThumb(file)) {
+    } else if (thumbnail) {
+        const placeholder = iconFileGlyph(kind);
         const image = document.createElement('img');
         image.alt = '';
         image.draggable = false;
-        image.src = BootFSSecurity.url(getThumbUrl(file));
-        image.addEventListener('error', () => {
-            glyph.replaceChildren(iconFileGlyph(isVideo(file) ? 'video' : 'image'));
-        });
-        glyph.appendChild(image);
-        if (isVideo(file)) glyph.appendChild(iconPlayBadge());
+        image.decoding = 'async';
+        image.className = 'icon-thumbnail-pending';
+        image.addEventListener('load', () => {
+            placeholder.remove();
+            image.classList.remove('icon-thumbnail-pending');
+            if (kind === 'video') glyph.appendChild(iconPlayBadge());
+        }, {once: true});
+        image.addEventListener('error', () => image.remove(), {once: true});
+        glyph.append(placeholder, image);
+        if (iconThumbnailObserver) {
+            image.dataset.src = thumbnail;
+            iconThumbnailObserver.observe(image);
+        } else {
+            image.loading = 'lazy';
+            image.src = thumbnail;
+        }
     } else {
-        const kind = isImage(file) || isAlbum(file) ? 'image' : isVideo(file) ? 'video' : isAudio(file) ? 'audio' : 'file';
         glyph.appendChild(iconFileGlyph(kind));
     }
     const name = document.createElement('span');
@@ -4598,7 +4556,7 @@ function applyMarqueeSelection(rect, state) {
         state.baseFolders.forEach(path => selectedFolders.add(path));
     }
     iconItems().forEach(item => {
-        const hit = Array.from(item.querySelectorAll('.icon-glyph > *, .icon-name')).some(part => {
+        const hit = Array.from(item.querySelectorAll('.icon-glyph > :not(.icon-thumbnail-pending), .icon-name')).some(part => {
             const bounds = part.getBoundingClientRect();
             return rect.left < bounds.right && rect.right > bounds.left && rect.top < bounds.bottom && rect.bottom > bounds.top;
         });

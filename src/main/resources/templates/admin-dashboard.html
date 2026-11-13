@@ -90,7 +90,7 @@
     <script src="//vjs.zencdn.net/8.23.4/video.min.js"></script>
 </head>
 <body class="overflow-hidden font-body" style="background-color: var(--color-bg-primary);">
-    <!-- 全局加载遮罩：在样式表与脚本全部就绪后淡出移除 -->
+    <!-- 全局加载遮罩：页面初始化后淡出移除 -->
     <div id="globalLoadingMask" role="status" aria-live="polite">
         <div style="display:flex; flex-direction:column; align-items:center;">
             <svg id="globalLoadingMask__spinner" fill="none" viewBox="0 0 24 24">
@@ -111,10 +111,10 @@
                 mask.classList.add('is-hidden');
                 setTimeout(function () { if (mask.parentNode) mask.parentNode.removeChild(mask); }, 320);
             }
-            if (document.readyState === 'complete') {
+            if (document.readyState !== 'loading') {
                 removeMask();
             } else {
-                window.addEventListener('load', removeMask);
+                document.addEventListener('DOMContentLoaded', removeMask, {once: true});
             }
             // 兜底：无论资源是否就绪，最多 5 秒后移除遮罩，避免卡死
             setTimeout(removeMask, 5000);
@@ -412,7 +412,7 @@
 
                     <!-- Grid View (Waterfall) -->
                     <div id="gridView" class="hidden p-4">
-                        <div id="waterfallContainer" class="flex gap-4">
+                        <div id="waterfallContainer" class="flex items-start gap-4">
                         </div>
                         <div id="noMoreContent" class="hidden text-center py-8 theme-page-text-tertiary">
                             没有更多内容了
@@ -429,8 +429,8 @@
                     </div>
 
                     <!-- List View -->
-                    <div id="listView" class="relative">
-                        <div id="loadingOverlay" class="hidden absolute inset-0 flex items-center justify-center z-50 theme-rounded-xl" style="background-color: var(--color-bg-secondary); opacity: 0.9;">
+                    <div id="listView" class="relative grid grid-cols-1">
+                        <div id="loadingOverlay" class="hidden col-start-1 row-start-1 flex items-center justify-center py-6 z-50 theme-rounded-xl" style="background-color: var(--color-bg-secondary); opacity: 0.9;">
                             <div class="flex flex-col items-center">
                                 <svg class="animate-spin h-10 w-10 mb-3" style="color: var(--color-accent-primary);" fill="none" viewBox="0 0 24 24">
                                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -446,7 +446,7 @@
                                 <p class="text-sm font-medium" style="color: var(--color-accent-primary);">释放以上传文件</p>
                             </div>
                         </div>
-                        <div class="overflow-hidden">
+                        <div class="col-start-1 row-start-1 overflow-hidden">
                             <table class="min-w-full divide-y" style="border-color: var(--color-border-primary);">
                                 <thead>
                                     <tr>

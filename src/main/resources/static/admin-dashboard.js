@@ -56,7 +56,9 @@ let currentPage = 1;
 let totalPages = 1;
 let pageSize = 10;
 let selectedFiles = new Set();
-let currentView = localStorage.getItem('tfs-view') || 'list'; // 'grid' or 'list' - default to list
+let selectedFolders = new Set();
+let currentView = localStorage.getItem('tfs-view') || 'list'; // 'list', 'grid' (waterfall) or 'icons'
+if (currentView !== 'grid' && currentView !== 'icons') currentView = 'list';
 let showAllFiles = localStorage.getItem('tfs-show-all') === 'true';
 let searchQuery = showAllFiles ? 'meta:all' : '';
 let currentFolder = new URLSearchParams(window.location.search).get('folder') || '';
@@ -85,35 +87,14 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeEventListeners();
     restoreViewState();
     initializeLocalFolderPanel();
+    initializeIconBrowser();
     loadFileList();
     initializeDragAndDrop();
 });
 
 // 从 localStorage 恢复视图状态（视图模式 + 只显示主存储），避免刷新后回到默认
 function restoreViewState() {
-    const gridView = document.getElementById('gridView');
-    const listView = document.getElementById('listView');
-    const gridViewBtn = document.getElementById('gridViewBtn');
-    const listViewBtn = document.getElementById('listViewBtn');
-    const paginationRow = document.getElementById('paginationRow');
-
-    if (currentView === 'grid') {
-        if (gridView) gridView.classList.remove('hidden');
-        if (listView) listView.classList.add('hidden');
-        if (gridViewBtn) gridViewBtn.classList.add('active');
-        if (listViewBtn) listViewBtn.classList.remove('active');
-        if (paginationRow) paginationRow.classList.add('hidden');
-        const listModeActions = document.getElementById('listModeActions');
-        if (listModeActions) listModeActions.classList.add('view-hidden');
-    } else {
-        if (gridView) gridView.classList.add('hidden');
-        if (listView) listView.classList.remove('hidden');
-        if (listViewBtn) listViewBtn.classList.add('active');
-        if (gridViewBtn) gridViewBtn.classList.remove('active');
-        if (paginationRow) paginationRow.classList.remove('hidden');
-        const listModeActions = document.getElementById('listModeActions');
-        if (listModeActions) listModeActions.classList.remove('view-hidden');
-    }
+    applyViewChrome(currentView, false);
 
     // Restore NSFW blur state from localStorage
     const savedNsfw = localStorage.getItem('tfs-nsfw-blur');
@@ -141,6 +122,7 @@ function initializeEventListeners() {
     // View toggle
     document.getElementById('gridViewBtn').addEventListener('click', () => switchView('grid'));
     document.getElementById('listViewBtn').addEventListener('click', () => switchView('list'));
+    document.getElementById('iconViewBtn').addEventListener('click', () => switchView('icons'));
     
     // NSFW toggle
     const nsfwToggleBtn = document.getElementById('nsfwToggleBtn');
@@ -208,11 +190,7 @@ function initializeEventListeners() {
         if (searchSuggestions) {
             searchSuggestions.classList.add('hidden');
         }
-        if (currentView === 'list') {
-            loadFileList();
-        } else {
-            loadGridView(true);
-        }
+        loadFileList();
     }
 
     const homeBtn = document.getElementById('homeBtn');
@@ -384,7 +362,14 @@ function initializeEventListeners() {
     document.addEventListener('keydown', function(e) {
         if (TextFileEditor.isOpen()) return;
         // Delete: Delete selected
-        if (e.key === 'Delete' && selectedFiles.size > 0) {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && currentView === 'icons') {
+            const tag = document.activeElement && document.activeElement.tagName;
+            if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
+                e.preventDefault();
+                selectAllIcons();
+            }
+        }
+        if (e.key === 'Delete' && (selectedFiles.size > 0 || selectedFolders.size > 0)) {
             e.preventDefault();
             showDeleteConfirm();
         }
@@ -397,7 +382,7 @@ function initializeEventListeners() {
         }
         // Arrow keys: navigate image preview when modal is open (grid mode only)
         const imagePreviewOpen = !document.getElementById('imagePreviewModal').classList.contains('hidden');
-        if (imagePreviewOpen && currentView === 'grid') {
+        if (imagePreviewOpen && currentView !== 'list') {
             // Let video.js handle arrow keys when the player is focused
             const target = e.target;
             const isVideoControl = target && target.closest && (target.closest('.video-js') || target.tagName === 'VIDEO');
@@ -445,6 +430,7 @@ function renderFolderBreadcrumbs() {
         button.type = 'button';
         button.className = 'theme-text-btn break-all';
         button.textContent = name;
+        button.dataset.folderPath = path;
         button.addEventListener('click', () => openFolder(path));
         container.appendChild(button);
     };
@@ -584,6 +570,8 @@ function createFolderCard(folder) {
 function loadFileList() {
     if (currentView === 'list') {
         loadListView();
+    } else if (currentView === 'icons') {
+        loadIconView(true);
     } else {
         loadGridView(true); // reset = true
     }
@@ -1478,8 +1466,9 @@ async function previewNextImage(e) {
         return;
     }
 
-    // At the last item — try to load more (grid view only)
-    if (currentView !== 'grid' || !gridHasMore) {
+    // At the last item — try to load more when the current view can fetch another page
+    const canLoadMore = (currentView === 'grid' && gridHasMore) || (currentView === 'icons' && iconHasMore);
+    if (!canLoadMore) {
         return;
     }
 
@@ -1487,7 +1476,8 @@ async function previewNextImage(e) {
     previewLoadingMore = true;
     setPreviewNavButtonsLoading(true);
     const previousLength = previewMediaFiles.length;
-    loadGridView(false);
+    if (currentView === 'icons') loadIconView(false);
+    else loadGridView(false);
     await waitForGridLoadComplete();
 
     // Bail if the user closed/reopened the preview while loading
@@ -1509,12 +1499,13 @@ async function previewNextImage(e) {
 // Wait until grid loading finishes (polls gridLoading flag)
 function waitForGridLoadComplete() {
     return new Promise(resolve => {
-        if (!gridLoading) {
+        const pending = () => currentView === 'icons' ? iconLoading : gridLoading;
+        if (!pending()) {
             resolve();
             return;
         }
         const interval = setInterval(() => {
-            if (!gridLoading) {
+            if (!pending()) {
                 clearInterval(interval);
                 resolve();
             }
@@ -1558,7 +1549,7 @@ function updatePreviewNavButtons() {
         prevBtn.disabled = !hasList || atStart;
     }
     if (nextBtn) {
-        const canLoadMore = currentView === 'grid' && gridHasMore;
+        const canLoadMore = (currentView === 'grid' && gridHasMore) || (currentView === 'icons' && iconHasMore);
         nextBtn.disabled = !hasList || (atEnd && !canLoadMore);
     }
 }
@@ -1585,13 +1576,18 @@ function toggleFileSelection(uuid, selected) {
 }
 
 // Update selected toolbar
+function selectionCount() {
+    return selectedFiles.size + selectedFolders.size;
+}
+
 function updateSelectedToolbar() {
     const toolbar = document.getElementById('selectedToolbar');
     const countLabel = document.getElementById('selectedCount');
+    syncIconSelection();
     
-    if (selectedFiles.size > 0) {
+    if (selectionCount() > 0) {
         toolbar.classList.remove('hidden');
-        countLabel.textContent = `已选择 ${selectedFiles.size} 项`;
+        countLabel.textContent = `已选择 ${selectionCount()} 项`;
     } else {
         toolbar.classList.add('hidden');
     }
@@ -1617,6 +1613,7 @@ function updateSelectedToolbar() {
 // Clear selection
 function clearSelection() {
     selectedFiles.clear();
+    selectedFolders.clear();
     
     // 清除列表视图的选中状态
     const listContainer = document.getElementById('fileListTableBody');
@@ -1661,6 +1658,9 @@ function selectAllOnPage() {
             if (checkbox) checkbox.checked = true;
             row.classList.add('bg-blue-50');
         });
+    } else if (currentView === 'icons') {
+        selectAllIcons();
+        return;
     } else {
         // 网格视图：选择所有卡片
         const gridContainer = document.getElementById('gridView');
@@ -1675,55 +1675,42 @@ function selectAllOnPage() {
 }
 
 // Switch view
-function switchView(view) {
-    currentView = view;
-    localStorage.setItem('tfs-view', view);
+function applyViewChrome(view, restorePanel = true) {
     const gridView = document.getElementById('gridView');
     const listView = document.getElementById('listView');
-    const gridViewBtn = document.getElementById('gridViewBtn');
-    const listViewBtn = document.getElementById('listViewBtn');
+    const iconView = document.getElementById('iconView');
     const paginationRow = document.getElementById('paginationRow');
-
-    selectedFiles.clear();
-    const selectedToolbar = document.getElementById('selectedToolbar');
-    if (selectedToolbar) {
-        selectedToolbar.classList.add('hidden');
+    if (gridView) gridView.classList.toggle('hidden', view !== 'grid');
+    if (listView) listView.classList.toggle('hidden', view !== 'list');
+    if (iconView) iconView.classList.toggle('hidden', view !== 'icons');
+    if (paginationRow) paginationRow.classList.toggle('hidden', view !== 'list');
+    document.querySelectorAll('.view-toggle-btn').forEach(button => {
+        button.classList.toggle('active', button.dataset.view === view);
+    });
+    const listModeActions = document.getElementById('listModeActions');
+    if (listModeActions) listModeActions.classList.toggle('view-hidden', view !== 'list');
+    if (view === 'list') {
+        if (restorePanel) restoreLocalPanel();
+        return;
     }
+    const localFolderPanel = document.getElementById('localFolderPanel');
+    const mainView = document.getElementById('mainView');
+    if (localFolderPanel) localFolderPanel.classList.add('no-transition');
+    if (mainView) mainView.classList.add('no-transition');
+    if (localFolderPanel) localFolderPanel.classList.remove('active');
+    if (mainView) mainView.classList.remove('local-panel-active');
+    if (mainView) mainView.offsetHeight;
+    if (localFolderPanel) localFolderPanel.classList.remove('no-transition');
+    if (mainView) mainView.classList.remove('no-transition');
+}
 
-    if (view === 'grid') {
-        gridView.classList.remove('hidden');
-        listView.classList.add('hidden');
-        gridViewBtn.classList.add('active');
-        listViewBtn.classList.remove('active');
-        if (paginationRow) {
-            paginationRow.classList.add('hidden');
-        }
-        const listModeActions = document.getElementById('listModeActions');
-        if (listModeActions) listModeActions.classList.add('view-hidden');
-        const localFolderPanel = document.getElementById('localFolderPanel');
-        const mainView = document.getElementById('mainView');
-        // 跳过关闭面板时的动画，避免左侧列表宽度变化的过渡效果
-        if (localFolderPanel) localFolderPanel.classList.add('no-transition');
-        if (mainView) mainView.classList.add('no-transition');
-        if (localFolderPanel) localFolderPanel.classList.remove('active');
-        if (mainView) mainView.classList.remove('local-panel-active');
-        if (mainView) mainView.offsetHeight; // 强制 reflow
-        if (localFolderPanel) localFolderPanel.classList.remove('no-transition');
-        if (mainView) mainView.classList.remove('no-transition');
-        loadGridView(true);
-    } else {
-        gridView.classList.add('hidden');
-        listView.classList.remove('hidden');
-        listViewBtn.classList.add('active');
-        gridViewBtn.classList.remove('active');
-        if (paginationRow) {
-            paginationRow.classList.remove('hidden');
-        }
-        const listModeActions = document.getElementById('listModeActions');
-        if (listModeActions) listModeActions.classList.remove('view-hidden');
-        restoreLocalPanel();
-        loadFileList();
-    }
+function switchView(view) {
+    if (view !== 'list' && view !== 'grid' && view !== 'icons') return;
+    currentView = view;
+    localStorage.setItem('tfs-view', view);
+    clearSelection();
+    applyViewChrome(view);
+    loadFileList();
 }
 
 // Change page (for list view only)
@@ -2088,12 +2075,13 @@ function closeUploadModal() {
 let deleteFolderTarget = null;
 
 function showDeleteConfirm() {
-    if (selectedFiles.size === 0) {
+    if (selectionCount() === 0) {
         showToast('请先选择要删除的文件', 'warning');
         return;
     }
     deleteFolderTarget = null;
-    document.getElementById('deleteConfirmMessage').textContent = '确定要删除选中的文件吗？此操作不可恢复。';
+    const folderNote = selectedFolders.size > 0 ? '文件夹会连同其中的内容一起删除。' : '此操作不可恢复。';
+    document.getElementById('deleteConfirmMessage').textContent = `确定要删除选中的 ${selectionCount()} 项吗？${folderNote}`;
     document.getElementById('deleteConfirmModal').classList.remove('hidden');
 }
 
@@ -2112,16 +2100,34 @@ function closeDeleteModal() {
 async function confirmDelete() {
     const uuids = Array.from(selectedFiles);
     const folder = deleteFolderTarget;
-    if (!folder && uuids.length === 0) return;
+    const folders = folder ? [] : Array.from(selectedFolders);
+    if (!folder && uuids.length === 0 && folders.length === 0) return;
     const submit = document.getElementById('confirmDeleteBtn');
     submit.disabled = true;
     try {
-        const response = await fetch(folder ? '/api/folders' : '/removeFileBatch', {
-            method: folder ? 'DELETE' : 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(folder ? {folder: folder.folderPath} : uuids)
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (folder) {
+            const response = await fetch('/api/folders', {
+                method: 'DELETE',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({folder: folder.folderPath})
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        } else if (uuids.length > 0) {
+            const response = await fetch('/removeFileBatch', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(uuids)
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        }
+        for (const path of folders) {
+            const response = await fetch('/api/folders', {
+                method: 'DELETE',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({folder: path})
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        }
         closeDeleteModal();
         clearSelection();
         showToast('删除成功', 'success');
@@ -2243,22 +2249,12 @@ function toggleShowAll() {
     currentPage = 1;
     gridPage = 0; // 重置网格页码
     
-    // 根据当前视图调用对应的加载函数
-    if (currentView === 'list') {
-        loadListView();
-    } else {
-        loadGridView(true);
-    }
+    loadFileList();
 }
 
 // Refresh file list
 function refreshFileList() {
-    // 根据当前视图调用对应的加载函数
-    if (currentView === 'list') {
-        loadListView();
-    } else {
-        loadGridView(true);
-    }
+    loadFileList();
     showToast('已刷新', 'success');
 }
 
@@ -2858,11 +2854,13 @@ async function fetchAlbumPoster(uuid) {
 
 // Apply or remove NSFW blur in both grid and list views
 function applyNsfwBlurToAll() {
-    document.querySelectorAll('.waterfall-card, .list-row').forEach(applyNsfwBlurToItem);
+    document.querySelectorAll('.waterfall-card, .list-row, .icon-item').forEach(applyNsfwBlurToItem);
 }
 
 // Check the tag labels shared by grid cards and list rows
 function itemHasNsfwTag(item) {
+    const tags = (item.dataset.tags || '').toLowerCase().split('\n');
+    if (tags.some(text => text.trim() === 'nsfw' || text.startsWith('nsfw:') || text.endsWith(':nsfw'))) return true;
     const badges = item.querySelectorAll('.waterfall-tag-badge, .tag-badge-text');
     for (const badge of badges) {
         const text = (badge.textContent || '').toLowerCase().trim();
@@ -4230,3 +4228,459 @@ document.addEventListener('click', async (e) => {
         video.currentTime = 0;
     });
 });
+
+// Icon view: aligned small icons, marquee selection, and drag into a folder.
+let iconPage = 0;
+let iconHasMore = true;
+let iconLoading = false;
+let iconRecords = new Map();
+let iconAnchorKey = null;
+let iconPointer = null;
+let iconMoveLock = false;
+const ICON_PAGE_SIZE = 200;
+
+function initializeIconBrowser() {
+    const view = document.getElementById('iconView');
+    if (!view) return;
+    view.addEventListener('pointerdown', onIconPointerDown);
+    view.addEventListener('pointermove', onIconPointerMove);
+    view.addEventListener('pointerup', onIconPointerUp);
+    view.addEventListener('pointercancel', onIconPointerUp);
+    const loadMore = document.getElementById('iconLoadMoreButton');
+    if (loadMore) loadMore.addEventListener('click', () => loadIconView(false));
+    const main = document.getElementById('mainView');
+    if (main) {
+        main.addEventListener('scroll', () => {
+            if (currentView !== 'icons' || iconLoading || !iconHasMore) return;
+            if (main.scrollTop + main.clientHeight >= main.scrollHeight - 280) loadIconView(false);
+        });
+    }
+}
+
+function loadIconView(reset = false) {
+    if (iconLoading && !reset) return;
+    const requestVersion = reset ? ++folderRequestVersion : folderRequestVersion;
+    const grid = document.getElementById('iconGrid');
+    const empty = document.getElementById('iconEmpty');
+    const loadMore = document.getElementById('iconLoadMore');
+    const loadMoreButton = document.getElementById('iconLoadMoreButton');
+    if (reset) {
+        iconPage = 0;
+        iconHasMore = true;
+        iconLoading = false;
+        iconRecords = new Map();
+        iconAnchorKey = null;
+        previewMediaFiles = [];
+        renderFolderBreadcrumbs();
+        if (grid) grid.replaceChildren();
+        if (empty) empty.classList.add('hidden');
+        if (loadMore) loadMore.classList.add('hidden');
+    }
+    if (!iconHasMore || !grid) {
+        iconLoading = false;
+        return;
+    }
+    iconLoading = true;
+    if (loadMoreButton) loadMoreButton.disabled = true;
+    const offset = iconPage * ICON_PAGE_SIZE;
+    const params = new URLSearchParams({
+        pageNumber: offset,
+        pageSize: ICON_PAGE_SIZE,
+        search: searchQuery
+    });
+    fetch(fileListUrl(params))
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json().then(normalizeFolderRows);
+        })
+        .then(data => {
+            if (requestVersion !== folderRequestVersion) return;
+            const rows = data && Array.isArray(data.rows) ? data.rows : [];
+            const fragment = document.createDocumentFragment();
+            rows.forEach(file => {
+                const item = createIconItem(file);
+                iconRecords.set(item.dataset.key, file);
+                if (isImage(file) || isVideo(file)) previewMediaFiles.push(file);
+                applyNsfwBlurToItem(item);
+                fragment.appendChild(item);
+            });
+            grid.appendChild(fragment);
+            syncIconSelection();
+            iconPage++;
+            iconHasMore = iconPage * ICON_PAGE_SIZE < (data.total || 0) && rows.length > 0;
+            if (empty) {
+                empty.textContent = searchQuery ? '没有匹配的文件' : '此文件夹是空的';
+                empty.classList.toggle('hidden', grid.childElementCount > 0);
+            }
+            if (loadMore) loadMore.classList.toggle('hidden', !iconHasMore);
+            updateStats(data);
+        })
+        .catch(error => {
+            if (requestVersion !== folderRequestVersion) return;
+            console.error('Error loading icons:', error);
+            showToast('加载文件失败', 'error');
+            iconHasMore = false;
+            if (loadMore) loadMore.classList.add('hidden');
+        })
+        .finally(() => {
+            if (requestVersion !== folderRequestVersion) return;
+            iconLoading = false;
+            if (loadMoreButton) loadMoreButton.disabled = false;
+        });
+}
+
+function createIconItem(file) {
+    const item = document.createElement('div');
+    const folder = !!file.folder;
+    item.className = 'icon-item';
+    item.dataset.kind = folder ? 'folder' : 'file';
+    item.dataset.key = folder ? 'folder:' + file.folderPath : 'file:' + (file.uuid || file.objectKey || file.fileName);
+    if (folder) item.dataset.folderPath = file.folderPath || '';
+    else item.dataset.objectKey = file.objectKey || '';
+    if (file.uuid) item.dataset.uuid = file.uuid;
+    const movable = folder ? file.managed !== false : !file.originEndpoint && !!file.objectKey;
+    item.dataset.managed = movable ? 'true' : 'false';
+    item.dataset.tags = (file.tags || []).map(tag => {
+        return tag.namespace && tag.namespace !== 'manual' ? `${tag.namespace}:${tag.name}` : tag.name;
+    }).join('\n');
+    item.setAttribute('role', 'gridcell');
+    item.title = file.fileName || '';
+
+    const glyph = document.createElement('div');
+    glyph.className = 'icon-glyph';
+    if (folder) {
+        glyph.appendChild(iconFolderGlyph());
+    } else if ((isImage(file) || isVideo(file) || isAlbum(file)) && hasThumb(file)) {
+        const image = document.createElement('img');
+        image.alt = '';
+        image.draggable = false;
+        image.src = BootFSSecurity.url(getThumbUrl(file));
+        image.addEventListener('error', () => {
+            glyph.replaceChildren(iconFileGlyph(isVideo(file) ? 'video' : 'image'));
+        });
+        glyph.appendChild(image);
+        if (isVideo(file)) glyph.appendChild(iconPlayBadge());
+    } else {
+        const kind = isImage(file) || isAlbum(file) ? 'image' : isVideo(file) ? 'video' : isAudio(file) ? 'audio' : 'file';
+        glyph.appendChild(iconFileGlyph(kind));
+    }
+    const name = document.createElement('div');
+    name.className = 'icon-name';
+    name.textContent = file.fileName || (folder ? '文件夹' : '未命名');
+    item.append(glyph, name);
+    return item;
+}
+
+function iconFolderGlyph() {
+    const holder = document.createElement('div');
+    holder.innerHTML = '<svg class="icon-folder-svg" viewBox="0 0 80 64" aria-hidden="true">'
+        + '<path fill="#7CC4F8" d="M8 18c0-3.3 2.7-6 6-6h16.2c1.2 0 2.3.5 3.1 1.3L37 17h29c3.3 0 6 2.7 6 6v2H8v-7z"></path>'
+        + '<path fill="#1E88E5" d="M4 30c0-2.2 1.8-4 4-4h64c2.2 0 4 1.8 4 4v22c0 3.3-2.7 6-6 6H10c-3.3 0-6-2.7-6-6V30z"></path>'
+        + '<path fill="#4DA3F0" d="M4 30c0-2.2 1.8-4 4-4h64c2.2 0 4 1.8 4 4v7H4v-7z"></path></svg>';
+    return holder.firstElementChild;
+}
+
+function iconFileGlyph(kind) {
+    const paths = {
+        image: '<rect x="4" y="4" width="16" height="16" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path>',
+        video: '<rect x="3" y="5" width="12" height="14" rx="2"></rect><path d="M15 10l6-3v10l-6-3z"></path>',
+        audio: '<path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>',
+        file: '<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path><path d="M14 2v6h6"></path>'
+    };
+    const holder = document.createElement('div');
+    holder.innerHTML = `<svg class="icon-file-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[kind] || paths.file}</svg>`;
+    return holder.firstElementChild;
+}
+
+function iconPlayBadge() {
+    const badge = document.createElement('span');
+    badge.className = 'icon-play-badge';
+    badge.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>';
+    return badge;
+}
+
+function iconItems() {
+    return Array.from(document.querySelectorAll('#iconGrid .icon-item'));
+}
+
+function addIconToSelection(item) {
+    if (!item) return;
+    if (item.dataset.kind === 'folder') selectedFolders.add(item.dataset.folderPath);
+    else if (item.dataset.uuid) selectedFiles.add(item.dataset.uuid);
+}
+
+function removeIconFromSelection(item) {
+    if (!item) return;
+    if (item.dataset.kind === 'folder') selectedFolders.delete(item.dataset.folderPath);
+    else selectedFiles.delete(item.dataset.uuid);
+}
+
+function selectOnlyIcon(item) {
+    selectedFiles.clear();
+    selectedFolders.clear();
+    addIconToSelection(item);
+    iconAnchorKey = item.dataset.key;
+    updateSelectedToolbar();
+}
+
+function toggleIcon(item) {
+    if (item.classList.contains('selected')) removeIconFromSelection(item);
+    else addIconToSelection(item);
+    iconAnchorKey = item.dataset.key;
+    updateSelectedToolbar();
+}
+
+function selectIconRange(item) {
+    const items = iconItems();
+    let anchor = items.findIndex(entry => entry.dataset.key === iconAnchorKey);
+    if (anchor < 0) anchor = 0;
+    const current = items.indexOf(item);
+    if (current < 0) return;
+    const start = Math.min(anchor, current);
+    const end = Math.max(anchor, current);
+    selectedFiles.clear();
+    selectedFolders.clear();
+    for (let index = start; index <= end; index++) addIconToSelection(items[index]);
+    updateSelectedToolbar();
+}
+
+function selectAllIcons() {
+    selectedFiles.clear();
+    selectedFolders.clear();
+    iconItems().forEach(addIconToSelection);
+    updateSelectedToolbar();
+}
+
+function syncIconSelection() {
+    iconItems().forEach(item => {
+        const selected = item.dataset.kind === 'folder'
+            ? selectedFolders.has(item.dataset.folderPath)
+            : selectedFiles.has(item.dataset.uuid);
+        item.classList.toggle('selected', selected);
+        item.setAttribute('aria-selected', selected ? 'true' : 'false');
+    });
+}
+
+function openIconItem(item) {
+    const file = iconRecords.get(item.dataset.key);
+    if (!file) return;
+    if (file.folder) openFolder(file.folderPath);
+    else previewFile(file);
+}
+
+function onIconPointerDown(event) {
+    if (event.button !== 0 || event.pointerType === 'touch') return;
+    if (event.target.closest('button, a, input, textarea')) return;
+    const view = document.getElementById('iconView');
+    const item = event.target.closest('.icon-item');
+    if (item && event.detail === 2) {
+        openIconItem(item);
+        return;
+    }
+    if (item) {
+        const additive = event.metaKey || event.ctrlKey;
+        const wasSelected = item.classList.contains('selected');
+        if (event.shiftKey) selectIconRange(item);
+        else if (additive) toggleIcon(item);
+        else if (!wasSelected) selectOnlyIcon(item);
+        iconPointer = {
+            mode: 'maybe-drag',
+            x: event.clientX,
+            y: event.clientY,
+            collapseOnClick: !event.shiftKey && !additive && wasSelected,
+            item
+        };
+    } else {
+        iconPointer = {
+            mode: 'maybe-marquee',
+            x: event.clientX,
+            y: event.clientY,
+            additive: event.metaKey || event.ctrlKey,
+            baseFiles: new Set(selectedFiles),
+            baseFolders: new Set(selectedFolders)
+        };
+    }
+    view.setPointerCapture(event.pointerId);
+    event.preventDefault();
+}
+
+function onIconPointerMove(event) {
+    if (!iconPointer) return;
+    if (!iconPointer.moved && Math.hypot(event.clientX - iconPointer.x, event.clientY - iconPointer.y) < 4) return;
+    iconPointer.moved = true;
+    autoScrollIconView(event.clientY);
+    if (iconPointer.mode === 'maybe-drag' || iconPointer.mode === 'drag') {
+        iconPointer.mode = 'drag';
+        if (!iconPointer.visual) {
+            iconItems().forEach(item => {
+                if (item.classList.contains('selected')) item.classList.add('is-dragging');
+            });
+            iconPointer.visual = true;
+        }
+        updateIconDrag(event.clientX, event.clientY);
+        return;
+    }
+    iconPointer.mode = 'marquee';
+    placeIconMarquee(iconPointer.x, iconPointer.y, event.clientX, event.clientY);
+    applyMarqueeSelection(clientSelectionRect(iconPointer.x, iconPointer.y, event.clientX, event.clientY), iconPointer);
+}
+
+function onIconPointerUp(event) {
+    if (!iconPointer) return;
+    const state = iconPointer;
+    iconPointer = null;
+    const marquee = document.getElementById('iconMarquee');
+    if (marquee) marquee.classList.add('hidden');
+    if (state.mode === 'drag') {
+        const target = dropTargetAt(event.clientX, event.clientY);
+        clearIconDragVisuals();
+        if (target && canDropInto(target.destination, target.managed)) moveSelectionTo(target.destination);
+        else if (target && !target.managed) showToast('请在来源节点移动这些项目', 'warning');
+        return;
+    }
+    clearIconDragVisuals();
+    if (!state.moved && state.mode === 'maybe-marquee' && !state.additive) clearSelection();
+    if (!state.moved && state.collapseOnClick && state.item) selectOnlyIcon(state.item);
+}
+
+function autoScrollIconView(clientY) {
+    const main = document.getElementById('mainView');
+    if (!main) return;
+    const rect = main.getBoundingClientRect();
+    if (clientY < rect.top + 56) main.scrollTop -= 18;
+    else if (clientY > rect.bottom - 56) main.scrollTop += 18;
+}
+
+function clientSelectionRect(x1, y1, x2, y2) {
+    return {
+        left: Math.min(x1, x2),
+        top: Math.min(y1, y2),
+        right: Math.max(x1, x2),
+        bottom: Math.max(y1, y2)
+    };
+}
+
+function placeIconMarquee(x1, y1, x2, y2) {
+    const view = document.getElementById('iconView');
+    const marquee = document.getElementById('iconMarquee');
+    if (!view || !marquee) return;
+    const bounds = view.getBoundingClientRect();
+    const rect = clientSelectionRect(x1, y1, x2, y2);
+    marquee.style.left = (rect.left - bounds.left) + 'px';
+    marquee.style.top = (rect.top - bounds.top) + 'px';
+    marquee.style.width = (rect.right - rect.left) + 'px';
+    marquee.style.height = (rect.bottom - rect.top) + 'px';
+    marquee.classList.remove('hidden');
+}
+
+function applyMarqueeSelection(rect, state) {
+    selectedFiles.clear();
+    selectedFolders.clear();
+    if (state.additive) {
+        state.baseFiles.forEach(uuid => selectedFiles.add(uuid));
+        state.baseFolders.forEach(path => selectedFolders.add(path));
+    }
+    iconItems().forEach(item => {
+        const bounds = item.getBoundingClientRect();
+        const hit = rect.left < bounds.right && rect.right > bounds.left && rect.top < bounds.bottom && rect.bottom > bounds.top;
+        if (hit) addIconToSelection(item);
+    });
+    updateSelectedToolbar();
+}
+
+function updateIconDrag(x, y) {
+    let badge = document.getElementById('iconDragBadge');
+    if (!badge) {
+        badge = document.createElement('div');
+        badge.id = 'iconDragBadge';
+        document.body.appendChild(badge);
+    }
+    badge.textContent = selectionCount() + ' 项';
+    badge.style.left = (x + 14) + 'px';
+    badge.style.top = (y + 16) + 'px';
+    document.querySelectorAll('.drop-target').forEach(element => element.classList.remove('drop-target'));
+    const target = dropTargetAt(x, y);
+    if (target && canDropInto(target.destination, target.managed)) target.element.classList.add('drop-target');
+}
+
+function dropTargetAt(x, y) {
+    const elements = document.elementsFromPoint ? document.elementsFromPoint(x, y) : [document.elementFromPoint(x, y)];
+    for (const element of elements) {
+        if (!element || !element.closest) continue;
+        const item = element.closest('.icon-item');
+        if (item && item.dataset.kind === 'folder' && !item.classList.contains('is-dragging')) {
+            return {destination: item.dataset.folderPath || '', element: item, managed: item.dataset.managed !== 'false'};
+        }
+        const crumb = element.closest('#folderBreadcrumbs button');
+        if (crumb) return {destination: crumb.dataset.folderPath || '', element: crumb, managed: true};
+    }
+    return null;
+}
+
+function canDropInto(destination, managed) {
+    if (!managed || selectionCount() === 0) return false;
+    if (destination === currentFolder) return false;
+    for (const path of selectedFolders) {
+        if (destination === path || destination.startsWith(path)) return false;
+    }
+    return true;
+}
+
+function clearIconDragVisuals() {
+    document.querySelectorAll('.is-dragging, .drop-target').forEach(element => {
+        element.classList.remove('is-dragging', 'drop-target');
+    });
+    const badge = document.getElementById('iconDragBadge');
+    if (badge) badge.remove();
+}
+
+async function moveSelectionTo(destination) {
+    if (iconMoveLock) return;
+    const files = [];
+    const folders = [];
+    iconItems().forEach(item => {
+        if (!item.classList.contains('selected') || item.dataset.managed === 'false') return;
+        if (item.dataset.kind === 'folder') folders.push(item.dataset.folderPath);
+        else if (item.dataset.objectKey) files.push(item.dataset.objectKey);
+    });
+    if (files.length + folders.length === 0) {
+        showToast('这些项目不能移动', 'warning');
+        return;
+    }
+    iconMoveLock = true;
+    try {
+        const response = await fetch('/api/folders/move', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({destination, files, folders})
+        });
+        if (!response.ok) {
+            showToast(await moveErrorMessage(response), 'error');
+            return;
+        }
+        const result = await response.json().catch(() => ({}));
+        clearSelection();
+        showToast(result.moved > 0 ? `已移动 ${result.moved} 项` : '已在此文件夹中', result.moved > 0 ? 'success' : 'info');
+        loadFileList();
+    } catch (error) {
+        console.error('Move error:', error);
+        showToast('移动失败', 'error');
+    } finally {
+        iconMoveLock = false;
+    }
+}
+
+async function moveErrorMessage(response) {
+    let text = '';
+    try { text = await response.text(); } catch (error) { text = ''; }
+    if (response.status === 409) {
+        if (/itself/i.test(text)) return '不能把文件夹移到它自己或子文件夹里';
+        if (/same name|already exists/i.test(text)) return '目标里已有同名文件或文件夹';
+        if (/source node/i.test(text)) return '请在来源节点移动这些项目';
+        if (/acknowledgement/i.test(text)) return '还有上传未完成，请稍后再移动';
+        return '无法移动，请刷新后重试';
+    }
+    if (response.status === 404) return '要移动的文件或文件夹已经不存在';
+    if (response.status === 400) return '不能移动这些项目';
+    return '移动失败';
+}

@@ -197,4 +197,60 @@ class FolderManagementIntegrationTest {
         assertFalse(Files.exists(ROOT.resolve("data").resolve(child.getUuid())));
         assertTrue(metadata.scan("/s3/bootfs/interrupted-delete/").isEmpty());
     }
+
+    @Test void iconViewMovePlacesFilesAndFoldersIntoTheDestinationWithoutRewritingBytes() throws Exception {
+        createFolder("", "归档");
+        S3ObjectMeta file = object("笔记.txt", "bytes");
+        S3ObjectMeta nested = object("资料/内层.txt", "nested");
+        mvc.perform(post("/api/folders/move").contentType("application/json")
+                .content(JSONObject.toJSONString(Map.of("destination", "归档/",
+                        "files", List.of("笔记.txt"), "folders", List.of("资料/")))))
+                .andExpect(status().is2xxSuccessful());
+        assertNull(keys.getIndex("bootfs", "笔记.txt"));
+        assertNull(keys.getIndex("bootfs", "资料/内层.txt"));
+        assertEquals(file.getUuid(), keys.getIndex("bootfs", "归档/笔记.txt").getUuid());
+        assertEquals(nested.getUuid(), keys.getIndex("bootfs", "归档/资料/内层.txt").getUuid());
+        assertEquals("归档/笔记.txt", context.query(file.getUuid()).getFileName());
+        assertEquals("bytes", Files.readString(Path.of(context.query(file.getUuid()).getPath())));
+        assertEquals("nested", Files.readString(Path.of(context.query(nested.getUuid()).getPath())));
+        assertEquals("笔记.txt", list("归档/").getJSONArray("rows").stream().map(JSONObject::from)
+                .filter(row -> !row.getBooleanValue("folder")).findFirst().orElseThrow().getString("fileName"));
+        assertEquals("资料", folderRow("归档/", "归档/资料/").getString("fileName"));
+    }
+
+    @Test void moveKeepsARenamedDisplayNameAndRejectsCollisionsOrMovesIntoItself() throws Exception {
+        createFolder("", "归档");
+        S3ObjectMeta file = object("笔记.txt", "bytes");
+        object("归档/笔记.txt", "already");
+        String documentKey = "/documents/full-text/" + file.getUuid();
+        JSONObject document = JSONObject.parseObject(metadata.getOne(documentKey));
+        document.put("fileName", "夏日.jpg");
+        document.put("title", "夏日.jpg");
+        metadata.put(documentKey, document.toJSONString());
+        mvc.perform(post("/api/folders/move").contentType("application/json")
+                .content(JSONObject.toJSONString(Map.of("destination", "归档/", "files", List.of("笔记.txt"), "folders", List.of()))))
+                .andExpect(status().isConflict());
+        assertEquals(file.getUuid(), keys.getIndex("bootfs", "笔记.txt").getUuid());
+        assertEquals("夏日.jpg", JSONObject.parseObject(metadata.getOne(documentKey)).getString("fileName"));
+
+        S3ObjectMeta picture = object("照片.jpg", "picture");
+        String pictureKey = "/documents/full-text/" + picture.getUuid();
+        JSONObject pictureDocument = JSONObject.parseObject(metadata.getOne(pictureKey));
+        pictureDocument.put("fileName", "夏日.jpg");
+        pictureDocument.put("title", "夏日.jpg");
+        metadata.put(pictureKey, pictureDocument.toJSONString());
+        mvc.perform(post("/api/folders/move").contentType("application/json")
+                .content(JSONObject.toJSONString(Map.of("destination", "归档/", "files", List.of("照片.jpg"), "folders", List.of()))))
+                .andExpect(status().is2xxSuccessful());
+        assertEquals(picture.getUuid(), keys.getIndex("bootfs", "归档/照片.jpg").getUuid());
+        assertEquals("夏日.jpg", JSONObject.parseObject(metadata.getOne(pictureKey)).getString("fileName"));
+        assertEquals("夏日.jpg", list("归档/").getJSONArray("rows").stream().map(JSONObject::from)
+                .filter(row -> "归档/照片.jpg".equals(row.getString("objectKey"))).findFirst().orElseThrow().getString("fileName"));
+
+        object("盒子/内层/child.txt", "child");
+        mvc.perform(post("/api/folders/move").contentType("application/json")
+                .content(JSONObject.toJSONString(Map.of("destination", "盒子/内层/", "files", List.of(), "folders", List.of("盒子/")))))
+                .andExpect(status().isConflict());
+        assertNotNull(keys.getIndex("bootfs", "盒子/内层/child.txt"));
+    }
 }

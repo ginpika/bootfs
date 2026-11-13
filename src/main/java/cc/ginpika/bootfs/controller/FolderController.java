@@ -204,6 +204,17 @@ public class FolderController {
         return folderService.rename(body.get("folder"), body.get("name"));
     }
 
+    @PostMapping("/api/folders/move")
+    public JSONObject move(@RequestBody JSONObject body) {
+        if (body == null) throw badRequest("Nothing to move");
+        String destination = body.getString("destination");
+        JSONArray files = body.getJSONArray("files");
+        JSONArray folders = body.getJSONArray("folders");
+        return folderService.move(destination == null ? "" : destination,
+                files == null ? List.of() : files.toJavaList(String.class),
+                folders == null ? List.of() : folders.toJavaList(String.class));
+    }
+
     @DeleteMapping("/api/folders")
     public JSONObject delete(@RequestBody Map<String, String> body) {
         return folderService.delete(body.get("folder"));

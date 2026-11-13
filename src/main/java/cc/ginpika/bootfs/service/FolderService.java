@@ -61,66 +61,241 @@ public class FolderService {
         requireFolder(target);
         synchronized (files) {
             requireLocal(folder);
-            requireNoPending(folder);
+            requireNoPendingPath(folder, true);
             if (folder.equals(target)) return result(folder);
             requireLocal(target);
-            requireNoPending(target);
-            String bucket = bucketPrefix();
-            NavigableMap<String, String> source = metadata.scan(bucket + folder);
-            Map<String, String> documents = matchingDocuments(folder);
-            source.values().forEach(raw -> {
-                String key = "/documents/full-text/" + JSONObject.parseObject(raw).getString("uuid");
-                String document = metadata.getOne(key);
-                if (document != null) documents.putIfAbsent(key, document);
-            });
-            if (source.isEmpty() && documents.isEmpty()) throw missing();
-            if (!metadata.scan(bucket + target).isEmpty() || !matchingDocuments(target).isEmpty())
-                throw conflict("The destination folder already exists");
-            materializeDirectories(folder, source, documents);
+            requireNoPendingPath(target, true);
             Map<String, String> expected = new LinkedHashMap<>(), puts = new LinkedHashMap<>();
             Set<String> deletes = new LinkedHashSet<>();
-            // Directory metadata alone does not keep a deleted S3 prefix alive.
-            metadata.scan(folderKey(target)).forEach((key, raw) -> { expected.put(key, raw); deletes.add(key); });
             Map<String, String> names = new HashMap<>();
-            source.forEach((oldKey, raw) -> {
-                String oldPath = oldKey.substring(bucket.length());
-                String newPath = target + oldPath.substring(folder.length());
-                JSONObject binding = JSONObject.parseObject(raw); binding.put("key", newPath);
-                expected.put(oldKey, raw); expected.put(bucket + newPath, null);
-                puts.put(bucket + newPath, binding.toJSONString()); deletes.add(oldKey);
-                names.putIfAbsent(binding.getString("uuid"), newPath);
-            });
-            metadata.scan(folderKey(folder)).forEach((oldKey, raw) -> {
-                String newKey = folderKey(target) + oldKey.substring(folderKey(folder).length());
-                expected.put(oldKey, raw); expected.putIfAbsent(newKey, null); puts.put(newKey, raw); deletes.add(oldKey);
-            });
-            documents.forEach((key, raw) -> {
-                JSONObject document = JSONObject.parseObject(raw);
-                String oldName = document.getString("fileName");
-                if (oldName == null) oldName = document.getString("title");
-                String newName = oldName != null && oldName.startsWith(folder)
-                        ? target + oldName.substring(folder.length()) : names.get(document.getString("uuid"));
-                if (newName == null) return;
-                document.put("fileName", newName); document.put("title", newName);
-                expected.put(key, raw); puts.put(key, document.toJSONString());
-                names.put(document.getString("uuid"), newName);
-            });
-            // Bindings may outlive a document projection; move every affected durable local inventory too.
-            metadata.scan("/nodes/").forEach((key, raw) -> {
-                if (!key.contains("/catalog/")) return;
-                JSONObject catalog = JSONObject.parseObject(raw);
-                String oldName = catalog.getString("fileName"), id = catalog.getString("uuid");
-                String newName = oldName != null && oldName.startsWith(folder)
-                        ? target + oldName.substring(folder.length()) : names.get(id);
-                if (newName == null) return;
-                catalog.put("fileName", newName); expected.put(key, raw); puts.put(key, catalog.toJSONString()); names.put(id, newName);
-            });
+            stageDirectoryRelocation(folder, target, expected, puts, deletes, names);
             if (!metadata.compareAndWrite(expected, puts, deletes)) throw conflict("The folder changed; refresh and retry");
-            names.forEach((id, nameAfterMove) -> {
-                FileObject local = context.STORAGE.get(id);
-                if (local != null) local.setFileName(nameAfterMove);
-            });
+            applyLocalNames(names);
             return result(target);
+        }
+    }
+
+    /** Move files and folders into an existing directory. Root is the empty destination. */
+    public JSONObject move(String destination, List<String> filesToMove, List<String> foldersToMove) {
+        if (destination == null) destination = "";
+        if (!destination.isEmpty()) requireFolder(destination);
+        List<String> fileKeys = distinct(filesToMove);
+        List<String> folderPaths = distinct(foldersToMove);
+        if (fileKeys.isEmpty() && folderPaths.isEmpty()) throw badRequest("Nothing to move");
+        if (fileKeys.size() + folderPaths.size() > 500) throw badRequest("Too many items");
+        synchronized (files) {
+            if (!destination.isEmpty()) {
+                requireLocal(destination);
+                requireNoPendingPath(destination, true);
+                result(destination);
+            }
+            List<Move> plan = planMove(destination, fileKeys, folderPaths);
+            JSONObject response = new JSONObject();
+            response.put("destination", destination);
+            response.put("moved", plan.size());
+            if (plan.isEmpty()) return response;
+            Map<String, String> expected = new LinkedHashMap<>(), puts = new LinkedHashMap<>();
+            Set<String> deletes = new LinkedHashSet<>();
+            Map<String, String> names = new HashMap<>();
+            for (Move move : plan) {
+                if (move.directory) stageDirectoryRelocation(move.source, move.target, expected, puts, deletes, names);
+                else stageFileRelocation(move.source, move.target, expected, puts, deletes, names);
+            }
+            if (!metadata.compareAndWrite(expected, puts, deletes)) throw conflict("The folder changed; refresh and retry");
+            applyLocalNames(names);
+            return response;
+        }
+    }
+
+    private List<Move> planMove(String destination, List<String> fileKeys, List<String> folderPaths) {
+        List<Move> plan = new ArrayList<>();
+        Set<String> reserved = new HashSet<>();
+        for (String folder : folderPaths) {
+            requireFolder(folder);
+            requireLocal(folder);
+            requireNoPendingPath(folder, true);
+            for (String other : folderPaths) {
+                if (!folder.equals(other) && (folder.startsWith(other) || other.startsWith(folder)))
+                    throw badRequest("Choose a folder or its contents, not both");
+            }
+            String name = folder.substring(0, folder.length() - 1);
+            name = name.substring(name.lastIndexOf('/') + 1);
+            String target = destination + name + "/";
+            requireFolder(target);
+            if (target.equals(folder)) continue;
+            if (target.startsWith(folder)) throw conflict("Cannot move a folder into itself");
+            reserve(reserved, target);
+            String bucket = bucketPrefix();
+            String sibling = target.substring(0, target.length() - 1);
+            if (metadata.getOne(bucket + sibling) != null) throw conflict("A file with this name already exists");
+            plan.add(new Move(folder, target, true));
+        }
+        for (String key : fileKeys) {
+            requireObjectKey(key);
+            for (String folder : folderPaths) {
+                if (key.startsWith(folder)) throw badRequest("Choose a folder or its contents, not both");
+            }
+            requireNoPendingPath(key, false);
+            String name = key.substring(key.lastIndexOf('/') + 1);
+            String target = destination + name;
+            requireObjectKey(target);
+            if (target.equals(key)) continue;
+            reserve(reserved, target);
+            plan.add(new Move(key, target, false));
+        }
+        return plan;
+    }
+
+    private void stageDirectoryRelocation(String folder, String target, Map<String, String> expected,
+                                          Map<String, String> puts, Set<String> deletes, Map<String, String> names) {
+        String bucket = bucketPrefix();
+        NavigableMap<String, String> source = metadata.scan(bucket + folder);
+        Map<String, String> documents = matchingDocuments(folder);
+        source.values().forEach(raw -> {
+            String key = "/documents/full-text/" + JSONObject.parseObject(raw).getString("uuid");
+            String document = metadata.getOne(key);
+            if (document != null) documents.putIfAbsent(key, document);
+        });
+        if (source.isEmpty() && documents.isEmpty()) throw missing();
+        if (!metadata.scan(bucket + target).isEmpty() || !matchingDocuments(target).isEmpty())
+            throw conflict("The destination folder already exists");
+        materializeDirectories(folder, source, documents);
+        // Directory metadata alone does not keep a deleted S3 prefix alive.
+        metadata.scan(folderKey(target)).forEach((key, raw) -> { expected.put(key, raw); deletes.add(key); });
+        source.forEach((oldKey, raw) -> {
+            String oldPath = oldKey.substring(bucket.length());
+            String newPath = target + oldPath.substring(folder.length());
+            JSONObject binding = JSONObject.parseObject(raw); binding.put("key", newPath);
+            expected.put(oldKey, raw); expected.put(bucket + newPath, null);
+            puts.put(bucket + newPath, binding.toJSONString()); deletes.add(oldKey);
+            names.putIfAbsent(binding.getString("uuid"), newPath);
+        });
+        metadata.scan(folderKey(folder)).forEach((oldKey, raw) -> {
+            String newKey = folderKey(target) + oldKey.substring(folderKey(folder).length());
+            expected.put(oldKey, raw); expected.putIfAbsent(newKey, null); puts.put(newKey, raw); deletes.add(oldKey);
+        });
+        documents.forEach((key, raw) -> {
+            JSONObject document = JSONObject.parseObject(raw);
+            String oldName = document.getString("fileName");
+            if (oldName == null) oldName = document.getString("title");
+            String newName = oldName != null && oldName.startsWith(folder)
+                    ? target + oldName.substring(folder.length()) : names.get(document.getString("uuid"));
+            if (newName == null) return;
+            document.put("fileName", newName); document.put("title", newName);
+            expected.put(key, raw); puts.put(key, document.toJSONString());
+            names.put(document.getString("uuid"), newName);
+        });
+        // Bindings may outlive a document projection; move every affected durable local inventory too.
+        metadata.scan("/nodes/").forEach((key, raw) -> {
+            if (!key.contains("/catalog/")) return;
+            JSONObject catalog = JSONObject.parseObject(raw);
+            String oldName = catalog.getString("fileName"), id = catalog.getString("uuid");
+            String newName = oldName != null && oldName.startsWith(folder)
+                    ? target + oldName.substring(folder.length()) : names.get(id);
+            if (newName == null) return;
+            catalog.put("fileName", newName); expected.put(key, raw); puts.put(key, catalog.toJSONString()); names.put(id, newName);
+        });
+    }
+
+    private void stageFileRelocation(String source, String target, Map<String, String> expected,
+                                     Map<String, String> puts, Set<String> deletes, Map<String, String> names) {
+        String bucket = bucketPrefix();
+        if (puts.containsKey(bucket + target) || metadata.getOne(bucket + target) != null)
+            throw conflict("A file with this name already exists");
+        if (!metadata.scan(bucket + target + "/").isEmpty() || !matchingDocuments(target + "/").isEmpty())
+            throw conflict("A folder with this name already exists");
+        String raw = metadata.getOne(bucket + source);
+        String uuid = null;
+        if (raw != null) {
+            JSONObject binding = JSONObject.parseObject(raw);
+            uuid = binding.getString("uuid");
+            if (uuid == null || uuid.isBlank() || metadata.getOne("/tombstones/" + uuid) != null) throw fileMissing();
+            binding.put("key", target);
+            expected.put(bucket + source, raw);
+            expected.put(bucket + target, null);
+            puts.put(bucket + target, binding.toJSONString());
+            deletes.add(bucket + source);
+            names.put(uuid, target);
+        }
+        String documentKey = uuid == null ? null : "/documents/full-text/" + uuid;
+        String documentRaw = documentKey == null ? null : metadata.getOne(documentKey);
+        if (raw == null) {
+            for (Map.Entry<String, String> entry : metadata.scan("/documents/full-text/").entrySet()) {
+                JSONObject document = JSONObject.parseObject(entry.getValue());
+                if (document.getBooleanValue("_bootfsDeleted")) continue;
+                String name = document.getString("fileName");
+                if (name == null) name = document.getString("title");
+                if (!source.equals(name)) continue;
+                uuid = document.getString("uuid");
+                if (uuid != null && metadata.getOne("/tombstones/" + uuid) != null) continue;
+                documentKey = entry.getKey();
+                documentRaw = entry.getValue();
+                break;
+            }
+            if (documentRaw == null) throw fileMissing();
+            names.put(uuid, target);
+        }
+        if (documentRaw != null) {
+            JSONObject document = JSONObject.parseObject(documentRaw);
+            if (document.getString("originEndpoint") != null) throw conflict("Manage this file on its source node");
+            String oldName = document.getString("fileName");
+            if (oldName == null) oldName = document.getString("title");
+            String newName = rewriteFileName(oldName, source, target);
+            document.put("fileName", newName);
+            document.put("title", newName);
+            expected.put(documentKey, documentRaw);
+            puts.put(documentKey, document.toJSONString());
+            names.put(uuid, newName);
+        }
+        String movedId = uuid;
+        metadata.scan("/nodes/").forEach((key, rawCatalog) -> {
+            if (!key.contains("/catalog/") || movedId == null) return;
+            JSONObject catalog = JSONObject.parseObject(rawCatalog);
+            if (!movedId.equals(catalog.getString("uuid"))) return;
+            String oldName = catalog.getString("fileName");
+            String newName = rewriteFileName(oldName == null ? names.get(movedId) : oldName, source, target);
+            if (newName.equals(oldName)) return;
+            catalog.put("fileName", newName);
+            expected.put(key, rawCatalog);
+            puts.put(key, catalog.toJSONString());
+        });
+    }
+
+    /** A renamed display name without a slash stays visible; a stored path follows the file into the new folder. */
+    static String rewriteFileName(String oldName, String source, String target) {
+        if (oldName == null || oldName.isEmpty() || oldName.equals(source)) return target;
+        int slash = source.lastIndexOf('/');
+        String parent = slash < 0 ? "" : source.substring(0, slash + 1);
+        String relocatedParent = target.substring(0, target.lastIndexOf('/') + 1);
+        if (!parent.isEmpty() && oldName.startsWith(parent)) return relocatedParent + oldName.substring(parent.length());
+        if (!oldName.contains("/")) return oldName;
+        return target;
+    }
+
+    private void applyLocalNames(Map<String, String> names) {
+        names.forEach((id, nameAfterMove) -> {
+            FileObject local = context.STORAGE.get(id);
+            if (local != null && nameAfterMove != null) local.setFileName(nameAfterMove);
+        });
+    }
+
+    private static void reserve(Set<String> reserved, String path) {
+        String sibling = path.endsWith("/") ? path.substring(0, path.length() - 1) : path + "/";
+        if (!reserved.add(path) || reserved.contains(sibling)) throw conflict("Two items would have the same name");
+    }
+
+    private static List<String> distinct(List<String> values) {
+        if (values == null || values.isEmpty()) return List.of();
+        if (values.contains(null)) throw badRequest("Invalid move");
+        return new ArrayList<>(new LinkedHashSet<>(values));
+    }
+
+    private static final class Move {
+        final String source;
+        final String target;
+        final boolean directory;
+        Move(String source, String target, boolean directory) {
+            this.source = source; this.target = target; this.directory = directory;
         }
     }
 
@@ -128,7 +303,7 @@ public class FolderService {
         requireFolder(folder);
         synchronized (files) {
             requireLocal(folder);
-            requireNoPending(folder);
+            requireNoPendingPath(folder, true);
             String bucket = bucketPrefix();
             NavigableMap<String, String> source = metadata.scan(bucket + folder);
             Map<String, String> documents = matchingDocuments(folder);
@@ -257,14 +432,17 @@ public class FolderService {
             if (offset + hits.size() >= page.getIntValue("total")) return;
         }
     }
-    private void requireNoPending(String folder) {
+    private void requireNoPendingPath(String path, boolean directory) {
         for (String raw : metadata.scan("/pending-publications/").values()) {
             JSONObject intent = JSONObject.parseObject(raw);
             JSONObject binding = intent.getJSONObject("s3Binding"), file = intent.getJSONObject("file");
             String key = binding == null ? null : binding.getString("key");
             String name = file == null ? null : file.getString("fileName");
             boolean sameBucket = binding == null || config.getBucket().equals(binding.getString("bucket"));
-            if (sameBucket && ((key != null && key.startsWith(folder)) || (name != null && name.startsWith(folder))))
+            boolean affected = directory
+                    ? (key != null && key.startsWith(path)) || (name != null && name.startsWith(path))
+                    : path.equals(key) || path.equals(name);
+            if (sameBucket && affected)
                 throw conflict("Folder uploads are still awaiting acknowledgement; retry after they finish");
         }
     }
@@ -284,6 +462,12 @@ public class FolderService {
         if (folder == null || folder.isEmpty() || !folder.endsWith("/") || folder.startsWith("/")
                 || folder.getBytes(StandardCharsets.UTF_8).length > 1024 || folder.chars().anyMatch(Character::isISOControl)) throw badRequest("Invalid folder path");
     }
+    public static void requireObjectKey(String key) {
+        if (key == null || key.isEmpty() || key.startsWith("/") || key.endsWith("/") || key.contains("\\")
+                || key.getBytes(StandardCharsets.UTF_8).length > 1024 || key.chars().anyMatch(Character::isISOControl))
+            throw badRequest("Invalid object path");
+        requireName(key.substring(key.lastIndexOf('/') + 1));
+    }
     public static void requireName(String name) {
         if (name == null || name.isBlank() || name.equals(".") || name.equals("..") || name.length() > 255
                 || name.contains("/") || name.contains("\\") || name.chars().anyMatch(Character::isISOControl)) throw badRequest("Invalid folder name");
@@ -291,4 +475,5 @@ public class FolderService {
     private static ResponseStatusException badRequest(String message) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, message); }
     private static ResponseStatusException conflict(String message) { return new ResponseStatusException(HttpStatus.CONFLICT, message); }
     private static ResponseStatusException missing() { return new ResponseStatusException(HttpStatus.NOT_FOUND, "Folder does not exist"); }
+    private static ResponseStatusException fileMissing() { return new ResponseStatusException(HttpStatus.NOT_FOUND, "File does not exist"); }
 }

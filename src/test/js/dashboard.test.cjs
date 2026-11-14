@@ -8,16 +8,17 @@ function dashboard(clusterState) {
     const elements = new Map();
     const events = new EventTarget();
     const intervals = new Map();
+    const timeouts = new Map();
     const nodes = [];
-    const removals = [];
-    let onRemove = () => { throw new Error('Unexpected removal'); };
+    const actions = [];
+    let onAction = () => { throw new Error('Unexpected cluster action'); };
     let timer = 0;
     const document = {
         activeElement: null,
         hidden: false,
         getElementById(id) {
             if (!elements.has(id)) elements.set(id, {
-                textContent: '', innerHTML: '', dataset: {}, listeners: {},
+                textContent: '', innerHTML: '', dataset: {}, listeners: {}, style: {},
                 classList: {add() {}, remove() {}, toggle() {}},
                 addEventListener(name, fn) { this.listeners[name] = fn; },
                 showModal() { this.open = true; },
@@ -35,15 +36,16 @@ function dashboard(clusterState) {
         window: {location: {href: 'http://localhost/dashboard', search: ''}, history: {replaceState() {}}},
         setInterval(fn) { intervals.set(++timer, fn); return timer; },
         clearInterval(id) { intervals.delete(id); },
-        setTimeout() {}, clearTimeout() {},
+        setTimeout(fn, delay) { timeouts.set(++timer, {fn, delay}); return timer; },
+        clearTimeout(id) { timeouts.delete(id); },
         async fetch(url, options) {
             if (url === '/api/dashboard/stats') return Response.json({succeed: true, data: {nodes: [...nodes]}});
             if (url === '/api/cluster/status' && clusterState) return Response.json(clusterState);
-            assert.equal(url, '/api/cluster/remove');
+            assert.ok(['/api/cluster/leave', '/api/cluster/remove'].includes(url), url);
             assert.equal(options.method, 'POST');
-            const body = JSON.parse(options.body);
-            removals.push(body);
-            return onRemove(body);
+            const action = {url, body: JSON.parse(options.body)};
+            actions.push(action);
+            return onAction(action);
         }
     });
     const scripts = clusterState ? ['security-utils.js', 'dashboard.js', 'dashboard-cluster.js'] : ['dashboard.js'];
@@ -51,7 +53,7 @@ function dashboard(clusterState) {
         vm.runInContext(fs.readFileSync(path.join(__dirname, '../../main/resources/static', script), 'utf8'), sandbox);
     }
     return {
-        sandbox, intervals, nodes, removals,
+        sandbox, intervals, nodes, actions,
         element: id => document.getElementById(id),
         init() {
             sandbox.window.bootfsClusterAvailable = false;
@@ -62,7 +64,11 @@ function dashboard(clusterState) {
             nodes.splice(0, nodes.length, ...nextNodes);
             await sandbox.loadStats();
         },
-        onRemove(handler) { onRemove = handler; }
+        async refreshCluster() {
+            const timeout = [...timeouts.values()].find(({delay}) => delay === 2500);
+            await timeout.fn();
+        },
+        onAction(handler) { onAction = handler; }
     };
 }
 
@@ -152,21 +158,22 @@ test('only confirmation removes the captured offline node and refreshes selectio
     const dialog = page.element('clusterRemoveDialog');
     const confirm = page.element('clusterRemoveConfirm');
     assert.equal(open.disabled, false);
+    assert.equal(open.textContent, '移除节点');
     open.listeners.click();
     assert.equal(dialog.open, true);
     assert.equal(page.element('clusterRemoveTarget').textContent, 'b · http://b');
     page.element('clusterRemoveCancel').listeners.click();
     assert.equal(dialog.open, false);
-    assert.deepEqual(page.removals, []);
+    assert.deepEqual(page.actions, []);
 
     open.listeners.click();
     page.sandbox.selectNode('a');
     let releaseRemoval;
-    page.onRemove(() => new Promise(resolve => { releaseRemoval = resolve; }));
+    page.onAction(() => new Promise(resolve => { releaseRemoval = resolve; }));
     const removing = confirm.listeners.click();
     assert.equal(confirm.disabled, true);
     await confirm.listeners.click();
-    assert.deepEqual(page.removals, [{nodeId: 'b'}]);
+    assert.deepEqual(page.actions, [{url: '/api/cluster/remove', body: {nodeId: 'b'}}]);
     page.sandbox.selectNode('b');
 
     let releaseStats;
@@ -202,17 +209,62 @@ test('remote removal on a non-coordinator links to the coordinator for the selec
     assert.equal(link.hidden, false);
     assert.equal(link.href, 'https://b.example/dashboard?node=c%2Fd');
     assert.equal(page.element('clusterRemoveConfirm').disabled, true);
-    assert.deepEqual(page.removals, []);
+    assert.deepEqual(page.actions, []);
 
     page.element('clusterRemoveCancel').listeners.click();
     page.sandbox.selectNode('a');
     page.element('clusterRemoveOpen').listeners.click();
     const confirm = page.element('clusterRemoveConfirm');
     assert.equal(confirm.disabled, false);
-    page.onRemove(() => Response.json({error: '请求失败'}, {status: 409}));
+    page.onAction(() => Response.json({error: '请求失败'}, {status: 409}));
     await confirm.listeners.click();
-    assert.deepEqual(page.removals, [{nodeId: 'a'}]);
+    assert.deepEqual(page.actions, [{url: '/api/cluster/leave', body: {}}]);
     assert.equal(page.element('clusterRemoveDialog').open, true);
-    assert.match(page.element('clusterRemoveMessage').textContent, /请求失败/);
+    assert.equal(page.element('clusterRemoveMessage').textContent, '退出集群失败：请求失败');
     assert.equal(confirm.disabled, false);
+});
+
+test('the Master display follows cluster status and confirmed local departure clears cluster details', async () => {
+    const state = {phase: 'ACTIVE', nodeId: 'a', coordinatorId: 'b', groupId: 'group', independent: false,
+        peers: {a: 'http://a', b: 'http://b'}};
+    const page = dashboard(state);
+    const a = node('a', true, 1);
+    await page.load([a, {...node('b', false, 2), online: false}]);
+    page.init();
+    await new Promise(setImmediate);
+
+    const coordinator = page.element('clusterCoordinatorStatus');
+    assert.equal(coordinator.hidden, false);
+    assert.equal(coordinator.textContent, '调度节点（Master） · b · http://b');
+    state.coordinatorId = 'a';
+    await page.refreshCluster();
+    assert.equal(coordinator.textContent, '调度节点（Master） · a · http://a');
+
+    const open = page.element('clusterRemoveOpen');
+    const dialog = page.element('clusterRemoveDialog');
+    const confirm = page.element('clusterRemoveConfirm');
+    assert.equal(open.textContent, '退出集群');
+    assert.equal(open.disabled, false);
+    open.listeners.click();
+    assert.equal(page.element('clusterRemoveTitle').textContent, '退出集群');
+    assert.equal(confirm.textContent, '确认退出');
+    assert.deepEqual(page.actions, []);
+
+    page.element('clusterPairingCode').textContent = '12345678';
+    page.onAction(() => {
+        Object.assign(state, {groupId: 'independent', independent: true, peers: {a: 'http://a'}});
+        page.nodes.pop();
+        return Response.json(state);
+    });
+    await confirm.listeners.click();
+    await new Promise(setImmediate);
+    assert.deepEqual(page.actions, [{url: '/api/cluster/leave', body: {}}]);
+    assert.equal(dialog.open, false);
+    assert.equal(open.disabled, true);
+    assert.equal(page.element('clusterRemoveFeedback').textContent, '本机已退出集群，可继续独立使用。');
+    assert.equal(page.element('clusterPairingCode').textContent, '');
+    assert.equal(coordinator.hidden, true);
+    assert.equal(coordinator.textContent, '');
+    assert.equal(page.sandbox.selectedNodeId, 'a');
+    assert.doesNotMatch(page.element('nodesGrid').innerHTML, /data-node-id="b"/);
 });

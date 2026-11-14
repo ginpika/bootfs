@@ -8,12 +8,13 @@
         var codeInput = document.getElementById('clusterLinkCode');
         var generate = document.getElementById('clusterPairingGenerate');
         var ownCode = document.getElementById('clusterPairingCode');
-        var leave = document.getElementById('clusterLeave');
         var submit = document.getElementById('clusterLinkSubmit');
         var message = document.getElementById('clusterLinkMessage');
         var summary = document.getElementById('clusterSummary');
+        var coordinatorStatus = document.getElementById('clusterCoordinatorStatus');
         var removeOpen = document.getElementById('clusterRemoveOpen');
         var removeDialog = document.getElementById('clusterRemoveDialog');
+        var removeTitle = document.getElementById('clusterRemoveTitle');
         var removeTarget = document.getElementById('clusterRemoveTarget');
         var removeDescription = document.getElementById('clusterRemoveDescription');
         var removeCoordinator = document.getElementById('clusterRemoveCoordinator');
@@ -30,7 +31,6 @@
         var submissionError = '';
         var generation = 0;
         var issuing = false;
-        var leaving = false;
         var removing = false;
         var removal;
         var codeExpiresAt = 0;
@@ -57,32 +57,33 @@
         }
 
         function updateRemovalControls() {
-            removeOpen.disabled = !isClusterMember(selectedNodeId) || posting || leaving || removing || Boolean(target);
+            removeOpen.textContent = selectedNodeId && selectedNodeId === local?.nodeId ? '退出集群' : '移除节点';
+            removeOpen.disabled = !isClusterMember(selectedNodeId) || posting || removing || Boolean(target);
             if (!removeDialog.open) return;
+            var self = removal.nodeId === local.nodeId;
             var canRemove = isClusterMember(removal.nodeId) && local.groupId === removal.groupId;
-            var self = canRemove && removal.nodeId === local.nodeId;
             var needsCoordinator = canRemove && !self && local.nodeId !== local.coordinatorId;
             var coordinatorEndpoint = needsCoordinator && local.peers[local.coordinatorId];
             var coordinatorUrl = coordinatorEndpoint && window.BootFSSecurity.url(coordinatorEndpoint);
+            removeTitle.textContent = self ? '退出集群' : '从集群中移除节点';
             removeCoordinator.hidden = !coordinatorUrl;
             if (coordinatorUrl) {
                 removeCoordinator.href = coordinatorUrl.replace(/\/+$/, '') + '/dashboard?node=' + encodeURIComponent(removal.nodeId);
             }
-            removeDescription.textContent = !canRemove ? '该节点已不在当前集群中。' : needsCoordinator ?
-                '请在协调节点的仪表盘操作。' : self ? '确认后，本机将退出集群并继续独立提供文件服务。' :
+            removeDescription.textContent = !canRemove ? '集群成员状态已变更，请关闭后重新选择节点。' : needsCoordinator ?
+                '请在调度节点的仪表盘操作。' : self ? '确认后，本机将退出集群并继续独立提供文件服务。' :
                 '确认后，集群将停止通过该节点访问文件。该节点会保留本地文件。';
+            removeConfirm.textContent = self ? (removing ? '正在退出…' : '确认退出') : (removing ? '正在移除…' : '确认移除');
             removeConfirm.disabled = !canRemove || needsCoordinator || removing;
             removeCancel.disabled = removing;
         }
 
         function updateControls() {
             var enabled = local && local.phase === 'ACTIVE';
-            submit.disabled = !enabled || posting || leaving || Boolean(target);
+            submit.disabled = !enabled || posting || removing || Boolean(target);
             input.disabled = posting || Boolean(target);
             codeInput.disabled = posting || Boolean(target);
-            generate.disabled = !enabled || issuing || leaving;
-            leave.hidden = !enabled || local.independent;
-            leave.disabled = leaving || posting;
+            generate.disabled = !enabled || issuing || removing;
             submit.textContent = posting ? '正在连接…' : (target ? '连接中…' : '连接');
             updateRemovalControls();
         }
@@ -122,6 +123,11 @@
                 summary.textContent = phaseLabel(state) + (state.lastError ? '：' + state.lastError : '');
                 if (!target) showMessage(summary.textContent, Boolean(state.lastError));
             }
+            var coordinatorId = state.phase === 'ACTIVE' && !state.independent && state.coordinatorId;
+            var coordinatorEndpoint = coordinatorId && state.peers?.[coordinatorId];
+            coordinatorStatus.hidden = !coordinatorId;
+            coordinatorStatus.textContent = coordinatorId ? '调度节点（Master） · ' + coordinatorId +
+                (coordinatorEndpoint ? ' · ' + coordinatorEndpoint : '') : '';
             var nextKey = window.bootfsClusterAvailable ? state.phase + JSON.stringify(state.peers || {}) : '';
             if (nextKey && (reloadStats || nextKey !== statsKey)) loadStats(reloadStats);
             statsKey = nextKey;
@@ -136,7 +142,7 @@
         }
 
         async function refresh() {
-            if (checking || posting || leaving || removing) return;
+            if (checking || posting || removing) return;
             checking = true;
             var currentGeneration = generation;
             clearTimeout(timer);
@@ -202,14 +208,6 @@
             codeExpiresAt = 0;
         }
 
-        leave.addEventListener('click', async function () {
-            leaving = true; generation++; updateControls();
-            try {
-                renderLocal(await request('leave', {})); clearPairing();
-                showMessage('已退出集群。本机文件、元数据和索引保持可用，现在可以连接其他集群。');
-            } catch (error) { showMessage(error.message, true); }
-            finally { leaving = false; updateControls(); refresh(); }
-        });
         document.addEventListener('dashboard-node-selected', updateRemovalControls);
         removeOpen.addEventListener('click', function () {
             if (removeOpen.disabled) return;
@@ -231,21 +229,22 @@
             removing = true;
             generation++;
             removeMessage.textContent = '';
-            removeConfirm.textContent = '正在移除…';
-            updateRemovalControls();
+            updateControls();
             try {
-                var state = await request('remove', {nodeId: nodeId});
-                if (self) clearPairing();
+                var state = self ? await request('leave', {}) : await request('remove', {nodeId: nodeId});
+                if (self) {
+                    clearPairing();
+                    showMessage('');
+                }
                 renderLocal(state, true);
                 if (!self && selectedNodeId === nodeId) selectNode(state.nodeId);
                 removeDialog.close();
                 removeFeedback.textContent = self ? '本机已退出集群，可继续独立使用。' : '已从集群移除节点 ' + nodeId + '。';
             } catch (error) {
                 var detail = error.name === 'AbortError' ? '请求超时，请刷新后确认节点状态。' : error.message;
-                removeMessage.textContent = '移除节点失败：' + detail;
+                removeMessage.textContent = (self ? '退出集群失败：' : '移除节点失败：') + detail;
             } finally {
                 removing = false;
-                removeConfirm.textContent = '确认移除';
                 updateControls();
                 if (removeDialog.open && !removeConfirm.disabled) removeConfirm.focus();
                 refresh();

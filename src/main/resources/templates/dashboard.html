@@ -241,6 +241,8 @@
                         style="color: var(--color-text-primary);">节点统计</h2>
                     <p id="selectedNodeStatus" role="status" aria-live="polite" class="text-xs mb-3 break-words"
                         style="color: var(--color-text-muted);">请选择节点</p>
+                    <p id="clusterCoordinatorStatus" hidden class="text-xs mb-3 break-words"
+                        style="color: var(--color-text-secondary);"></p>
                     <div id="systemStats" class="grid grid-cols-1 lg:grid-cols-3 gap-4"></div>
                 </section>
 
@@ -379,7 +381,6 @@
                 <p id="clusterPairingCode" role="status" aria-live="polite" class="text-sm mt-2" style="color: var(--color-text-secondary);"></p>
             </div>
             <p id="clusterLinkMessage" role="status" aria-live="polite" class="text-sm break-words" style="color: var(--color-text-secondary);"></p>
-            <button id="clusterLeave" type="button" hidden class="text-sm" style="color: var(--color-danger);">退出当前集群，继续独立使用本机资源</button>
             <div class="flex justify-end gap-2 pt-2">
                 <button id="clusterLinkClose" type="button" class="px-4 py-2 text-sm theme-rounded-lg theme-btn-secondary">关闭</button>
                 <button id="clusterLinkSubmit" type="submit" disabled class="px-4 py-2 text-sm font-medium theme-rounded-lg theme-btn-primary disabled:opacity-50">连接</button>
@@ -393,7 +394,7 @@
             <h2 id="clusterRemoveTitle" class="text-lg font-semibold font-display">从集群中移除节点</h2>
             <p id="clusterRemoveTarget" class="text-sm font-medium break-words"></p>
             <p id="clusterRemoveDescription" class="text-sm" style="color: var(--color-text-secondary);"></p>
-            <a id="clusterRemoveCoordinator" class="text-sm underline" style="color: var(--color-accent-primary);" hidden>打开协调节点的仪表盘</a>
+            <a id="clusterRemoveCoordinator" class="text-sm underline" style="color: var(--color-accent-primary);" hidden>打开调度节点的仪表盘</a>
             <p id="clusterRemoveMessage" role="alert" class="text-sm break-words empty:hidden" style="color: var(--color-danger);"></p>
             <div class="flex justify-end gap-2 pt-2">
                 <button id="clusterRemoveCancel" type="button" autofocus class="theme-btn-secondary">取消</button>

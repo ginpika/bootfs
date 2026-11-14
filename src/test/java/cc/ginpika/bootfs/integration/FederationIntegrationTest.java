@@ -93,6 +93,14 @@ class FederationIntegrationTest {
         assertFalse(offline.getBooleanValue("online"));
         assertFalse(offline.containsKey("system"));
         assertFalse(offline.containsKey("requests"));
+
+        var removed = request(a, "POST", "/api/cluster/remove", new JSONObject(Map.of("nodeId", b.id)).toJSONString(), null);
+        assertEquals(200, removed.statusCode(), removed.body());
+        assertFalse(JSON.parseObject(removed.body()).getJSONObject("peers").containsKey(b.id));
+        JSONObject refreshed = JSON.parseObject(request(a, "GET", "/api/dashboard/stats", null, null).body());
+        JSONArray remaining = refreshed.getJSONObject("data").getJSONArray("nodes");
+        assertEquals(1, remaining.size());
+        assertEquals(a.id, remaining.getJSONObject(0).getString("nodeId"));
     }
 
     private void assertDashboardNodes(Node entry, String currentId, String remoteId) throws Exception {

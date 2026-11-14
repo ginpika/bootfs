@@ -16,7 +16,7 @@ var CATEGORY_LABELS = {
 
 var dashboardNodes = [];
 var selectedNodeId = new URLSearchParams(window.location.search).get('node');
-var statsLoading = false;
+var statsRequest = null;
 
 function setTheme(theme) {
     document.documentElement.classList.forEach(function (c) {
@@ -133,6 +133,7 @@ function renderSelectedNode() {
     renderRequests(available ? node.requests : null,
         available ? '该节点未提供请求统计' : '节点不可达，请求统计暂不可用');
     renderUptime(available ? node.appStartTime : null);
+    document.dispatchEvent(new Event('dashboard-node-selected'));
 }
 
 function systemRow(label, value) {
@@ -366,11 +367,11 @@ function formatUptime(ms) {
 
 // ============ 数据加载 ============
 
-function loadStats() {
-    if (window.bootfsClusterAvailable === false || statsLoading) return;
-    statsLoading = true;
+function loadStats(reload) {
+    if (window.bootfsClusterAvailable === false) return;
+    if (statsRequest) return reload ? statsRequest.then(function () { return loadStats(); }) : statsRequest;
     hideError();
-    return fetch('/api/dashboard/stats')
+    statsRequest = fetch('/api/dashboard/stats')
         .then(function (r) { return r.json(); })
         .then(function (res) {
             if (!res.succeed) {
@@ -393,7 +394,8 @@ function loadStats() {
         .catch(function () {
             showError('请求失败');
         })
-        .finally(function () { statsLoading = false; });
+        .finally(function () { statsRequest = null; });
+    return statsRequest;
 }
 
 document.addEventListener('DOMContentLoaded', function () {

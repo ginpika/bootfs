@@ -12,6 +12,15 @@
         var submit = document.getElementById('clusterLinkSubmit');
         var message = document.getElementById('clusterLinkMessage');
         var summary = document.getElementById('clusterSummary');
+        var removeOpen = document.getElementById('clusterRemoveOpen');
+        var removeDialog = document.getElementById('clusterRemoveDialog');
+        var removeTarget = document.getElementById('clusterRemoveTarget');
+        var removeDescription = document.getElementById('clusterRemoveDescription');
+        var removeCoordinator = document.getElementById('clusterRemoveCoordinator');
+        var removeMessage = document.getElementById('clusterRemoveMessage');
+        var removeFeedback = document.getElementById('clusterRemoveFeedback');
+        var removeCancel = document.getElementById('clusterRemoveCancel');
+        var removeConfirm = document.getElementById('clusterRemoveConfirm');
         var local = null;
         var target = '';
         var posting = false;
@@ -22,6 +31,8 @@
         var generation = 0;
         var issuing = false;
         var leaving = false;
+        var removing = false;
+        var removal;
         var codeExpiresAt = 0;
         var storageKey = 'bootfs-dashboard-link';
         try { target = sessionStorage.getItem(storageKey) || ''; } catch (ignored) {}
@@ -40,6 +51,30 @@
             message.style.color = error ? 'var(--color-danger)' : 'var(--color-text-secondary)';
         }
 
+        function isClusterMember(nodeId) {
+            return nodeId && local?.phase === 'ACTIVE' && !local.independent &&
+                Object.prototype.hasOwnProperty.call(local.peers || {}, nodeId);
+        }
+
+        function updateRemovalControls() {
+            removeOpen.disabled = !isClusterMember(selectedNodeId) || posting || leaving || removing || Boolean(target);
+            if (!removeDialog.open) return;
+            var canRemove = isClusterMember(removal.nodeId) && local.groupId === removal.groupId;
+            var self = canRemove && removal.nodeId === local.nodeId;
+            var needsCoordinator = canRemove && !self && local.nodeId !== local.coordinatorId;
+            var coordinatorEndpoint = needsCoordinator && local.peers[local.coordinatorId];
+            var coordinatorUrl = coordinatorEndpoint && window.BootFSSecurity.url(coordinatorEndpoint);
+            removeCoordinator.hidden = !coordinatorUrl;
+            if (coordinatorUrl) {
+                removeCoordinator.href = coordinatorUrl.replace(/\/+$/, '') + '/dashboard?node=' + encodeURIComponent(removal.nodeId);
+            }
+            removeDescription.textContent = !canRemove ? '该节点已不在当前集群中。' : needsCoordinator ?
+                '请在协调节点的仪表盘操作。' : self ? '确认后，本机将退出集群并继续独立提供文件服务。' :
+                '确认后，集群将停止通过该节点访问文件。该节点会保留本地文件。';
+            removeConfirm.disabled = !canRemove || needsCoordinator || removing;
+            removeCancel.disabled = removing;
+        }
+
         function updateControls() {
             var enabled = local && local.phase === 'ACTIVE';
             submit.disabled = !enabled || posting || leaving || Boolean(target);
@@ -49,6 +84,7 @@
             leave.hidden = !enabled || local.independent;
             leave.disabled = leaving || posting;
             submit.textContent = posting ? '正在连接…' : (target ? '连接中…' : '连接');
+            updateRemovalControls();
         }
 
         async function request(path, body) {
@@ -58,7 +94,7 @@
                 var response = await fetch('/api/cluster/' + path, {
                     method: body ? 'POST' : 'GET',
                     credentials: 'same-origin', redirect: 'error', signal: controller.signal,
-                    headers: body ? {'Content-Type': 'application/json'} : {},
+                    headers: body ? {'Content-Type': 'application/json', 'X-BootFS-Request': '1'} : {},
                     body: body ? JSON.stringify(body) : undefined
                 });
                 if (!response.headers.get('content-type')?.includes('application/json')) {
@@ -74,7 +110,7 @@
             } finally { clearTimeout(timeout); }
         }
 
-        function renderLocal(state) {
+        function renderLocal(state, reloadStats) {
             local = state;
             window.bootfsClusterAvailable = state.phase === 'ACTIVE' || state.phase === 'STATIC';
             if (state.phase === 'STATIC') {
@@ -87,7 +123,7 @@
                 if (!target) showMessage(summary.textContent, Boolean(state.lastError));
             }
             var nextKey = window.bootfsClusterAvailable ? state.phase + JSON.stringify(state.peers || {}) : '';
-            if (nextKey && nextKey !== statsKey) loadStats();
+            if (nextKey && (reloadStats || nextKey !== statsKey)) loadStats(reloadStats);
             statsKey = nextKey;
             updateControls();
         }
@@ -100,7 +136,7 @@
         }
 
         async function refresh() {
-            if (checking || posting || leaving) return;
+            if (checking || posting || leaving || removing) return;
             checking = true;
             var currentGeneration = generation;
             clearTimeout(timer);
@@ -159,13 +195,61 @@
             refresh();
         });
         document.getElementById('clusterLinkClose').addEventListener('click', function () { dialog.close(); });
+        function clearPairing() {
+            rememberTarget('');
+            codeInput.value = '';
+            ownCode.textContent = '';
+            codeExpiresAt = 0;
+        }
+
         leave.addEventListener('click', async function () {
             leaving = true; generation++; updateControls();
             try {
-                renderLocal(await request('leave', {})); rememberTarget(''); codeInput.value = ''; ownCode.textContent = ''; codeExpiresAt = 0;
+                renderLocal(await request('leave', {})); clearPairing();
                 showMessage('已退出集群。本机文件、元数据和索引保持可用，现在可以连接其他集群。');
             } catch (error) { showMessage(error.message, true); }
             finally { leaving = false; updateControls(); refresh(); }
+        });
+        document.addEventListener('dashboard-node-selected', updateRemovalControls);
+        removeOpen.addEventListener('click', function () {
+            if (removeOpen.disabled) return;
+            removal = {nodeId: selectedNodeId, groupId: local.groupId};
+            removeTarget.textContent = removal.nodeId + ' · ' + local.peers[removal.nodeId];
+            removeMessage.textContent = '';
+            removeFeedback.textContent = '';
+            removeDialog.showModal();
+            updateRemovalControls();
+        });
+        removeCancel.addEventListener('click', function () { removeDialog.close(); });
+        removeDialog.addEventListener('cancel', function (event) {
+            if (removing) event.preventDefault();
+        });
+        removeConfirm.addEventListener('click', async function () {
+            if (!removeDialog.open || removeConfirm.disabled) return;
+            var nodeId = removal.nodeId;
+            var self = nodeId === local.nodeId;
+            removing = true;
+            generation++;
+            removeMessage.textContent = '';
+            removeConfirm.textContent = '正在移除…';
+            updateRemovalControls();
+            try {
+                var state = await request('remove', {nodeId: nodeId});
+                if (self) clearPairing();
+                renderLocal(state, true);
+                if (!self && selectedNodeId === nodeId) selectNode(state.nodeId);
+                removeDialog.close();
+                removeFeedback.textContent = self ? '本机已退出集群，可继续独立使用。' : '已从集群移除节点 ' + nodeId + '。';
+            } catch (error) {
+                var detail = error.name === 'AbortError' ? '请求超时，请刷新后确认节点状态。' : error.message;
+                removeMessage.textContent = '移除节点失败：' + detail;
+            } finally {
+                removing = false;
+                removeConfirm.textContent = '确认移除';
+                updateControls();
+                if (removeDialog.open && !removeConfirm.disabled) removeConfirm.focus();
+                refresh();
+            }
         });
         generate.addEventListener('click', async function () {
             issuing = true; updateControls();

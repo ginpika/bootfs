@@ -975,7 +975,7 @@ function createWaterfallCard(file) {
     
     return `
         <div class="waterfall-card theme-card theme-rounded-xl overflow-hidden cursor-pointer group" data-uuid="${file.uuid}" data-type="${isAlbumFile ? 'album' : (isImageFile ? 'image' : 'video')}">
-            <div class="relative w-full">
+            <div class="waterfall-media relative w-full">
                 ${isAlbumFile ? `
                     <div class="relative w-full aspect-[3/4] album-cover" style="background-color: var(--color-bg-tertiary);" data-album-uuid="${file.uuid}">
                         ${albumCoverUrl ? `
@@ -4172,6 +4172,7 @@ let iconPointer = null;
 let iconMoveLock = false;
 let iconThumbnailObserver;
 const ICON_PAGE_SIZE = 200;
+const ICON_CONTENT_SELECTOR = '.icon-glyph > :not(.icon-thumbnail-pending), .icon-name';
 
 function initializeIconBrowser() {
     const view = document.getElementById('iconView');
@@ -4311,13 +4312,14 @@ function createIconItem(file) {
 
     const glyph = document.createElement('span');
     glyph.className = 'icon-glyph';
-    const kind = isImage(file) || isAlbum(file) ? 'image' : isVideo(file) ? 'video' : isAudio(file) ? 'audio' : 'file';
+    const kind = folder ? 'folder'
+        : isImage(file) || isAlbum(file) ? 'image'
+        : isVideo(file) ? 'video'
+        : isAudio(file) ? 'audio' : 'file';
     const thumbnail = (kind === 'image' || kind === 'video') && hasThumb(file)
         ? BootFSSecurity.url(getThumbUrl(file)) : '';
-    if (folder) {
-        glyph.appendChild(iconFolderGlyph());
-    } else if (thumbnail) {
-        const placeholder = iconFileGlyph(kind);
+    if (thumbnail) {
+        const placeholder = createIconGlyph(kind);
         const image = document.createElement('img');
         image.alt = '';
         image.draggable = false;
@@ -4338,7 +4340,7 @@ function createIconItem(file) {
             image.src = thumbnail;
         }
     } else {
-        glyph.appendChild(iconFileGlyph(kind));
+        glyph.appendChild(createIconGlyph(kind));
     }
     const name = document.createElement('span');
     name.className = 'icon-name';
@@ -4347,24 +4349,16 @@ function createIconItem(file) {
     return item;
 }
 
-function iconFolderGlyph() {
-    const holder = document.createElement('div');
-    holder.innerHTML = '<svg class="icon-folder-svg" viewBox="0 0 80 64" aria-hidden="true">'
-        + '<path fill="#7CC4F8" d="M8 18c0-3.3 2.7-6 6-6h16.2c1.2 0 2.3.5 3.1 1.3L37 17h29c3.3 0 6 2.7 6 6v2H8v-7z"></path>'
-        + '<path fill="#1E88E5" d="M4 30c0-2.2 1.8-4 4-4h64c2.2 0 4 1.8 4 4v22c0 3.3-2.7 6-6 6H10c-3.3 0-6-2.7-6-6V30z"></path>'
-        + '<path fill="#4DA3F0" d="M4 30c0-2.2 1.8-4 4-4h64c2.2 0 4 1.8 4 4v7H4v-7z"></path></svg>';
-    return holder.firstElementChild;
-}
-
-function iconFileGlyph(kind) {
+function createIconGlyph(kind) {
     const paths = {
+        folder: '<path d="M3 6a2 2 0 0 1 2-2h4l3 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"></path>',
         image: '<rect x="4" y="4" width="16" height="16" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path>',
         video: '<rect x="3" y="5" width="12" height="14" rx="2"></rect><path d="M15 10l6-3v10l-6-3z"></path>',
         audio: '<path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>',
         file: '<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path><path d="M14 2v6h6"></path>'
     };
     const holder = document.createElement('div');
-    holder.innerHTML = `<svg class="icon-file-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[kind] || paths.file}</svg>`;
+    holder.innerHTML = `<svg class="icon-item-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[kind] || paths.file}</svg>`;
     return holder.firstElementChild;
 }
 
@@ -4448,8 +4442,8 @@ function openIconItem(item) {
 function onIconPointerDown(event) {
     if (event.button !== 0 || event.pointerType === 'touch') return;
     const view = document.getElementById('iconView');
-    const item = event.target.closest('.icon-item');
-    if (!item && event.target.closest('button, a, input, textarea')) return;
+    const item = event.target.closest(ICON_CONTENT_SELECTOR)?.closest('.icon-item');
+    if (!item && event.target.closest('button:not(.icon-item), a, input, textarea')) return;
     if (item) {
         item.focus({preventScroll: true});
         const additive = event.metaKey || event.ctrlKey;
@@ -4556,7 +4550,7 @@ function applyMarqueeSelection(rect, state) {
         state.baseFolders.forEach(path => selectedFolders.add(path));
     }
     iconItems().forEach(item => {
-        const hit = Array.from(item.querySelectorAll('.icon-glyph > :not(.icon-thumbnail-pending), .icon-name')).some(part => {
+        const hit = Array.from(item.querySelectorAll(ICON_CONTENT_SELECTOR)).some(part => {
             const bounds = part.getBoundingClientRect();
             return rect.left < bounds.right && rect.right > bounds.left && rect.top < bounds.bottom && rect.bottom > bounds.top;
         });

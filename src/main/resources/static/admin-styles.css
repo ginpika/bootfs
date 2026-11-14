@@ -307,12 +307,16 @@
     color: white;
 }
 
-/* NSFW blur effect: only on grid media and list thumbnails */
-.waterfall-card.nsfw-blur > div:first-child,
+/* NSFW blur effect on thumbnails */
+.waterfall-card.nsfw-blur .waterfall-media :is(img, video),
 .list-row.nsfw-blur .list-thumbnail img,
 .icon-item.nsfw-blur .icon-glyph img {
     filter: blur(25px);
     transition: filter 0.3s ease;
+}
+
+.waterfall-media :is(img, video) {
+    clip-path: inset(0);
 }
 
 /* Video card container */
@@ -764,6 +768,10 @@ input[type="checkbox"]:checked {
     outline-offset: 1px;
 }
 
+.icon-item.selected {
+    background: var(--color-accent-muted);
+}
+
 .icon-item.selected .icon-name {
     background: var(--color-accent-primary);
     color: var(--color-accent-text);
@@ -812,7 +820,7 @@ input[type="checkbox"]:checked {
     max-width: 72px;
     max-height: 72px;
     object-fit: contain;
-    border-radius: 4px;
+    clip-path: inset(0 round 4px);
 }
 
 .icon-glyph .icon-thumbnail-pending {
@@ -823,14 +831,8 @@ input[type="checkbox"]:checked {
     pointer-events: none;
 }
 
-.icon-folder-svg,
-.icon-file-svg {
-    width: 68px;
-    height: 54px;
+.icon-item-svg {
     display: block;
-}
-
-.icon-file-svg {
     width: 42px;
     height: 42px;
     color: var(--color-text-secondary);

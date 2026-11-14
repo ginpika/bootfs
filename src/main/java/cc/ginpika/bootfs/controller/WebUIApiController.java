@@ -10,6 +10,7 @@ import cc.ginpika.bootfs.domain.dto.FileObjectWebVO;
 import cc.ginpika.bootfs.domain.dto.Tag;
 import cc.ginpika.bootfs.core.Context;
 import cc.ginpika.bootfs.service.ClusterProxyService;
+import cc.ginpika.bootfs.service.FolderService;
 import cc.ginpika.bootfs.service.ReverseProxyService;
 import cc.ginpika.bootfs.service.etcd.EtcdService;
 import cc.ginpika.bootfs.service.meilisearch.ImageHostDocument;
@@ -335,11 +336,22 @@ public class WebUIApiController {
         }
         if (name.length() > 255) return ResponseEntity.badRequest().body("文件名过长");
         ResponseEntity<?> remote=remoteResource(uuid,body); if (remote!=null) return remote;
-        prepareLocalEdit(uuid);
-        if (meiliSearchService.findDocument("full-text", uuid) == null) return ResponseEntity.notFound().build();
-        // Only the node holding the complete resource commits its metadata.
-        meiliSearchService.updateDocumentTitle("full-text", uuid, name);
-        synchronizeLocalResourceMetadata(uuid);
+        synchronized (fileService) {
+            prepareLocalEdit(uuid);
+            JSONObject document = meiliSearchService.findDocument("full-text", uuid);
+            if (document == null) return ResponseEntity.notFound().build();
+            String oldName = document.getString("fileName");
+            int slash = oldName == null ? -1 : oldName.lastIndexOf('/');
+            FileObject local = context.query(uuid);
+            // HLS-only catalog entries use their logical filename as the folder listing key.
+            if (slash >= 0 && local != null && "1".equals(local.getHlsAvailable())
+                    && (local.getPath() == null || !Files.isRegularFile(Path.of(local.getPath())))) {
+                name = FolderService.uploadKey(oldName.substring(0, slash + 1), name);
+            }
+            // Only the node holding the complete resource commits its metadata.
+            meiliSearchService.updateDocumentTitle("full-text", uuid, name);
+            synchronizeLocalResourceMetadata(uuid);
+        }
         return resourceMutationResponse();
     }
 

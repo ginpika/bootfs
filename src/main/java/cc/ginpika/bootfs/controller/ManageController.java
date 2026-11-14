@@ -5,8 +5,10 @@ import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.core.Context;
 import cc.ginpika.bootfs.core.IdGenerator;
 import cc.ginpika.bootfs.domain.dto.FileObject;
+import cc.ginpika.bootfs.s3.S3ConcurrentWriteException;
 import cc.ginpika.bootfs.service.FileService;
 import cc.ginpika.bootfs.service.FileTransferService;
+import cc.ginpika.bootfs.service.FolderService;
 import cc.ginpika.bootfs.domain.result.TransferResult;
 import cc.ginpika.bootfs.service.ClusterProxyService;
 import cc.ginpika.bootfs.service.ReverseProxyService;
@@ -20,10 +22,12 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -104,13 +108,18 @@ public class ManageController {
     // upload comic/zip archive
     @PutMapping("/comic")
     public ResponseEntity<?> uploadComic(@RequestPart("file") MultipartFile file,
+                                         @RequestParam(value = "folder", defaultValue = "") String folder,
                                          @RequestHeader(value="X-BootFS-Request-Id", required=false) String requestId) {
         String url = "";
         try {
             log.info("Uploading comic archive: {}", file.getOriginalFilename());
-            url = fileService.uploadComic(file, requestId);
+            url = fileService.uploadComic(file, requestId, folder);
         } catch (cc.ginpika.bootfs.kernel.object.PublicationPendingException pending) {
             return ResponseEntity.status(503).header("X-BootFS-Upload-Id", pending.getUploadId()).body(pending.getMessage());
+        } catch (S3ConcurrentWriteException conflict) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(conflict.getMessage());
+        } catch (ResponseStatusException invalidPath) {
+            throw invalidPath;
         } catch (Exception e) {
             log.error("图包上传失败", e);
             return ResponseEntity.internalServerError().build();
@@ -300,8 +309,10 @@ public class ManageController {
 
     @PostMapping("/virtual-file")
     public ResponseEntity<?> createVirtualFile(@RequestBody Map<String, String> request) {
+        String fileName = request.getOrDefault("fileName", "virtual_video.mp4");
+        String folder = request.getOrDefault("folder", "");
+        String logicalName = "".equals(folder) ? fileName : FolderService.uploadKey(folder, fileName);
         try {
-            String fileName = request.getOrDefault("fileName", "virtual_video.mp4");
             String fileType = request.getOrDefault("fileType", "video/mp4");
             
             String uuid = IdGenerator.getUniqueId();
@@ -310,15 +321,10 @@ public class ManageController {
             FileObject fileObject = FileObject.builder()
                     .path(filePath)
                     .uuid(uuid)
-                    .fileName(fileName)
+                    .fileName(logicalName)
                     .size(0L)
                     .hlsAvailable("1")
                     .build();
-            
-            context.record(fileObject, uuid);
-            
-            // 索引到本地 MeiliSearch full_text，支持分布式下各节点仅展示本地数据
-            indexVirtualFileToMeiliSearch(fileObject);
             
             Path hlsDir = Path.of(tfsConfig.getPathPrefix(), "hls", uuid);
             Files.createDirectories(hlsDir);
@@ -326,6 +332,10 @@ public class ManageController {
             Path m3u8Path = hlsDir.resolve("playlist.m3u8");
             String initialM3u8 = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXT-X-PLAYLIST-TYPE:EVENT\n";
             Files.writeString(m3u8Path, initialM3u8);
+
+            // HLS files have a catalog path. The playlist and segments are stored by UUID.
+            context.record(fileObject, uuid);
+            indexVirtualFileToMeiliSearch(fileObject);
             
             log.info("Created virtual FileObject with uuid: {}, hlsAvailable: {}", uuid, fileObject.getHlsAvailable());
             

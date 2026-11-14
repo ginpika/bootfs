@@ -12,20 +12,27 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpMethod;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -88,6 +95,59 @@ class FolderManagementIntegrationTest {
         mvc.perform(post("/api/folders/tags").contentType("application/json").content(JSONObject.toJSONString(
                 Map.of("folder", path, "tags", List.of(Map.of("namespace", "manual", "name", name))))))
                 .andExpect(status().is2xxSuccessful());
+    }
+
+    @Test void uploadsFilesAlbumsAndHlsVideosToTheOpenFolder() throws Exception {
+        String folder = "上传 + 测试/内层/";
+        createFolder("", "上传 + 测试");
+        createFolder("上传 + 测试/", "内层");
+        var plain = new MockMultipartFile("file", "notes.txt", "text/plain", new byte[]{1});
+        mvc.perform(multipart("/api/folders/upload").file(plain).param("folder", folder))
+                .andExpect(status().isOk());
+
+        var archive = new ByteArrayOutputStream();
+        try (var zip = new ZipOutputStream(archive)) {
+            zip.putNextEntry(new ZipEntry("page.jpg"));
+            zip.write(new byte[]{1, 2, 3});
+            zip.closeEntry();
+        }
+        var comic = new MockMultipartFile("file", "[Comic]图包.zip", "application/zip", archive.toByteArray());
+        mvc.perform(multipart(HttpMethod.PUT, "/comic").file(comic).param("folder", folder))
+                .andExpect(status().isOk());
+        mvc.perform(multipart(HttpMethod.PUT, "/comic").file(comic).param("folder", folder))
+                .andExpect(status().isConflict());
+
+        byte[] created = mvc.perform(post("/virtual-file").contentType("application/json")
+                        .content(JSONObject.toJSONString(Map.of("folder", folder, "fileName", "视频.mp4"))))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        String videoId = JSONObject.parseObject(new String(created, StandardCharsets.UTF_8)).getString("uuid");
+        var segment = new MockMultipartFile("segment", "part1.ts", "video/mp2t", new byte[]{1, 2, 3});
+        mvc.perform(multipart("/hls/{uuid}/segments", videoId).file(segment).param("sequence", "0"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/hls/{uuid}/finalize", videoId)).andExpect(status().isOk());
+        mvc.perform(get("/hls/{uuid}/playlist.m3u8", videoId))
+                .andExpect(status().isOk()).andExpect(content().string(containsString("part1.ts")));
+
+        List<JSONObject> rows = list(folder).getJSONArray("rows").toJavaList(JSONObject.class);
+        assertEquals(3, rows.size());
+        Map<String, JSONObject> byName = new HashMap<>();
+        rows.forEach(row -> byName.put(row.getString("fileName"), row));
+        assertNotNull(keys.getIndex("bootfs", folder + "notes.txt"));
+        String albumId = byName.get("[Comic]图包.zip").getString("uuid");
+        assertEquals(albumId, keys.getIndex("bootfs", folder + "[Comic]图包.zip").getUuid());
+        assertEquals("1", byName.get("[Comic]图包.zip").getString("albumAvailable"));
+        assertEquals("图包", byName.get("[Comic]图包.zip").getString("title"));
+        assertEquals(videoId, byName.get("视频.mp4").getString("uuid"));
+        assertEquals("1", byName.get("视频.mp4").getString("hlsAvailable"));
+        assertTrue(list("").getJSONArray("rows").toJavaList(JSONObject.class).stream()
+                .noneMatch(row -> byName.containsKey(row.getString("fileName"))));
+
+        mvc.perform(put("/api/file/{uuid}/rename", videoId).contentType("application/json")
+                        .content(JSONObject.toJSONString(Map.of("fileName", "重命名视频.mp4"))))
+                .andExpect(status().isOk());
+        JSONObject renamed = list(folder).getJSONArray("rows").toJavaList(JSONObject.class).stream()
+                .filter(row -> videoId.equals(row.getString("uuid"))).findFirst().orElseThrow();
+        assertEquals("重命名视频.mp4", renamed.getString("fileName"));
     }
 
     @Test void explicitFoldersExposePersistentIdentityCreationTimeAndEditableTags() throws Exception {

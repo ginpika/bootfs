@@ -491,14 +491,29 @@ public class FolderService {
     }
     private String bucketPrefix() { return "/s3/" + config.getBucket() + "/"; }
     private String folderKey(String folder) { return "/folders/" + config.getBucket() + "/" + folder; }
+    public static void requireDirectoryPrefix(String folder) {
+        if (folder == null || (!folder.isEmpty() && !folder.endsWith("/"))) throw badRequest("Invalid folder path");
+        requireKeyLengthAndCharacters(folder);
+    }
+    public static String uploadKey(String folder, String name) {
+        requireDirectoryPrefix(folder);
+        requireName(name);
+        String key = folder + name;
+        requireKeyLengthAndCharacters(key);
+        return key;
+    }
+    private static void requireKeyLengthAndCharacters(String key) {
+        if (key.getBytes(StandardCharsets.UTF_8).length > 1024 || key.chars().anyMatch(Character::isISOControl))
+            throw badRequest("Invalid object path");
+    }
     public static void requireFolder(String folder) {
-        if (folder == null || folder.isEmpty() || !folder.endsWith("/") || folder.startsWith("/")
-                || folder.getBytes(StandardCharsets.UTF_8).length > 1024 || folder.chars().anyMatch(Character::isISOControl)) throw badRequest("Invalid folder path");
+        requireDirectoryPrefix(folder);
+        if (folder.isEmpty() || folder.startsWith("/")) throw badRequest("Invalid folder path");
     }
     public static void requireObjectKey(String key) {
-        if (key == null || key.isEmpty() || key.startsWith("/") || key.endsWith("/") || key.contains("\\")
-                || key.getBytes(StandardCharsets.UTF_8).length > 1024 || key.chars().anyMatch(Character::isISOControl))
+        if (key == null || key.isEmpty() || key.startsWith("/") || key.endsWith("/") || key.contains("\\"))
             throw badRequest("Invalid object path");
+        requireKeyLengthAndCharacters(key);
         requireName(key.substring(key.lastIndexOf('/') + 1));
     }
     public static void requireName(String name) {

@@ -103,7 +103,7 @@ public class FileService {
     public String upload(MultipartFile file, String requestId) throws IOException {
         String name = filename(file.getOriginalFilename());
         if ((name.startsWith("[Comic]") || name.startsWith("[Picture]")) && extension(name).equals(".zip")) {
-            return uploadAlbum(file, requestId);
+            return uploadAlbum(file, requestId, null);
         }
         try (InputStream input = file.getInputStream()) {
             return context.buildUrl(publish(input, name, uploadId(requestId, "ordinary"), null, false, true).file().getUuid());
@@ -113,8 +113,17 @@ public class FileService {
     public String uploadComic(MultipartFile file) throws IOException { return uploadComic(file, null); }
 
     public String uploadComic(MultipartFile file, String requestId) throws IOException {
-        if (extension(filename(file.getOriginalFilename())).equals(".zip")) return uploadAlbum(file, requestId);
-        return upload(file, requestId);
+        return uploadComic(file, requestId, "");
+    }
+
+    public String uploadComic(MultipartFile file, String requestId, String folder) throws IOException {
+        String name = file.getOriginalFilename();
+        String key = folder.isEmpty() ? null : FolderService.uploadKey(folder, name);
+        if (extension(filename(name)).equals(".zip")) return uploadAlbum(file, requestId, key);
+        if (key == null) return upload(file, requestId);
+        try (InputStream input = file.getInputStream()) {
+            return context.buildUrl(publishS3(input, key, bucket(), uploadContentType(file), null, null, requestId).file().getUuid());
+        }
     }
 
     private String uploadId(String requestId, String scope) {
@@ -135,10 +144,15 @@ public class FileService {
 
     public PublishedResource publishS3(InputStream input, String key, String bucket, String contentType,
                                        String expectedBinding, String payloadHash, String requestId) throws IOException {
+        JSONObject binding = s3Binding(key, bucket, contentType, expectedBinding, payloadHash);
+        return publish(input, key, uploadId(requestId, "s3:" + bucket + ":" + key), null, false, false, binding);
+    }
+
+    private static JSONObject s3Binding(String key, String bucket, String contentType, String expectedBinding, String payloadHash) {
         JSONObject binding = new JSONObject();
         binding.put("key", key); binding.put("bucket", bucket); binding.put("contentType", contentType);
         binding.put("expected", expectedBinding); binding.put("payloadHash", payloadHash);
-        return publish(input, key, uploadId(requestId, "s3:" + bucket + ":" + key), null, false, false, binding);
+        return binding;
     }
 
     private PublishedResource publish(InputStream input, String name, String uuid, String parent,
@@ -721,14 +735,25 @@ public class FileService {
 
     private String albumPrefix() { return "/pending-albums/" + context.uuid + "/"; }
 
-    private String uploadAlbum(MultipartFile file, String requestId) throws IOException {
-        String name = filename(file.getOriginalFilename());
-        String albumId = uploadId(requestId, "album");
+    private synchronized String uploadAlbum(MultipartFile file, String requestId, String key) throws IOException {
+        String name = key == null ? filename(file.getOriginalFilename()) : key;
+        String bucket = bucket();
+        String albumId = uploadId(requestId, key == null ? "album" : "album:" + bucket + ":" + key);
+        JSONObject binding = null;
+        if (key != null) {
+            S3ObjectMeta current = s3KeyIndex.getIndex(bucket, key);
+            if (current != null && !albumId.equals(current.getUuid())) {
+                throw new S3ConcurrentWriteException("A file with this name already exists");
+            }
+            binding = s3Binding(key, bucket, uploadContentType(file), null, null);
+        }
         JSONObject album = new JSONObject(); album.put("uuid", albumId); album.put("filename", name);
         // Persist the assembly intent first. The original archive is a normal durable resource
         // until every page and the ordered album source have completed publication.
         etcdService.put(albumPrefix() + albumId, album.toJSONString());
-        try (InputStream input = file.getInputStream()) { publish(input, name, albumId, null, false, true); }
+        try (InputStream input = file.getInputStream()) {
+            publish(input, name, albumId, null, false, key == null, binding);
+        }
         FileObject existingAlbum = context.query(albumId);
         if (existingAlbum == null || !"1".equals(existingAlbum.getAlbumAvailable())) finishAlbum(album);
         else etcdService.delete(albumPrefix() + albumId);
@@ -741,8 +766,9 @@ public class FileService {
         if (resource == null) return; // Its durable publication intent is retried before album assembly.
         if (isDeleted(resource)) { etcdService.delete(albumPrefix() + albumId); return; }
         String name = resource.getFileName();
-        int titleDot = name.lastIndexOf('.');
-        String title = titleDot > 0 ? name.substring(0, titleDot) : name;
+        String basename = name.substring(name.lastIndexOf('/') + 1);
+        int titleDot = basename.lastIndexOf('.');
+        String title = titleDot > 0 ? basename.substring(0, titleDot) : basename;
         if (title.startsWith("[Comic]")) title = title.substring(7);
         if (title.startsWith("[Picture]")) title = title.substring(9);
         List<Path> pages = List.of();
@@ -1062,6 +1088,9 @@ public class FileService {
     private static String contentType(String filename) {
         String type = java.net.URLConnection.guessContentTypeFromName(filename);
         return type == null ? "application/octet-stream" : type;
+    }
+    private static String uploadContentType(MultipartFile file) {
+        return file.getContentType() == null ? "application/octet-stream" : file.getContentType();
     }
 
     @PreDestroy

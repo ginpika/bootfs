@@ -23,7 +23,6 @@ import org.springframework.web.server.ResponseStatusException;
 import javax.servlet.http.HttpServletRequest;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.function.Supplier;
 
@@ -91,7 +90,7 @@ public class FolderController {
     }
 
     private JSONObject listLocal(String folder, boolean includeAll, boolean local, long fileLimit, boolean persistDescriptors) {
-        validateFolder(folder);
+        FolderService.requireDirectoryPrefix(folder);
         if (fileLimit < 0 || fileLimit > (long) Integer.MAX_VALUE + 1000) throw badRequest("Invalid pagination");
         Set<String> localResourceIds = etcdService.localResourceIds();
         Map<String, JSONObject> resources = new LinkedHashMap<>();
@@ -188,11 +187,9 @@ public class FolderController {
     @PostMapping("/api/folders")
     public JSONObject create(@RequestBody Map<String, String> body, HttpServletRequest request) throws IOException {
         String folder = body.getOrDefault("folder", "");
-        validateFolder(folder);
         String name = body.get("name");
-        validateSegment(name);
-        String key = folder + name + "/";
-        validateKey(key);
+        String key = FolderService.uploadKey(folder, name) + "/";
+        FolderService.requireDirectoryPrefix(key);
         String existing = etcdService.getOne(bindingKey(key));
         if (existing == null) fileService.publishS3(new ByteArrayInputStream(new byte[0]), key, s3Config.getBucket(),
                 "application/x-directory", null, null, request.getHeader("X-BootFS-Request-Id"));
@@ -202,11 +199,8 @@ public class FolderController {
     @PostMapping("/api/folders/upload")
     public JSONObject upload(@RequestParam(defaultValue = "") String folder, @RequestParam("file") MultipartFile file,
                              HttpServletRequest request) throws IOException {
-        validateFolder(folder);
         String name = file.getOriginalFilename();
-        validateSegment(name);
-        String key = folder + name;
-        validateKey(key);
+        String key = FolderService.uploadKey(folder, name);
         if (etcdService.getOne(bindingKey(key)) != null)
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A file with this name already exists");
         FileService.PublishedResource result;
@@ -377,18 +371,5 @@ public class FolderController {
 
     private String bindingKey(String key) { return "/s3/" + s3Config.getBucket() + "/" + key; }
     private static boolean nonBlank(String value) { return value != null && !value.isBlank(); }
-    private static void validateFolder(String folder) {
-        if (folder == null || (!folder.isEmpty() && !folder.endsWith("/"))) throw badRequest("Invalid folder path");
-        validateKey(folder);
-    }
-    private static void validateKey(String key) {
-        if (key.getBytes(StandardCharsets.UTF_8).length > 1024 || key.chars().anyMatch(Character::isISOControl))
-            throw badRequest("Invalid object path");
-    }
-    private static void validateSegment(String name) {
-        if (name == null || name.isBlank() || name.equals(".") || name.equals("..") || name.length() > 255
-                || name.contains("/") || name.contains("\\") || name.chars().anyMatch(Character::isISOControl))
-            throw badRequest("Invalid file or folder name");
-    }
     private static ResponseStatusException badRequest(String message) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, message); }
 }

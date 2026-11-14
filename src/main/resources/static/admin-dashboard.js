@@ -1788,9 +1788,23 @@ function updateStats(data) {
 
 // File upload
 function handleFileUpload(e) {
-    const uploadFolder = currentFolder;
-    const files = e.target.files;
+    const files = Array.from(e.target.files);
+    e.target.value = '';
+    uploadFiles(files, currentFolder);
+}
+
+function handleComicUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    uploadFiles([file], currentFolder, {method: 'PUT', url: '/comic'});
+}
+
+function uploadFiles(files, uploadFolder, endpoint) {
     if (files.length === 0) return;
+    const {method, url} = endpoint || (uploadFolder
+        ? {method: 'POST', url: '/api/folders/upload'}
+        : {method: 'PUT', url: '/f'});
     
     const modal = document.getElementById('uploadProgressModal');
     const progressBar = document.getElementById('uploadProgressBar');
@@ -1805,12 +1819,8 @@ function handleFileUpload(e) {
     
     let uploaded = 0;
     const totalFiles = files.length;
-    let totalBytes = 0;
+    const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
     let totalTransferred = 0;
-    
-    Array.from(files).forEach(file => {
-        totalBytes += file.size;
-    });
     
     uploadTotalSize.textContent = formatFileSize(totalBytes);
     uploadFileCount.textContent = `1 / ${totalFiles}`;
@@ -1827,23 +1837,26 @@ function handleFileUpload(e) {
             
             const xhr = new XMLHttpRequest();
             
-            let startTime = Date.now();
-            let lastLoaded = 0;
-            let lastTime = startTime;
+            let lastTransferred = 0;
+            let lastTime = Date.now();
             
             xhr.upload.addEventListener('progress', (event) => {
-                if (event.lengthComputable) {
+                if (event.lengthComputable && event.total > 0) {
                     const currentTime = Date.now();
                     const timeDiff = (currentTime - lastTime) / 1000;
-                    const loadedDiff = event.loaded - lastLoaded;
+                    const transferred = Math.round(file.size * (event.loaded / event.total));
+                    const loadedDiff = transferred - lastTransferred;
                     
                     let speed = 0;
                     if (timeDiff > 0) {
                         speed = loadedDiff / timeDiff;
                     }
                     
-                    const overallTransferred = totalTransferred + event.loaded;
-                    const overallPercent = Math.round((overallTransferred / totalBytes) * 100);
+                    const overallTransferred = totalTransferred + transferred;
+                    const fraction = totalBytes > 0
+                        ? overallTransferred / totalBytes
+                        : (index + event.loaded / event.total) / totalFiles;
+                    const overallPercent = Math.round(fraction * 100);
                     
                     progressBar.style.width = `${overallPercent}%`;
                     uploadPercent.textContent = `${overallPercent}%`;
@@ -1853,7 +1866,7 @@ function handleFileUpload(e) {
                         uploadSpeed.textContent = formatSpeed(speed);
                     }
                     
-                    lastLoaded = event.loaded;
+                    lastTransferred = transferred;
                     lastTime = currentTime;
                 }
             });
@@ -1863,20 +1876,22 @@ function handleFileUpload(e) {
                     totalTransferred += file.size;
                     uploaded++;
                     resolve();
+                } else if (xhr.status === 409) {
+                    reject(new Error(`${file.name} 已存在，或上传路径已变更`));
                 } else {
-                    reject(new Error(`Upload failed with status ${xhr.status}`));
+                    reject(new Error(`${file.name}（HTTP ${xhr.status}）`));
                 }
             });
             
             xhr.addEventListener('error', () => {
-                reject(new Error('Upload failed'));
+                reject(new Error('网络错误'));
             });
             
             xhr.addEventListener('abort', () => {
-                reject(new Error('Upload aborted'));
+                reject(new Error('上传已取消'));
             });
             
-            xhr.open(uploadFolder ? 'POST' : 'PUT', uploadFolder ? '/api/folders/upload' : '/f');
+            xhr.open(method, url);
             xhr.send(formData);
         });
     };
@@ -1899,97 +1914,17 @@ function handleFileUpload(e) {
                 uploadTransferred.textContent = '0 B';
                 uploadSpeed.textContent = '-- MB/s';
                 showToast('上传成功！', 'success');
-                loadFileList();
-                document.getElementById('uploadFileBtn').value = '';
+                if (currentFolder === uploadFolder) loadFileList();
             }, 800);
         } catch (error) {
             console.error('Upload error:', error);
             showToast('上传失败: ' + error.message, 'error');
             modal.classList.add('hidden');
+            if (uploaded > 0 && currentFolder === uploadFolder) loadFileList();
         }
     };
     
     uploadAllFiles();
-}
-
-function handleComicUpload(e) {
-    const files = e.target.files;
-    if (files.length === 0) return;
-
-    const modal = document.getElementById('uploadProgressModal');
-    const progressBar = document.getElementById('uploadProgressBar');
-    const uploadFileName = document.getElementById('uploadFileName');
-    const uploadFileCount = document.getElementById('uploadFileCount');
-    const uploadPercent = document.getElementById('uploadPercent');
-    const uploadTransferred = document.getElementById('uploadTransferred');
-    const uploadSpeed = document.getElementById('uploadSpeed');
-    const uploadTotalSize = document.getElementById('uploadTotalSize');
-
-    modal.classList.remove('hidden');
-
-    let totalBytes = 0;
-    Array.from(files).forEach(file => { totalBytes += file.size; });
-    uploadTotalSize.textContent = formatFileSize(totalBytes);
-    uploadFileCount.textContent = `1 / ${files.length}`;
-
-    const file = files[0];
-    uploadFileName.textContent = file.name;
-    uploadFileName.title = file.name;
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const xhr = new XMLHttpRequest();
-    const startTime = Date.now();
-    let lastLoaded = 0;
-    let lastTime = startTime;
-
-    xhr.upload.addEventListener('progress', (event) => {
-        if (event.lengthComputable) {
-            const currentTime = Date.now();
-            const timeDiff = (currentTime - lastTime) / 1000;
-            const loadedDiff = event.loaded - lastLoaded;
-            let speed = 0;
-            if (timeDiff > 0) speed = loadedDiff / timeDiff;
-            const overallPercent = Math.round((event.loaded / totalBytes) * 100);
-            progressBar.style.width = `${overallPercent}%`;
-            uploadPercent.textContent = `${overallPercent}%`;
-            uploadTransferred.textContent = formatFileSize(event.loaded);
-            if (speed > 0) uploadSpeed.textContent = formatSpeed(speed);
-            lastLoaded = event.loaded;
-            lastTime = currentTime;
-        }
-    });
-
-    xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-            progressBar.style.width = '100%';
-            uploadPercent.textContent = '100%';
-            uploadTransferred.textContent = formatFileSize(totalBytes);
-            uploadSpeed.textContent = '完成';
-            setTimeout(() => {
-                modal.classList.add('hidden');
-                progressBar.style.width = '0%';
-                uploadPercent.textContent = '0%';
-                uploadTransferred.textContent = '0 B';
-                uploadSpeed.textContent = '-- MB/s';
-                showToast('上传成功！', 'success');
-                loadFileList();
-                document.getElementById('comicUploadBtn').value = '';
-            }, 800);
-        } else {
-            modal.classList.add('hidden');
-            showToast('上传失败: ' + (xhr.status), 'error');
-        }
-    });
-
-    xhr.addEventListener('error', () => {
-        modal.classList.add('hidden');
-        showToast('上传失败: 网络错误', 'error');
-    });
-
-    xhr.open('PUT', '/comic');
-    xhr.send(formData);
 }
 
 function formatSpeed(bytesPerSecond) {
@@ -2872,7 +2807,8 @@ function initializeDragAndDrop() {
     dropZone.addEventListener('drop', async (e) => {
         dropZone.classList.remove('drag-active');
         if (overlay) overlay.classList.add('hidden');
-        let files = e.dataTransfer.files;
+        const uploadFolder = currentFolder;
+        let files = Array.from(e.dataTransfer.files);
         // 右栏拖拽：files 为空时从 draggingFileHandle 异步获取 File
         if (files.length === 0 && draggingFileHandle) {
             try {
@@ -2883,9 +2819,7 @@ function initializeDragAndDrop() {
             }
             draggingFileHandle = null;
         }
-        if (files.length > 0) {
-            handleFileUpload({ target: { files } });
-        }
+        uploadFiles(files, uploadFolder);
     }, false);
 }
 
@@ -3603,11 +3537,13 @@ let selectedSegmentIndex = null;
 let draggedSegmentIndex = null;
 
 function showTsUploadModal() {
+    if (document.getElementById('startTsUploadBtn').disabled) return;
     if (selectedFiles.size > 1) {
         showToast('仅限单选，请只选择一个文件', 'warning');
         return;
     }
     
+    document.getElementById('tsUploadModal').dataset.folder = currentFolder;
     selectedTsFiles = [];
     currentVirtualFileUuid = null;
     editingFileObject = null;
@@ -3660,7 +3596,7 @@ function openTsUploadModalUI() {
     
     if (tsUploadMode === 'edit' && editingFileObject) {
         modalTitle.textContent = '编辑 HLS 切片';
-        fileNameInput.value = editingFileObject.fileName;
+        fileNameInput.value = editingFileObject.fileName.split('/').pop();
         fileNameInput.disabled = true;
         startBtn.textContent = '追加切片';
         startBtn.classList.remove('theme-btn-primary');
@@ -3693,8 +3629,9 @@ function openTsUploadModalUI() {
                 <div class="flex items-center space-x-2 mb-2">
                     <span class="px-2 py-1 text-xs rounded-md" style="background-color: rgba(245, 158, 11, 0.1); color: var(--color-warning);">新建模式</span>
                 </div>
-                <p class="text-xs theme-page-text-secondary">将创建新的虚拟文件并上传切片</p>
+                <p class="text-xs theme-page-text-secondary"></p>
             `;
+            infoDiv.querySelector('p').textContent = `上传到 /${document.getElementById('tsUploadModal').dataset.folder}`;
             infoDiv.classList.remove('hidden');
         }
         
@@ -3946,8 +3883,10 @@ function handleTsFileSelect(e) {
 
 async function startTsUpload() {
     const fileName = document.getElementById('tsVideoFileName').value.trim() || 'virtual_video.mp4';
+    const uploadFolder = document.getElementById('tsUploadModal').dataset.folder;
+    const files = [...selectedTsFiles];
     
-    if (selectedTsFiles.length === 0) {
+    if (files.length === 0) {
         showToast('请先选择 TS 切片文件', 'warning');
         return;
     }
@@ -3958,7 +3897,7 @@ async function startTsUpload() {
     
     document.getElementById('tsUploadProgress').classList.remove('hidden');
     
-    const totalBytes = selectedTsFiles.reduce((sum, f) => sum + f.size, 0);
+    const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
     let totalTransferred = 0;
     let lastTime = Date.now();
     let lastLoaded = 0;
@@ -4036,7 +3975,7 @@ async function startTsUpload() {
             const createResponse = await fetch('/virtual-file', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fileName: fileName, fileType: 'video/mp4' })
+                body: JSON.stringify({ fileName, fileType: 'video/mp4', folder: uploadFolder })
             });
             
             if (!createResponse.ok) {
@@ -4049,14 +3988,14 @@ async function startTsUpload() {
             updateTsProgress(5, `虚拟文件已创建: ${currentVirtualFileUuid}`);
         }
         
-        const sortedFiles = selectedTsFiles.sort((a, b) => {
+        files.sort((a, b) => {
             const numA = parseInt(a.name.match(/(\d+)/)?.[1] || '0');
             const numB = parseInt(b.name.match(/(\d+)/)?.[1] || '0');
             return numA - numB;
         });
         
-        for (let i = 0; i < sortedFiles.length; i++) {
-            const file = sortedFiles[i];
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
             const sequence = startSequence + i;
             
             await uploadSegment(file, sequence);
@@ -4081,7 +4020,7 @@ async function startTsUpload() {
         
         setTimeout(() => {
             showToast(`TS 切片上传成功！`, 'success');
-            loadFileList();
+            if (currentFolder === uploadFolder) loadFileList();
         }, 1000);
         
     } catch (error) {

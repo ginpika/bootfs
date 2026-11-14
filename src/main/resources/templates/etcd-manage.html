@@ -2,9 +2,12 @@
 <html lang="zh-CN">
 <head>
     <script src="/security-utils.js"></script>
+    <script src="/i18n/en.js"></script>
+    <script src="/i18n.js"></script>
+    <link rel="stylesheet" href="/language-picker.css">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>元数据管理 - BootFS</title>
+    <title data-i18n>元数据管理 - BootFS</title>
     <style>
         :root, :root.theme-light { --color-bg-primary:#f9fafb; --color-accent-primary:#0ea5e9; --color-text-secondary:#374151; }
         :root.theme-dark { --color-bg-primary:#0a0a0a; --color-accent-primary:#00d98a; --color-text-secondary:#a8a8a8; }
@@ -78,11 +81,11 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
                                 </svg>
                             </a>
-                            <h1 class="text-lg font-semibold font-display" style="color: var(--color-text-primary);">元数据管理</h1>
+                            <h1 data-i18n class="text-lg font-semibold font-display" style="color: var(--color-text-primary);">元数据管理</h1>
                         </div>
                         <div class="flex items-center space-x-3">
                             <div class="relative">
-                                <button id="themeMenuBtn" class="theme-icon-btn" title="主题">
+                                <button data-i18n-attrs="title" id="themeMenuBtn" class="theme-icon-btn" title="主题">
                                     <svg xmlns="http://www.w3.org/2000/svg"
                                         fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
                                         class="w-5 h-5">
@@ -92,36 +95,37 @@
                                 </button>
                                 <div id="themeDropdown" class="hidden absolute right-0 mt-2 w-56 theme-rounded-xl shadow-lg border py-2 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
                                     <div class="px-3 py-2 border-b" style="border-color: var(--color-border-primary);">
-                                        <p class="text-sm font-medium" style="color: var(--color-text-primary);">选择主题</p>
+                                        <p data-i18n class="text-sm font-medium" style="color: var(--color-text-primary);">选择主题</p>
                                     </div>
                                     <div class="py-1">
                                         <button onclick="setTheme('light')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);">
-                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #0ea5e9;"></span>浅色模式
+                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #0ea5e9;"></span><span data-i18n>浅色模式</span>
                                         </button>
                                         <button onclick="setTheme('dark')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);">
-                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #00d98a;"></span>深色模式
+                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #00d98a;"></span><span data-i18n>深色模式</span>
                                         </button>
                                         <button onclick="setTheme('sakura')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);">
-                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #ec4899;"></span>樱花
+                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #ec4899;"></span><span data-i18n>樱花</span>
                                         </button>
                                         <button onclick="setTheme('starry-night')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);">
-                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #e94560;"></span>星空夜景
+                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #e94560;"></span><span data-i18n>星空夜景</span>
                                         </button>
                                         <button onclick="setTheme('forest')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);">
-                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #16a34a;"></span>森林
+                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #16a34a;"></span><span data-i18n>森林</span>
                                         </button>
                                         <button onclick="setTheme('ocean')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);">
-                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #29b6f6;"></span>海洋
+                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #29b6f6;"></span><span data-i18n>海洋</span>
                                         </button>
                                         <button onclick="setTheme('sunset')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);">
-                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #f59e0b;"></span>日落
+                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #f59e0b;"></span><span data-i18n>日落</span>
                                         </button>
                                         <button onclick="setTheme('lavender')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);">
-                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #a855f7;"></span>薰衣草
+                                            <span class="w-4 h-4 rounded-full mr-3" style="background-color: #a855f7;"></span><span data-i18n>薰衣草</span>
                                         </button>
                                     </div>
                                 </div>
                             </div>
+                            <div th:replace="fragments/language-picker :: picker"></div>
                         </div>
                     </div>
                 </div>
@@ -133,7 +137,7 @@
                 <div class="theme-card theme-rounded-xl theme-shadow p-4 mb-6">
                     <div class="flex flex-wrap items-center gap-3">
                         <div class="relative flex-1 min-w-[200px] max-w-xl">
-                            <input type="text" id="prefixInput" placeholder="搜索 key，支持模糊匹配..."
+                            <input data-i18n-attrs="placeholder" type="text" id="prefixInput" placeholder="搜索 key，支持模糊匹配..."
                                    class="w-full pl-10 pr-4 py-2 border rounded-lg text-sm theme-input focus:outline-none">
                             <svg class="w-5 h-5 absolute left-3 top-2.5" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
@@ -143,23 +147,23 @@
                             <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                             </svg>
-                            查询
+                            <span data-i18n>查询</span>
                         </button>
                         <label class="flex items-center gap-1.5 cursor-pointer select-none">
                             <input type="checkbox" id="exactMatchCheck" class="w-4 h-4 rounded" style="accent-color: var(--color-accent-primary);">
-                            <span class="text-sm" style="color: var(--color-text-secondary);">精确匹配</span>
+                            <span data-i18n class="text-sm" style="color: var(--color-text-secondary);">精确匹配</span>
                         </label>
                         <button onclick="showAddModal()" class="theme-btn-primary">
                             <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                             </svg>
-                            新增
+                            <span data-i18n>新增</span>
                         </button>
                         <button onclick="showDeletePrefixModal()" class="theme-btn-danger">
                             <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                             </svg>
-                            按前缀删除
+                            <span data-i18n>按前缀删除</span>
                         </button>
                         <span id="resultCount" class="text-sm" style="color: var(--color-text-muted);"></span>
                     </div>
@@ -174,12 +178,12 @@
                                     <th class="px-4 py-3 text-left font-medium" style="color: var(--color-text-secondary); width: 60px;">#</th>
                                     <th class="px-4 py-3 text-left font-medium" style="color: var(--color-text-secondary); min-width: 250px;">Key</th>
                                     <th class="px-4 py-3 text-left font-medium" style="color: var(--color-text-secondary);">Value</th>
-                                    <th class="px-4 py-3 text-right font-medium" style="color: var(--color-text-secondary); width: 160px;">操作</th>
+                                    <th data-i18n class="px-4 py-3 text-right font-medium" style="color: var(--color-text-secondary); width: 160px;">操作</th>
                                 </tr>
                             </thead>
                             <tbody id="tableBody">
                                 <tr>
-                                    <td colspan="4" class="px-4 py-12 text-center" style="color: var(--color-text-muted);">
+                                    <td data-i18n colspan="4" class="px-4 py-12 text-center" style="color: var(--color-text-muted);">
                                         输入前缀后点击查询
                                     </td>
                                 </tr>
@@ -194,7 +198,7 @@
     <!-- Add/Edit Modal -->
     <div id="editModal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background-color: rgba(0,0,0,0.5);">
         <div class="theme-card theme-rounded-xl theme-shadow w-full max-w-lg mx-4 p-6 fade-in">
-            <h2 id="editModalTitle" class="text-lg font-semibold mb-4 font-display" style="color: var(--color-text-primary);">新增 Key</h2>
+            <h2 data-i18n id="editModalTitle" class="text-lg font-semibold mb-4 font-display" style="color: var(--color-text-primary);">新增 Key</h2>
             <div class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium mb-1" style="color: var(--color-text-secondary);">Key</label>
@@ -208,8 +212,8 @@
                 </div>
             </div>
             <div class="flex justify-end gap-3 mt-6">
-                <button onclick="closeEditModal()" class="theme-btn-secondary">取消</button>
-                <button onclick="saveKey()" class="theme-btn-primary">保存</button>
+                <button data-i18n onclick="closeEditModal()" class="theme-btn-secondary">取消</button>
+                <button data-i18n onclick="saveKey()" class="theme-btn-primary">保存</button>
             </div>
         </div>
     </div>
@@ -217,16 +221,16 @@
     <!-- Delete Prefix Modal -->
     <div id="deletePrefixModal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background-color: rgba(0,0,0,0.5);">
         <div class="theme-card theme-rounded-xl theme-shadow w-full max-w-md mx-4 p-6 fade-in">
-            <h2 class="text-lg font-semibold mb-2 font-display" style="color: var(--color-text-primary);">按前缀删除</h2>
-            <p class="text-sm mb-4" style="color: var(--color-text-muted);">此操作将删除所有匹配前缀的 key，不可恢复。</p>
+            <h2 data-i18n class="text-lg font-semibold mb-2 font-display" style="color: var(--color-text-primary);">按前缀删除</h2>
+            <p data-i18n class="text-sm mb-4" style="color: var(--color-text-muted);">此操作将删除所有匹配前缀的 key，不可恢复。</p>
             <div>
-                <label class="block text-sm font-medium mb-1" style="color: var(--color-text-secondary);">前缀</label>
+                <label data-i18n class="block text-sm font-medium mb-1" style="color: var(--color-text-secondary);">前缀</label>
                 <input type="text" id="deletePrefix" placeholder="/example/"
                        class="w-full px-3 py-2 border rounded-lg text-sm theme-input focus:outline-none">
             </div>
             <div class="flex justify-end gap-3 mt-6">
-                <button onclick="closeDeletePrefixModal()" class="theme-btn-secondary">取消</button>
-                <button onclick="confirmDeletePrefix()" class="theme-btn-danger">确认删除</button>
+                <button data-i18n onclick="closeDeletePrefixModal()" class="theme-btn-secondary">取消</button>
+                <button data-i18n onclick="confirmDeletePrefix()" class="theme-btn-danger">确认删除</button>
             </div>
         </div>
     </div>
@@ -234,11 +238,11 @@
     <!-- Confirm Delete Single Modal -->
     <div id="confirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background-color: rgba(0,0,0,0.5);">
         <div class="theme-card theme-rounded-xl theme-shadow w-full max-w-sm mx-4 p-6 fade-in">
-            <h2 class="text-lg font-semibold mb-2 font-display" style="color: var(--color-text-primary);">确认删除</h2>
+            <h2 data-i18n class="text-lg font-semibold mb-2 font-display" style="color: var(--color-text-primary);">确认删除</h2>
             <p class="text-sm mb-4" style="color: var(--color-text-muted);" id="confirmMsg"></p>
             <div class="flex justify-end gap-3">
-                <button onclick="closeConfirmModal()" class="theme-btn-secondary">取消</button>
-                <button id="confirmDeleteBtn" class="theme-btn-danger">删除</button>
+                <button data-i18n onclick="closeConfirmModal()" class="theme-btn-secondary">取消</button>
+                <button data-i18n id="confirmDeleteBtn" class="theme-btn-danger">删除</button>
             </div>
         </div>
     </div>
@@ -274,21 +278,21 @@
             var prefix = document.getElementById('prefixInput').value.trim();
             var exact = document.getElementById('exactMatchCheck').checked;
             var tbody = document.getElementById('tableBody');
-            tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center" style="color: var(--color-text-muted);">加载中...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center" style="color: var(--color-text-muted);">' + BootFSI18n.html('加载中...') + '</td></tr>';
 
             var url = '/api/etcd/keys?prefix=' + encodeURIComponent(prefix) + '&mode=' + (exact ? 'exact' : 'fuzzy');
             fetch(url)
                 .then(r => r.json())
                 .then(res => {
                     if (!res.succeed) {
-                        tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center" style="color: var(--color-danger);">查询失败: ' + escapeHtml(res.message || '未知错误') + '</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center" style="color: var(--color-danger);">' + BootFSI18n.html('查询失败:') + ' ' + escapeHtml(BootFSI18n.t(res.message || '未知错误')) + '</td></tr>';
                         document.getElementById('resultCount').textContent = '';
                         return;
                     }
                     var items = res.data || [];
-                    document.getElementById('resultCount').textContent = '共 ' + items.length + ' 条';
+                    document.getElementById('resultCount').textContent = BootFSI18n.t('共') + ' ' + items.length + ' ' + BootFSI18n.t('条');
                     if (items.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center" style="color: var(--color-text-muted);">无匹配结果</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center" style="color: var(--color-text-muted);">' + BootFSI18n.html('无匹配结果') + '</td></tr>';
                         return;
                     }
                     tbody.innerHTML = items.map(function (item, idx) {
@@ -300,20 +304,20 @@
                             '<td class="px-4 py-3 font-mono text-xs break-all" style="color: var(--color-accent-primary);">' + escapeHtml(item.key) + '</td>' +
                             '<td class="px-4 py-3 font-mono text-xs break-all" style="color: var(--color-text-primary);">' + escapeHtml(valueDisplay) + '</td>' +
                             '<td class="px-4 py-3 text-right whitespace-nowrap">' +
-                                '<button onclick="showEditModal(\'' + escapeJs(item.key) + '\',\'' + escapeJs(item.value) + '\')" class="theme-btn-quiet mr-1" style="color: var(--color-accent-primary); background-color: var(--color-accent-muted);">编辑</button>' +
-                                '<button onclick="showConfirmDelete(\'' + escapeJs(item.key) + '\')" class="theme-btn-quiet" style="color: var(--color-danger); background-color: rgba(239,68,68,0.1);">删除</button>' +
+                                '<button onclick="showEditModal(\'' + escapeJs(item.key) + '\',\'' + escapeJs(item.value) + '\')" class="theme-btn-quiet mr-1" style="color: var(--color-accent-primary); background-color: var(--color-accent-muted);">' + BootFSI18n.html('编辑') + '</button>' +
+                                '<button onclick="showConfirmDelete(\'' + escapeJs(item.key) + '\')" class="theme-btn-quiet" style="color: var(--color-danger); background-color: rgba(239,68,68,0.1);">' + BootFSI18n.html('删除') + '</button>' +
                             '</td>' +
                         '</tr>';
                     }).join('');
                 })
                 .catch(err => {
-                    tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center" style="color: var(--color-danger);">请求失败</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center" style="color: var(--color-danger);">' + BootFSI18n.html('请求失败') + '</td></tr>';
                 });
         }
 
         function showAddModal() {
             currentEditMode = 'add';
-            document.getElementById('editModalTitle').textContent = '新增 Key';
+            document.getElementById('editModalTitle').textContent = BootFSI18n.t('新增 Key');
             document.getElementById('editKey').value = '';
             document.getElementById('editKey').readOnly = false;
             document.getElementById('editValue').value = '';
@@ -322,7 +326,7 @@
 
         function showEditModal(key, value) {
             currentEditMode = 'edit';
-            document.getElementById('editModalTitle').textContent = '编辑 Key';
+            document.getElementById('editModalTitle').textContent = BootFSI18n.t('编辑 Key');
             document.getElementById('editKey').value = key;
             document.getElementById('editKey').readOnly = true;
             document.getElementById('editValue').value = value;
@@ -337,7 +341,7 @@
             var key = document.getElementById('editKey').value.trim();
             var value = document.getElementById('editValue').value;
             if (!key) {
-                alert('Key 不能为空');
+                alert(BootFSI18n.t('Key 不能为空'));
                 return;
             }
             fetch('/api/etcd/key', {
@@ -351,15 +355,15 @@
                     closeEditModal();
                     searchKeys();
                 } else {
-                    alert('保存失败: ' + escapeHtml(res.message || '未知错误'));
+                    alert(BootFSI18n.t('保存失败:') + ' ' + escapeHtml(BootFSI18n.t(res.message || '未知错误')));
                 }
             })
-            .catch(err => alert('请求失败'));
+            .catch(err => alert(BootFSI18n.t('请求失败')));
         }
 
         function showConfirmDelete(key) {
             pendingDeleteKey = key;
-            document.getElementById('confirmMsg').textContent = '确定要删除 key: ' + key + ' 吗？';
+            document.getElementById('confirmMsg').textContent = BootFSI18n.t('确定要删除 key: {0} 吗？', key);
             document.getElementById('confirmModal').classList.remove('hidden');
             document.getElementById('confirmDeleteBtn').onclick = function () {
                 confirmDeleteSingle();
@@ -380,10 +384,10 @@
                         closeConfirmModal();
                         searchKeys();
                     } else {
-                        alert('删除失败: ' + escapeHtml(res.message || '未知错误'));
+                        alert(BootFSI18n.t('删除失败:') + ' ' + escapeHtml(BootFSI18n.t(res.message || '未知错误')));
                     }
                 })
-                .catch(err => alert('请求失败'));
+                .catch(err => alert(BootFSI18n.t('请求失败')));
         }
 
         function showDeletePrefixModal() {
@@ -398,10 +402,10 @@
         function confirmDeletePrefix() {
             var prefix = document.getElementById('deletePrefix').value.trim();
             if (!prefix) {
-                alert('前缀不能为空');
+                alert(BootFSI18n.t('前缀不能为空'));
                 return;
             }
-            if (!confirm('确定要删除所有前缀为 "' + prefix + '" 的 key 吗？此操作不可恢复！')) return;
+            if (!confirm(BootFSI18n.t('确定要删除所有前缀为 "{0}" 的 key 吗？此操作不可恢复！', prefix))) return;
             fetch('/api/etcd/keys/prefix?prefix=' + encodeURIComponent(prefix), { method: 'DELETE' })
                 .then(r => r.json())
                 .then(res => {
@@ -409,10 +413,10 @@
                         closeDeletePrefixModal();
                         searchKeys();
                     } else {
-                        alert('删除失败: ' + escapeHtml(res.message || '未知错误'));
+                        alert(BootFSI18n.t('删除失败:') + ' ' + escapeHtml(BootFSI18n.t(res.message || '未知错误')));
                     }
                 })
-                .catch(err => alert('请求失败'));
+                .catch(err => alert(BootFSI18n.t('请求失败')));
         }
 
         function escapeHtml(str) {

@@ -19,13 +19,19 @@ async function page(options = {}) {
     const form = element('settingsForm'); form.elements = {namedItem: name => inputs[name]}; form.reportValidity = () => true;
     const state = {revision:7, values, pending:options.pending || {}, restartRequired:false, activeProxy:{forwardHeadersStrategy:'none', internalProxies:'127[.]0[.]0[.]1'}};
     const requests = [];
-    const context = vm.createContext({console, Uint8Array, document:{getElementById:element}, window:{addEventListener() {}},
+    const context = vm.createContext({console, URL, Uint8Array,
+        document:{documentElement: {}, addEventListener() {}, getElementById:element},
+        localStorage:{getItem: () => options.language ?? null},
+        window:{location:{href:'http://localhost/settings'}, addEventListener() {}},
         crypto:require('node:crypto').webcrypto,
         fetch:async (url, request) => {
             requests.push({url, ...request});
-            return {ok:request.method === 'GET' || !options.fail, json:async () => request.method === 'GET' || !options.fail ? state : {error:'<img src=x onerror=alert(1)> conflict'}};
+            const ok = request.method === 'GET' || !options.error;
+            return {ok, json:async () => ok ? state : {error:options.error}};
         }});
-    vm.runInContext(readFileSync(join(__dirname, '../../main/resources/static/settings.js'), 'utf8'), context);
+    for (const name of ['i18n/en.js', 'i18n.js', 'settings.js']) {
+        vm.runInContext(readFileSync(join(__dirname, '../../main/resources/static', name), 'utf8'), context);
+    }
     await new Promise(resolve => setImmediate(resolve));
     return {inputs, element, requests, submit: () => form.handlers.submit({preventDefault(){}})};
 }
@@ -54,7 +60,14 @@ test('pending controlled changes stay in the form until confirmed, without chang
 });
 
 test('save conflicts preserve input and render server errors as text', async () => {
-    const p = await page({fail:true}); p.inputs.copies.value='9'; await p.submit();
+    const p = await page({error:'<img src=x onerror=alert(1)> conflict'}); p.inputs.copies.value='9'; await p.submit();
     assert.equal(p.inputs.copies.value,'9'); assert.equal(p.element('feedback').className,'error');
     assert.equal(p.element('feedback').textContent,'<img src=x onerror=alert(1)> conflict');
+});
+
+test('English localizes settings feedback and interpolates field names in validation errors', async () => {
+    const p = await page({language:'en', error:'设置类型无效：copies'});
+    assert.equal(p.element('feedback').textContent, 'Current node settings loaded.');
+    await p.submit();
+    assert.equal(p.element('feedback').textContent, 'Invalid value type for setting copies');
 });

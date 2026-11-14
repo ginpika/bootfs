@@ -2,14 +2,14 @@
 
 // Theme System
 const THEMES = [
-    { id: 'light', name: '浅色模式', accent: '#0ea5e9' },
-    { id: 'dark', name: '深色模式', accent: '#00d98a' },
-    { id: 'sakura', name: '樱花', accent: '#ec4899' },
-    { id: 'starry-night', name: '星空夜景', accent: '#e94560' },
-    { id: 'forest', name: '森林', accent: '#16a34a' },
-    { id: 'ocean', name: '海洋', accent: '#29b6f6' },
-    { id: 'sunset', name: '日落', accent: '#f59e0b' },
-    { id: 'lavender', name: '薰衣草', accent: '#a855f7' }
+    { id: 'light', name: BootFSI18n.t('浅色模式'), accent: '#0ea5e9' },
+    { id: 'dark', name: BootFSI18n.t('深色模式'), accent: '#00d98a' },
+    { id: 'sakura', name: BootFSI18n.t('樱花'), accent: '#ec4899' },
+    { id: 'starry-night', name: BootFSI18n.t('星空夜景'), accent: '#e94560' },
+    { id: 'forest', name: BootFSI18n.t('森林'), accent: '#16a34a' },
+    { id: 'ocean', name: BootFSI18n.t('海洋'), accent: '#29b6f6' },
+    { id: 'sunset', name: BootFSI18n.t('日落'), accent: '#f59e0b' },
+    { id: 'lavender', name: BootFSI18n.t('薰衣草'), accent: '#a855f7' }
 ];
 
 function initTheme() {
@@ -434,7 +434,7 @@ function renderFolderBreadcrumbs() {
         button.addEventListener('click', () => openFolder(path));
         container.appendChild(button);
     };
-    addCrumb('全部文件', '');
+    addCrumb(BootFSI18n.t('全部文件'), '');
     let path = '';
     const segments = currentFolder.endsWith('/') ? currentFolder.slice(0, -1).split('/') : [];
     for (const segment of segments) {
@@ -447,7 +447,7 @@ function renderFolderBreadcrumbs() {
     }
     if (isGlobalFileSearch()) {
         const label = document.createElement('span');
-        label.textContent = '· 所有文件夹的搜索结果';
+        label.textContent = BootFSI18n.t('· 所有文件夹的搜索结果');
         container.appendChild(label);
     }
 }
@@ -486,7 +486,7 @@ async function submitCreateFolder(event) {
     const name = document.getElementById('newFolderName').value;
     const error = document.getElementById('newFolderError');
     if (!name.trim() || /[\/\\\x00-\x1f\x7f]/.test(name) || name === '.' || name === '..') {
-        error.textContent = '请输入有效的文件夹名称，不含斜杠或控制字符。';
+        error.textContent = BootFSI18n.t('请输入有效的文件夹名称，不含斜杠或控制字符。');
         return;
     }
     const submit = document.getElementById('newFolderSubmit');
@@ -499,10 +499,10 @@ async function submitCreateFolder(event) {
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         closeCreateFolder();
-        showToast('文件夹已创建', 'success');
+        showToast(BootFSI18n.t('文件夹已创建'), 'success');
         refreshFileList();
     } catch (failure) {
-        error.textContent = '创建文件夹失败，请重试。';
+        error.textContent = BootFSI18n.t('创建文件夹失败，请重试。');
     } finally {
         submit.disabled = false;
     }
@@ -519,12 +519,12 @@ function listTags(tags, editable = true) {
             const indexFormat = tag.namespace + ':' + tag.name;
             return `<span class="tag-badge" title="${BootFSSecurity.html(label)}">
                 <span class="tag-badge-text">${BootFSSecurity.html(label)}</span>
-                ${editable ? `<button class="tag-delete-btn" data-tag="${BootFSSecurity.html(indexFormat)}" title="删除标签">
+                ${editable ? `<button class="tag-delete-btn" data-tag="${BootFSSecurity.html(indexFormat)}" title="${BootFSI18n.html('删除标签')}">
                     <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>` : ''}
             </span>`;
         }).join('')}
-        <button class="tag-add-btn" title="${editable ? '添加标签' : '请在来源节点管理此文件夹'}" ${editable ? '' : 'disabled'}>
+        <button class="tag-add-btn" title="${BootFSI18n.html(editable ? '添加标签' : '请在来源节点管理此文件夹')}" ${editable ? '' : 'disabled'}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         </button>
     </div>`;
@@ -532,12 +532,12 @@ function listTags(tags, editable = true) {
 
 function createFolderRow(folder) {
     const editable = folder.managed !== false;
-    const disabled = editable ? '' : 'disabled title="请在来源节点管理此文件夹"';
+    const disabled = editable ? '' : 'disabled title="' + BootFSI18n.html('请在来源节点管理此文件夹') + '"';
     return `<tr class="folder-row" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);" data-folder-path="${BootFSSecurity.html(folder.folderPath)}">
         <td class="w-12 px-4 py-4 whitespace-nowrap"></td>
         <td class="px-6 py-4">
             <div class="flex items-center">
-                <button type="button" class="folder-open-btn list-thumbnail flex-shrink-0 h-10 w-10 overflow-hidden theme-rounded-lg" title="打开文件夹">
+                <button type="button" class="folder-open-btn list-thumbnail flex-shrink-0 h-10 w-10 overflow-hidden theme-rounded-lg" title="${BootFSI18n.html('打开文件夹')}">
                     <span class="h-10 w-10 theme-rounded-lg flex items-center justify-center" style="background-color: var(--color-bg-tertiary);">${folderIcon(true)}</span>
                 </button>
                 <div class="ml-4">
@@ -548,21 +548,21 @@ function createFolderRow(folder) {
         </td>
         <td class="created-col px-4 py-3 whitespace-nowrap text-sm" style="color: var(--color-text-secondary);">${folder.createdAt ? formatDateTime(folder.createdAt) : '—'}</td>
         <td class="tag-col px-4 py-3 whitespace-nowrap">${listTags(folder.tags, editable)}</td>
-        <td class="px-6 py-4 whitespace-nowrap"><div class="flex space-x-1"><span class="px-2 py-1 text-xs rounded-md" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);">文件夹</span></div></td>
+        <td class="px-6 py-4 whitespace-nowrap"><div class="flex space-x-1"><span class="px-2 py-1 text-xs rounded-md" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);">${BootFSI18n.html('文件夹')}</span></div></td>
         <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-text-secondary);">—</td>
         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium"><div class="flex space-x-2">
-            <button type="button" class="folder-open-btn theme-text-btn" style="color: var(--color-accent-primary);">打开</button>
-            <button type="button" class="folder-rename-btn theme-text-btn disabled:opacity-50" style="color: var(--color-text-secondary);" ${disabled}>重命名</button>
-            <button type="button" class="folder-delete-btn theme-text-btn disabled:opacity-50" style="color: var(--color-danger);" ${disabled}>删除</button>
+            <button type="button" class="folder-open-btn theme-text-btn" style="color: var(--color-accent-primary);">${BootFSI18n.html('打开')}</button>
+            <button type="button" class="folder-rename-btn theme-text-btn disabled:opacity-50" style="color: var(--color-text-secondary);" ${disabled}>${BootFSI18n.html('重命名')}</button>
+            <button type="button" class="folder-delete-btn theme-text-btn disabled:opacity-50" style="color: var(--color-danger);" ${disabled}>${BootFSI18n.html('删除')}</button>
         </div></td>
     </tr>`;
 }
 
 function createFolderCard(folder) {
-    return `<div class="waterfall-card theme-card theme-rounded-xl overflow-hidden cursor-pointer p-4" role="button" tabindex="0" aria-label="${BootFSSecurity.html('打开文件夹 ' + folder.fileName)}">
+    return `<div class="waterfall-card theme-card theme-rounded-xl overflow-hidden cursor-pointer p-4" role="button" tabindex="0" aria-label="${BootFSI18n.html('打开文件夹 {0}', folder.fileName)}">
         <div class="flex justify-center py-8">${folderIcon()}</div>
         <p class="text-sm font-medium truncate theme-page-text-primary" title="${BootFSSecurity.html(folder.fileName)}">${BootFSSecurity.html(folder.fileName || '/')}</p>
-        <p class="text-xs mt-1 theme-page-text-muted">文件夹</p>
+        <p class="text-xs mt-1 theme-page-text-muted">${BootFSI18n.html('文件夹')}</p>
     </div>`;
 }
 
@@ -610,7 +610,7 @@ function loadListView() {
             if (requestVersion !== folderRequestVersion) return;
             console.error('Error loading files:', error);
             if (error.message && !error.message.includes('Cannot read properties')) {
-                showToast('加载文件列表失败', 'error');
+                showToast(BootFSI18n.t('加载文件列表失败'), 'error');
             }
         })
         .finally(() => {
@@ -660,7 +660,7 @@ function loadGridView(reset = false) {
             loadMoreSpinner.classList.add('hidden');
         }
         if (loadMoreText) {
-            loadMoreText.textContent = '加载更多';
+            loadMoreText.textContent = BootFSI18n.t('加载更多');
         }
     }
     
@@ -689,7 +689,7 @@ function loadGridView(reset = false) {
         loadMoreSpinner.classList.remove('hidden');
     }
     if (loadMoreText) {
-        loadMoreText.textContent = '加载中...';
+        loadMoreText.textContent = BootFSI18n.t('加载中...');
     }
     
     loadMediaFilesRecursively(GRID_TARGET_COUNT);
@@ -757,10 +757,10 @@ async function loadMediaFilesRecursively(needCount) {
             loadMoreSpinner.classList.add('hidden');
         }
         if (loadMoreText) {
-            loadMoreText.textContent = '加载更多';
+            loadMoreText.textContent = BootFSI18n.t('加载更多');
         }
         
-        showToast('加载失败', 'error');
+        showToast(BootFSI18n.t('加载失败'), 'error');
     }
 }
 
@@ -780,7 +780,7 @@ function finishLoading() {
         loadMoreSpinner.classList.add('hidden');
     }
     if (loadMoreText) {
-        loadMoreText.textContent = '加载更多';
+        loadMoreText.textContent = BootFSI18n.t('加载更多');
     }
     
     if (!gridHasMore) {
@@ -884,7 +884,7 @@ function renderFileList(data) {
         listContainer.innerHTML = `
             <tr>
                 <td colspan="7" class="px-6 py-12 text-center theme-page-text-secondary">
-                    暂无文件
+                    ${BootFSI18n.html('暂无文件')}
                 </td>
             </tr>
         `;
@@ -1050,10 +1050,10 @@ function createWaterfallCard(file) {
                 </div>
                 ` : ''}
                 <div class="flex items-center justify-between mt-1">
-                    <span class="text-xs" style="color: var(--color-text-tertiary);">${isAlbumFile ? '图集' : (isImageFile ? '图片' : '视频')}</span>
+                    <span class="text-xs" style="color: var(--color-text-tertiary);">${isAlbumFile ? BootFSI18n.t('图集') : (isImageFile ? BootFSI18n.t('图片') : BootFSI18n.t('视频'))}</span>
                     <div class="flex items-center space-x-2">
-                        ${file.hlsAvailable ? '<span class="text-xs" style="color: var(--color-success);">HLS可用</span>' : ''}
-                        ${file.isPublicAccess ? '<span class="text-xs" style="color: var(--color-success);">公开</span>' : ''}
+                        ${file.hlsAvailable ? '<span class="text-xs" style="color: var(--color-success);">' + BootFSI18n.html('HLS可用') + '</span>' : ''}
+                        ${file.isPublicAccess ? '<span class="text-xs" style="color: var(--color-success);">' + BootFSI18n.html('公开') + '</span>' : ''}
                     </div>
                 </div>
             </div>
@@ -1118,14 +1118,14 @@ function createGridCard(file) {
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
                                 </svg>
-                                预览
+                                ${BootFSI18n.html('预览')}
                             </button>
                         ` : ''}
                         <button class="download-btn theme-btn-secondary theme-btn-sm flex-1">
                             <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
                             </svg>
-                            下载
+                            ${BootFSI18n.html('下载')}
                         </button>
                         <button class="delete-btn theme-icon-btn theme-btn-danger theme-btn-sm">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1142,10 +1142,10 @@ function createGridCard(file) {
                 
                 <!-- Badges -->
                 <div class="absolute bottom-2 right-2 flex flex-col space-y-1">
-                    ${file.copyOf ? '<span class="badge px-2 py-1 text-white text-xs theme-rounded-md font-medium" style="background-color: var(--color-accent-primary);">副本</span>' : ''}
-                    ${file.hlsAvailable ? '<span class="badge px-2 py-1 text-white text-xs theme-rounded-md font-medium" style="background-color: var(--color-success);">HLS可用</span>' : ''}
-                    ${file.albumAvailable ? '<span class="badge px-2 py-1 text-white text-xs theme-rounded-md font-medium" style="background-color: #06b6d4;">图集</span>' : ''}
-                    ${file.isPublicAccess ? '<span class="badge px-2 py-1 text-white text-xs theme-rounded-md font-medium" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);">公开</span>' : ''}
+                    ${file.copyOf ? '<span class="badge px-2 py-1 text-white text-xs theme-rounded-md font-medium" style="background-color: var(--color-accent-primary);">' + BootFSI18n.html('副本') + '</span>' : ''}
+                    ${file.hlsAvailable ? '<span class="badge px-2 py-1 text-white text-xs theme-rounded-md font-medium" style="background-color: var(--color-success);">' + BootFSI18n.html('HLS可用') + '</span>' : ''}
+                    ${file.albumAvailable ? '<span class="badge px-2 py-1 text-white text-xs theme-rounded-md font-medium" style="background-color: #06b6d4;">' + BootFSI18n.html('图集') + '</span>' : ''}
+                    ${file.isPublicAccess ? '<span class="badge px-2 py-1 text-white text-xs theme-rounded-md font-medium" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);">' + BootFSI18n.html('公开') + '</span>' : ''}
                 </div>
             </div>
             
@@ -1157,12 +1157,12 @@ function createGridCard(file) {
                     <div class="mt-2 flex space-x-1">
                         ${!file.hlsAvailable && isVideoFile ? `
                             <button class="hls-convert-btn theme-btn-quiet flex-1" style="color: var(--color-success); background-color: rgba(16, 185, 129, 0.1);">
-                                HLS 转码
+                                ${BootFSI18n.html('HLS 转码')}
                             </button>
                         ` : ''}
                         ${!file.isPublicAccess && isImageFile ? `
                             <button class="public-access-btn theme-btn-quiet flex-1" style="color: #a855f7; background-color: rgba(168, 85, 247, 0.1);">
-                                发布
+                                ${BootFSI18n.html('发布')}
                             </button>
                         ` : ''}
                     </div>
@@ -1239,10 +1239,10 @@ function createListRow(file) {
             </td>
             <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex space-x-1">
-                    ${file.copyOf ? '<span class="px-2 py-1 text-xs rounded-md" style="background-color: var(--color-accent-muted); color: var(--color-accent-primary);">副本</span>' : ''}
+                    ${file.copyOf ? '<span class="px-2 py-1 text-xs rounded-md" style="background-color: var(--color-accent-muted); color: var(--color-accent-primary);">' + BootFSI18n.html('副本') + '</span>' : ''}
                     ${file.hlsAvailable ? '<span class="px-2 py-1 text-xs rounded-md" style="background-color: rgba(16, 185, 129, 0.1); color: var(--color-success);">HLS</span>' : ''}
-                    ${file.albumAvailable ? '<span class="px-2 py-1 text-xs rounded-md" style="background-color: rgba(6, 182, 212, 0.1); color: #06b6d4;">图集</span>' : ''}
-                    ${file.isPublicAccess ? '<span class="px-2 py-1 text-xs rounded-md" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);">公开</span>' : ''}
+                    ${file.albumAvailable ? '<span class="px-2 py-1 text-xs rounded-md" style="background-color: rgba(6, 182, 212, 0.1); color: #06b6d4;">' + BootFSI18n.html('图集') + '</span>' : ''}
+                    ${file.isPublicAccess ? '<span class="px-2 py-1 text-xs rounded-md" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);">' + BootFSI18n.html('公开') + '</span>' : ''}
                 </div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-text-secondary);">
@@ -1250,11 +1250,11 @@ function createListRow(file) {
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                 <div class="flex space-x-2">
-                    ${textType ? '<button class="list-edit-btn theme-text-btn" style="color: var(--color-accent-primary);">编辑</button>' : `<button class="list-preview-btn theme-text-btn" style="color: var(--color-accent-primary); ${(isImageFile || isVideoFile || isAudioFile) ? '' : 'visibility: hidden;'}">${isImageFile ? '预览' : '播放'}</button>`}
-                    <button class="list-detail-btn theme-text-btn" style="color: var(--color-text-secondary);">详情</button>
-                    <button class="list-rename-btn theme-text-btn" style="color: var(--color-text-secondary);">重命名</button>
-                    <a href="/f/${file.uuid}" download class="theme-text-btn" style="color: var(--color-accent-primary);">下载</a>
-                    <button class="list-delete-btn theme-text-btn" style="color: var(--color-danger);">删除</button>
+                    ${textType ? '<button class="list-edit-btn theme-text-btn" style="color: var(--color-accent-primary);">' + BootFSI18n.html('编辑') + '</button>' : `<button class="list-preview-btn theme-text-btn" style="color: var(--color-accent-primary); ${(isImageFile || isVideoFile || isAudioFile) ? '' : 'visibility: hidden;'}">${BootFSI18n.html(isImageFile ? '预览' : '播放')}</button>`}
+                    <button class="list-detail-btn theme-text-btn" style="color: var(--color-text-secondary);">${BootFSI18n.html('详情')}</button>
+                    <button class="list-rename-btn theme-text-btn" style="color: var(--color-text-secondary);">${BootFSI18n.html('重命名')}</button>
+                    <a href="/f/${file.uuid}" download class="theme-text-btn" style="color: var(--color-accent-primary);">${BootFSI18n.html('下载')}</a>
+                    <button class="list-delete-btn theme-text-btn" style="color: var(--color-danger);">${BootFSI18n.html('删除')}</button>
                 </div>
             </td>
         </tr>
@@ -1349,6 +1349,7 @@ function updateImagePreview(file) {
 
         if (!videoPlayer) {
             videoPlayer = videojs(videoEl, {
+                language: BootFSI18n.language,
                 fluid: true,
                 responsive: true
             });
@@ -1454,7 +1455,7 @@ function setPreviewNavButtonsLoading(loading) {
     if (loading) {
         if (prevBtn) prevBtn.disabled = true;
         if (nextBtn) nextBtn.disabled = true;
-        if (counter) counter.textContent = '加载更多...';
+        if (counter) counter.textContent = BootFSI18n.t('加载更多...');
     }
 }
 
@@ -1520,7 +1521,7 @@ function updateSelectedToolbar() {
     
     if (selectionCount() > 0) {
         toolbar.classList.remove('hidden');
-        countLabel.textContent = `已选择 ${selectionCount()} 项`;
+        countLabel.textContent = BootFSI18n.t('已选择 {0} 项', selectionCount());
     } else {
         toolbar.classList.add('hidden');
     }
@@ -1753,7 +1754,7 @@ function updateStats(data) {
         notice.className = 'hidden px-4 py-2 text-sm'; notice.style.color = 'var(--color-warning)';
         document.getElementById('mainContent')?.insertBefore(notice, document.getElementById('mainContent')?.querySelector('main'));
     }
-    notice.textContent = data?.partial ? '部分节点不可达，当前仅显示可达节点的结果；本机资源可正常使用。' : '';
+    notice.textContent = data?.partial ? BootFSI18n.t('部分节点不可达，当前仅显示可达节点的结果；本机资源可正常使用。') : '';
     notice.classList.toggle('hidden', !data?.partial);
     if (data && data.rows) {
         const total = data.total || data.rows.length;
@@ -1765,23 +1766,23 @@ function updateStats(data) {
         const publicFilesEl = document.getElementById('publicFiles');
         
         if (totalFilesEl) {
-            totalFilesEl.textContent = total.toLocaleString();
+            totalFilesEl.textContent = total.toLocaleString(BootFSI18n.language);
         }
         
         // Count by type (simplified - in real scenario, you'd get this from backend)
         if (imageFilesEl) {
             const imageCount = data.rows.filter(f => isImage(f)).length;
-            imageFilesEl.textContent = imageCount.toLocaleString();
+            imageFilesEl.textContent = imageCount.toLocaleString(BootFSI18n.language);
         }
         
         if (videoFilesEl) {
             const videoCount = data.rows.filter(f => isVideo(f)).length;
-            videoFilesEl.textContent = videoCount.toLocaleString();
+            videoFilesEl.textContent = videoCount.toLocaleString(BootFSI18n.language);
         }
         
         if (publicFilesEl) {
             const publicCount = data.rows.filter(f => f.isPublicAccess).length;
-            publicFilesEl.textContent = publicCount.toLocaleString();
+            publicFilesEl.textContent = publicCount.toLocaleString(BootFSI18n.language);
         }
     }
 }
@@ -1877,18 +1878,18 @@ function uploadFiles(files, uploadFolder, endpoint) {
                     uploaded++;
                     resolve();
                 } else if (xhr.status === 409) {
-                    reject(new Error(`${file.name} 已存在，或上传路径已变更`));
+                    reject(new Error(BootFSI18n.t('{0} 已存在，或上传路径已变更', file.name)));
                 } else {
                     reject(new Error(`${file.name}（HTTP ${xhr.status}）`));
                 }
             });
             
             xhr.addEventListener('error', () => {
-                reject(new Error('网络错误'));
+                reject(new Error(BootFSI18n.t('网络错误')));
             });
             
             xhr.addEventListener('abort', () => {
-                reject(new Error('上传已取消'));
+                reject(new Error(BootFSI18n.t('上传已取消')));
             });
             
             xhr.open(method, url);
@@ -1905,7 +1906,7 @@ function uploadFiles(files, uploadFolder, endpoint) {
             progressBar.style.width = '100%';
             uploadPercent.textContent = '100%';
             uploadTransferred.textContent = formatFileSize(totalBytes);
-            uploadSpeed.textContent = '完成';
+            uploadSpeed.textContent = BootFSI18n.t('完成');
             
             setTimeout(() => {
                 modal.classList.add('hidden');
@@ -1913,12 +1914,12 @@ function uploadFiles(files, uploadFolder, endpoint) {
                 uploadPercent.textContent = '0%';
                 uploadTransferred.textContent = '0 B';
                 uploadSpeed.textContent = '-- MB/s';
-                showToast('上传成功！', 'success');
+                showToast(BootFSI18n.t('上传成功！'), 'success');
                 if (currentFolder === uploadFolder) loadFileList();
             }, 800);
         } catch (error) {
             console.error('Upload error:', error);
-            showToast('上传失败: ' + error.message, 'error');
+            showToast(BootFSI18n.t('上传失败:') + ' ' + error.message, 'error');
             modal.classList.add('hidden');
             if (uploaded > 0 && currentFolder === uploadFolder) loadFileList();
         }
@@ -1946,19 +1947,19 @@ let deleteFolderTarget = null;
 
 function showDeleteConfirm() {
     if (selectionCount() === 0) {
-        showToast('请先选择要删除的文件', 'warning');
+        showToast(BootFSI18n.t('请先选择要删除的文件'), 'warning');
         return;
     }
     deleteFolderTarget = null;
-    const folderNote = selectedFolders.size > 0 ? '文件夹会连同其中的内容一起删除。' : '此操作不可恢复。';
-    document.getElementById('deleteConfirmMessage').textContent = `确定要删除选中的 ${selectionCount()} 项吗？${folderNote}`;
+    const folderNote = selectedFolders.size > 0 ? BootFSI18n.t('文件夹会连同其中的内容一起删除。') : BootFSI18n.t('此操作不可恢复。');
+    document.getElementById('deleteConfirmMessage').textContent = BootFSI18n.t('确定要删除选中的 {0} 项吗？{1}', selectionCount(), folderNote);
     document.getElementById('deleteConfirmModal').classList.remove('hidden');
 }
 
 function showFolderDeleteConfirm(folder) {
     if (folder.managed === false) return;
     deleteFolderTarget = folder;
-    document.getElementById('deleteConfirmMessage').textContent = `确定要删除文件夹「${folder.fileName}」及其内部的所有文件和子文件夹吗？此操作不可恢复。`;
+    document.getElementById('deleteConfirmMessage').textContent = BootFSI18n.t('确定要删除文件夹「{0}」及其内部的所有文件和子文件夹吗？此操作不可恢复。', folder.fileName);
     document.getElementById('deleteConfirmModal').classList.remove('hidden');
 }
 
@@ -2000,11 +2001,11 @@ async function confirmDelete() {
         }
         closeDeleteModal();
         clearSelection();
-        showToast('删除成功', 'success');
+        showToast(BootFSI18n.t('删除成功'), 'success');
         loadFileList();
     } catch (error) {
         console.error('Delete error:', error);
-        showToast('删除失败', 'error');
+        showToast(BootFSI18n.t('删除失败'), 'error');
     } finally {
         submit.disabled = false;
     }
@@ -2013,7 +2014,7 @@ async function confirmDelete() {
 // Batch download
 function batchDownload() {
     if (selectedFiles.size === 0) {
-        showToast('请先选择要下载的文件', 'warning');
+        showToast(BootFSI18n.t('请先选择要下载的文件'), 'warning');
         return;
     }
     
@@ -2032,11 +2033,11 @@ function batchDownload() {
         iframe.style.display = 'none';
         document.body.appendChild(iframe);
         iframe.src = `/g/b/${data.uuid}`;
-        showToast('正在准备下载...', 'info');
+        showToast(BootFSI18n.t('正在准备下载...'), 'info');
     })
     .catch(error => {
         console.error('Batch download error:', error);
-        showToast('批量下载失败', 'error');
+        showToast(BootFSI18n.t('批量下载失败'), 'error');
     });
 }
 
@@ -2044,7 +2045,7 @@ function batchDownload() {
 function convertToHLS() {
     const selected = Array.from(selectedFiles);
     if (selected.length !== 1) {
-        showToast('请选择一个视频文件进行转码', 'warning');
+        showToast(BootFSI18n.t('请选择一个视频文件进行转码'), 'warning');
         return;
     }
     
@@ -2055,19 +2056,19 @@ function convertSingleToHLS(uuid) {
     fetch(`/hls/convert?uuid=${uuid}`, { method: 'POST' })
     .then(response => response.text())
     .then(data => {
-        showToast('HLS 转码已启动', 'success');
+        showToast(BootFSI18n.t('HLS 转码已启动'), 'success');
         loadFileList();
     })
     .catch(error => {
         console.error('HLS conversion error:', error);
-        showToast('转码失败', 'error');
+        showToast(BootFSI18n.t('转码失败'), 'error');
     });
 }
 
 // Publish to gallery
 function publishToGallery() {
     if (selectedFiles.size === 0) {
-        showToast('请先选择要发布的文件', 'warning');
+        showToast(BootFSI18n.t('请先选择要发布的文件'), 'warning');
         return;
     }
     
@@ -2081,12 +2082,12 @@ function publishSingleToGallery(uuid) {
         method: 'POST'
     })
     .then(() => {
-        showToast('发布成功', 'success');
+        showToast(BootFSI18n.t('发布成功'), 'success');
         loadFileList();
     })
     .catch(error => {
         console.error('Publish error:', error);
-        showToast('发布失败', 'error');
+        showToast(BootFSI18n.t('发布失败'), 'error');
     });
 }
 
@@ -2125,7 +2126,7 @@ function toggleShowAll() {
 // Refresh file list
 function refreshFileList() {
     loadFileList();
-    showToast('已刷新', 'success');
+    showToast(BootFSI18n.t('已刷新'), 'success');
 }
 
 // ======================== File Detail Modal ========================
@@ -2156,7 +2157,7 @@ function showFileDetail(uuid) {
     // 异步请求文件详情
     fetch(`/api/file/${uuid}/details`)
         .then(res => {
-            if (!res.ok) throw new Error('文件不存在');
+            if (!res.ok) throw new Error(BootFSI18n.t('文件不存在'));
             return res.json();
         })
         .then(data => {
@@ -2166,10 +2167,10 @@ function showFileDetail(uuid) {
         .catch(err => {
             if (session !== fileDetailSession) return;
             const error = document.getElementById('fileDetailError');
-            error.textContent = `加载失败: ${err.message}`;
+            error.textContent = BootFSI18n.t('加载失败: {0}', err.message);
             error.classList.remove('hidden');
             content.classList.add('hidden');
-            showToast('文件详情加载失败', 'error');
+            showToast(BootFSI18n.t('文件详情加载失败'), 'error');
         })
         .finally(() => {
             if (session !== fileDetailSession) return;
@@ -2195,16 +2196,16 @@ function renderFileDetail(data) {
     const badges = document.getElementById('detailStatusBadges');
     badges.innerHTML = '';
     if (data.copyOf) {
-        badges.appendChild(createBadge('副本', 'var(--color-accent-muted)', 'var(--color-accent-primary)'));
+        badges.appendChild(createBadge(BootFSI18n.t('副本'), 'var(--color-accent-muted)', 'var(--color-accent-primary)'));
     }
     if (data.hlsAvailable) {
         badges.appendChild(createBadge('HLS', 'rgba(16, 185, 129, 0.1)', 'var(--color-success)'));
     }
     if (data.albumAvailable) {
-        badges.appendChild(createBadge('图集', 'rgba(6, 182, 212, 0.1)', '#06b6d4'));
+        badges.appendChild(createBadge(BootFSI18n.t('图集'), 'rgba(6, 182, 212, 0.1)', '#06b6d4'));
     }
     if (data.isPublicAccess) {
-        badges.appendChild(createBadge('公开', 'var(--color-bg-tertiary)', 'var(--color-text-secondary)'));
+        badges.appendChild(createBadge(BootFSI18n.t('公开'), 'var(--color-bg-tertiary)', 'var(--color-text-secondary)'));
     }
 
     // 标签
@@ -2223,7 +2224,7 @@ function renderFileDetail(data) {
             detailTags.appendChild(span);
         });
     } else {
-        detailTags.innerHTML = '<span class="text-sm theme-page-text-muted">无标签</span>';
+        detailTags.innerHTML = '<span class="text-sm theme-page-text-muted">' + BootFSI18n.html('无标签') + '</span>';
     }
 
     // 媒体信息
@@ -2288,15 +2289,15 @@ function renderFileDetail(data) {
         const metadataGrid = document.getElementById('detailMetadataGrid');
         if (metadata) {
             const fields = [
-                { key: 'title', label: '标题' },
-                { key: 'artist', label: '艺术家' },
-                { key: 'album', label: '专辑' },
-                { key: 'albumArtist', label: '专辑艺术家' },
-                { key: 'track', label: '音轨' },
-                { key: 'date', label: '年代' },
-                { key: 'genre', label: '风格' },
-                { key: 'composer', label: '作曲' },
-                { key: 'comment', label: '备注', maxLen: 60 }
+                { key: 'title', label: BootFSI18n.t('标题') },
+                { key: 'artist', label: BootFSI18n.t('艺术家') },
+                { key: 'album', label: BootFSI18n.t('专辑') },
+                { key: 'albumArtist', label: BootFSI18n.t('专辑艺术家') },
+                { key: 'track', label: BootFSI18n.t('音轨') },
+                { key: 'date', label: BootFSI18n.t('年代') },
+                { key: 'genre', label: BootFSI18n.t('风格') },
+                { key: 'composer', label: BootFSI18n.t('作曲') },
+                { key: 'comment', label: BootFSI18n.t('备注'), maxLen: 60 }
             ];
             const items = fields.filter(f => metadata[f.key]).map(f => {
                 let value = metadata[f.key];
@@ -2324,9 +2325,9 @@ function renderFileDetail(data) {
         fetch(`/hls/${data.uuid}/segments/info`)
             .then(res => res.json())
             .then(hlsInfo => {
-                document.getElementById('detailHlsSegments').textContent = hlsInfo.segmentCount + ' 段';
+                document.getElementById('detailHlsSegments').textContent = BootFSI18n.t('{0} 段', hlsInfo.segmentCount);
                 document.getElementById('detailHlsSize').textContent = formatFileSize(hlsInfo.totalSize || 0);
-                document.getElementById('detailHlsStatus').textContent = hlsInfo.isFinalized ? '已完结' : '未完结';
+                document.getElementById('detailHlsStatus').textContent = hlsInfo.isFinalized ? BootFSI18n.t('已完结') : BootFSI18n.t('未完结');
                 document.getElementById('detailHlsPlaylist').textContent = `/hls/${data.uuid}/playlist.m3u8`;
                 hlsSection.classList.remove('hidden');
             })
@@ -2362,10 +2363,10 @@ function renderFileDetail(data) {
 
                 const paramsGrid = document.getElementById('detailAiParams');
                 const params = [
-                    { label: '步数', value: ai.steps },
+                    { label: BootFSI18n.t('步数'), value: ai.steps },
                     { label: 'CFG', value: ai.cfgScale },
-                    { label: '种子', value: ai.seed, mono: true },
-                    { label: '尺寸', value: ai.size }
+                    { label: BootFSI18n.t('种子'), value: ai.seed, mono: true },
+                    { label: BootFSI18n.t('尺寸'), value: ai.size }
                 ];
                 paramsGrid.innerHTML = params
                     .filter(p => p.value)
@@ -2401,12 +2402,12 @@ function bindCopyOnClick(elementId) {
     const el = document.getElementById(elementId);
     if (!el) return;
     el.style.cursor = 'pointer';
-    el.title = '点击复制';
+    el.title = BootFSI18n.t('点击复制');
     el.onclick = () => {
         const text = el.textContent;
         if (!text) return;
         navigator.clipboard.writeText(text)
-            .then(() => showToast('已复制到剪切板', 'success'))
+            .then(() => showToast(BootFSI18n.t('已复制到剪切板'), 'success'))
             .catch(() => {
                 const ta = document.createElement('textarea');
                 ta.value = text;
@@ -2416,9 +2417,9 @@ function bindCopyOnClick(elementId) {
                 ta.select();
                 try {
                     document.execCommand('copy');
-                    showToast('已复制到剪切板', 'success');
+                    showToast(BootFSI18n.t('已复制到剪切板'), 'success');
                 } catch {
-                    showToast('复制失败', 'error');
+                    showToast(BootFSI18n.t('复制失败'), 'error');
                 }
                 document.body.removeChild(ta);
             });
@@ -2454,11 +2455,11 @@ function formatDuration(seconds) {
 
 function formatChannels(channels) {
     switch (channels) {
-        case 1: return '单声道 (Mono)';
-        case 2: return '立体声 (Stereo)';
-        case 6: return '5.1 环绕声';
-        case 8: return '7.1 环绕声';
-        default: return channels + ' 声道';
+        case 1: return BootFSI18n.t('单声道 (Mono)');
+        case 2: return BootFSI18n.t('立体声 (Stereo)');
+        case 6: return BootFSI18n.t('5.1 环绕声');
+        case 8: return BootFSI18n.t('7.1 环绕声');
+        default: return BootFSI18n.t('{0} 声道', channels);
     }
 }
 
@@ -2522,7 +2523,7 @@ function showTagInput(row, uuid, folder = null) {
     const inputContainer = document.createElement('span');
     inputContainer.className = 'tag-input-inline';
     inputContainer.innerHTML = `
-        <input type="text" class="tag-input-field" placeholder="标签名" maxlength="30" autofocus>
+        <input type="text" class="tag-input-field" placeholder="${BootFSI18n.html('标签名')}" maxlength="30" autofocus>
     `;
     wrapper.insertBefore(inputContainer, addBtn);
 
@@ -2566,14 +2567,14 @@ async function confirmAddTag(uuid, tagName, folder = null) {
             body: JSON.stringify(folder ? {folder: folder.folderPath, tags} : tags)
         });
         if (response.ok) {
-            showToast('标签已添加', 'success');
+            showToast(BootFSI18n.t('标签已添加'), 'success');
             loadFileList();
         } else {
-            showToast('添加标签失败', 'error');
+            showToast(BootFSI18n.t('添加标签失败'), 'error');
         }
     } catch (error) {
         console.error('Add tag error:', error);
-        showToast('添加标签失败', 'error');
+        showToast(BootFSI18n.t('添加标签失败'), 'error');
     }
 }
 
@@ -2586,14 +2587,14 @@ async function removeTag(uuid, tagIndexFormat, folder = null) {
             body: JSON.stringify(folder ? {folder: folder.folderPath, tags: [tagIndexFormat]} : [tagIndexFormat])
         });
         if (response.ok) {
-            showToast('标签已删除', 'success');
+            showToast(BootFSI18n.t('标签已删除'), 'success');
             loadFileList();
         } else {
-            showToast('删除标签失败', 'error');
+            showToast(BootFSI18n.t('删除标签失败'), 'error');
         }
     } catch (error) {
         console.error('Remove tag error:', error);
-        showToast('删除标签失败', 'error');
+        showToast(BootFSI18n.t('删除标签失败'), 'error');
     }
 }
 
@@ -2604,7 +2605,7 @@ let renameTargetFolder = null;
 function showRenameModal(uuid, oldName) {
     renameTargetUuid = uuid;
     renameTargetFolder = null;
-    document.getElementById('renamePrompt').textContent = '请输入新的文件名：';
+    document.getElementById('renamePrompt').textContent = BootFSI18n.t('请输入新的文件名：');
     const input = document.getElementById('renameInput');
     input.value = oldName;
     document.getElementById('renameModal').classList.remove('hidden');
@@ -2621,7 +2622,7 @@ function showFolderRenameModal(folder) {
     if (folder.managed === false) return;
     showRenameModal(folder.uuid, folder.fileName);
     renameTargetFolder = folder;
-    document.getElementById('renamePrompt').textContent = '请输入新的文件夹名称，内部文件和子文件夹会一并保留：';
+    document.getElementById('renamePrompt').textContent = BootFSI18n.t('请输入新的文件夹名称，内部文件和子文件夹会一并保留：');
     document.getElementById('renameInput').select();
 }
 
@@ -2635,11 +2636,11 @@ async function confirmRename() {
     if (!renameTargetUuid && !renameTargetFolder) return;
     const newFileName = document.getElementById('renameInput').value.trim();
     if (!newFileName) {
-        showToast(renameTargetFolder ? '文件夹名称不能为空' : '文件名不能为空', 'warning');
+        showToast(renameTargetFolder ? BootFSI18n.t('文件夹名称不能为空') : BootFSI18n.t('文件名不能为空'), 'warning');
         return;
     }
     if (renameTargetFolder && (/[\/\\\x00-\x1f\x7f]/.test(newFileName) || newFileName === '.' || newFileName === '..')) {
-        showToast('请输入有效的文件夹名称', 'warning');
+        showToast(BootFSI18n.t('请输入有效的文件夹名称'), 'warning');
         return;
     }
     const uuid = renameTargetUuid;
@@ -2653,16 +2654,16 @@ async function confirmRename() {
             body: JSON.stringify(folder ? {folder: folder.folderPath, name: newFileName} : {fileName: newFileName})
         });
         if (response.ok) {
-            showToast('重命名成功', 'success');
+            showToast(BootFSI18n.t('重命名成功'), 'success');
             closeRenameModal();
             loadFileList();
         } else {
             const msg = await response.text();
-            showToast('重命名失败: ' + msg, 'error');
+            showToast(BootFSI18n.t('重命名失败:') + ' ' + BootFSI18n.t(msg), 'error');
         }
     } catch (error) {
         console.error('Rename error:', error);
-        showToast('重命名失败', 'error');
+        showToast(BootFSI18n.t('重命名失败'), 'error');
     } finally {
         submit.disabled = false;
     }
@@ -2815,7 +2816,7 @@ function initializeDragAndDrop() {
                 const file = await draggingFileHandle.getFile();
                 files = [file];
             } catch (err) {
-                showToast('读取文件失败：' + err.message, 'error');
+                showToast(BootFSI18n.t('读取文件失败：') + err.message, 'error');
             }
             draggingFileHandle = null;
         }
@@ -2981,12 +2982,12 @@ function initializeLocalFolderPanel() {
     }
     if (previewToggleBtn) {
         previewToggleBtn.classList.toggle('active', localPreviewEnabled);
-        previewToggleBtn.title = localPreviewEnabled ? '关闭悬停预览' : '开启悬停预览';
+        previewToggleBtn.title = localPreviewEnabled ? BootFSI18n.t('关闭悬停预览') : BootFSI18n.t('开启悬停预览');
         previewToggleBtn.addEventListener('click', () => {
             localPreviewEnabled = !localPreviewEnabled;
             localStorage.setItem('tfs-local-preview-enabled', String(localPreviewEnabled));
             previewToggleBtn.classList.toggle('active', localPreviewEnabled);
-            previewToggleBtn.title = localPreviewEnabled ? '关闭悬停预览' : '开启悬停预览';
+            previewToggleBtn.title = localPreviewEnabled ? BootFSI18n.t('关闭悬停预览') : BootFSI18n.t('开启悬停预览');
             if (!localPreviewEnabled) hideLocalImagePreview();
         });
     }
@@ -3041,7 +3042,7 @@ async function openLocalFolder() {
         showLocalFolderPanel();
     } catch (e) {
         if (e.name !== 'AbortError') {
-            showToast('打开文件夹失败：' + e.message, 'error');
+            showToast(BootFSI18n.t('打开文件夹失败：') + e.message, 'error');
         }
     }
 }
@@ -3056,7 +3057,7 @@ async function changeLocalFolder() {
         await renderLocalDir();
     } catch (e) {
         if (e.name !== 'AbortError') {
-            showToast('更换文件夹失败：' + e.message, 'error');
+            showToast(BootFSI18n.t('更换文件夹失败：') + e.message, 'error');
         }
     }
 }
@@ -3094,22 +3095,22 @@ function closeLocalFolderPanel() {
 async function toggleCurrentBookmark() {
     const current = dirStack[dirStack.length - 1];
     if (!current) {
-        showToast('请先打开一个文件夹', 'error');
+        showToast(BootFSI18n.t('请先打开一个文件夹'), 'error');
         return;
     }
     try {
         const existing = await findCurrentBookmark();
         if (existing) {
             await deleteBookmark(existing.id);
-            showToast('已移除书签', 'info');
+            showToast(BootFSI18n.t('已移除书签'), 'info');
         } else {
             const name = dirStack.map(h => h.name).join(' / ');
             await saveBookmark(current, name);
-            showToast('已保存书签', 'success');
+            showToast(BootFSI18n.t('已保存书签'), 'success');
         }
         await updateBookmarkBtnState();
     } catch (e) {
-        showToast('书签操作失败：' + e.message, 'error');
+        showToast(BootFSI18n.t('书签操作失败：') + e.message, 'error');
     }
 }
 
@@ -3141,11 +3142,11 @@ async function updateBookmarkBtnState() {
     const bm = await findCurrentBookmark();
     if (bm) {
         bookmarkBtn.classList.add('active');
-        bookmarkBtn.title = '移除书签';
+        bookmarkBtn.title = BootFSI18n.t('移除书签');
         bookmarkBtn.dataset.bookmarkId = bm.id;
     } else {
         bookmarkBtn.classList.remove('active');
-        bookmarkBtn.title = '保存书签';
+        bookmarkBtn.title = BootFSI18n.t('保存书签');
         delete bookmarkBtn.dataset.bookmarkId;
     }
 }
@@ -3180,7 +3181,7 @@ async function openFromHandle(handle) {
         await renderLocalDir();
         showLocalFolderPanel();
     } catch (e) {
-        showToast('打开失败：' + e.message, 'error');
+        showToast(BootFSI18n.t('打开失败：') + e.message, 'error');
     }
 }
 
@@ -3212,13 +3213,13 @@ async function renderBookmarksDropdown() {
     let html = '';
 
     if (bookmarks.length > 0) {
-        html += `<div class="px-3 py-2 border-b" style="border-color: var(--color-border-primary);"><p class="text-xs font-medium uppercase tracking-wider" style="color: var(--color-text-tertiary);">书签</p></div>`;
+        html += `<div class="px-3 py-2 border-b" style="border-color: var(--color-border-primary);"><p class="text-xs font-medium uppercase tracking-wider" style="color: var(--color-text-tertiary);">${BootFSI18n.html('书签')}</p></div>`;
         html += '<div class="py-1">';
         bookmarks.forEach(bm => {
             html += `
                 <div class="bookmark-item flex items-center justify-between px-3 py-2 text-sm cursor-pointer transition-colors" data-bookmark-id="${bm.id}" style="color: var(--color-text-secondary);" onmouseover="this.style.backgroundColor='var(--color-bg-tertiary)'" onmouseout="this.style.backgroundColor=''">
                     <span class="truncate flex-1">${BootFSSecurity.html(bm.name)}</span>
-                    <button class="bookmark-delete-btn ml-2 flex-shrink-0 p-0.5 rounded" data-bookmark-id="${bm.id}" style="color: var(--color-text-muted);" title="删除书签">
+                    <button class="bookmark-delete-btn ml-2 flex-shrink-0 p-0.5 rounded" data-bookmark-id="${bm.id}" style="color: var(--color-text-muted);" title="${BootFSI18n.html('删除书签')}">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                     </button>
                 </div>
@@ -3228,7 +3229,7 @@ async function renderBookmarksDropdown() {
     }
 
     if (recents.length > 0) {
-        html += `<div class="px-3 py-2 border-t ${bookmarks.length > 0 ? 'border-b' : 'border-b'}" style="border-color: var(--color-border-primary);"><p class="text-xs font-medium uppercase tracking-wider" style="color: var(--color-text-tertiary);">最近打开</p></div>`;
+        html += `<div class="px-3 py-2 border-t ${bookmarks.length > 0 ? 'border-b' : 'border-b'}" style="border-color: var(--color-border-primary);"><p class="text-xs font-medium uppercase tracking-wider" style="color: var(--color-text-tertiary);">${BootFSI18n.html('最近打开')}</p></div>`;
         html += '<div class="py-1">';
         recents.forEach(r => {
             html += `
@@ -3238,11 +3239,11 @@ async function renderBookmarksDropdown() {
             `;
         });
         html += '</div>';
-        html += `<div class="border-t" style="border-color: var(--color-border-primary);"><button id="clearRecentBtn" class="w-full text-left px-3 py-2 text-sm transition-colors" style="color: var(--color-danger);" onmouseover="this.style.backgroundColor='var(--color-bg-tertiary)'" onmouseout="this.style.backgroundColor=''">清除最近打开</button></div>`;
+        html += `<div class="border-t" style="border-color: var(--color-border-primary);"><button id="clearRecentBtn" class="w-full text-left px-3 py-2 text-sm transition-colors" style="color: var(--color-danger);" onmouseover="this.style.backgroundColor='var(--color-bg-tertiary)'" onmouseout="this.style.backgroundColor=''">${BootFSI18n.html('清除最近打开')}</button></div>`;
     }
 
     if (!html) {
-        html = '<div class="px-3 py-6 text-center text-sm" style="color: var(--color-text-tertiary);">暂无书签或历史记录</div>';
+        html = '<div class="px-3 py-6 text-center text-sm" style="color: var(--color-text-tertiary);">' + BootFSI18n.html('暂无书签或历史记录') + '</div>';
     }
 
     dropdown.innerHTML = html;
@@ -3400,7 +3401,7 @@ async function renderLocalDir() {
         return a.name.localeCompare(b.name);
     });
 
-    pathEl.textContent = '../ ' + (dirStack.map(h => h.name).join(' / ') || '本地文件夹');
+    pathEl.textContent = '../ ' + (dirStack.map(h => h.name).join(' / ') || BootFSI18n.t('本地文件夹'));
     backBtn.disabled = dirStack.length <= 1;
 
     if (entries.length === 0) {
@@ -3446,7 +3447,7 @@ async function renderLocalDir() {
                     let count = 0;
                     for await (const _ of entry.handle.entries()) count++;
                     const sizeCell = row.querySelector('.local-file-size');
-                    if (sizeCell) sizeCell.textContent = `${count} 项`;
+                    if (sizeCell) sizeCell.textContent = BootFSI18n.t('{0} 项', count);
                 } catch (_) {}
             })();
         } else {
@@ -3539,7 +3540,7 @@ let draggedSegmentIndex = null;
 function showTsUploadModal() {
     if (document.getElementById('startTsUploadBtn').disabled) return;
     if (selectedFiles.size > 1) {
-        showToast('仅限单选，请只选择一个文件', 'warning');
+        showToast(BootFSI18n.t('仅限单选，请只选择一个文件'), 'warning');
         return;
     }
     
@@ -3568,7 +3569,7 @@ function showTsUploadModal() {
                     openTsUploadModalUI();
                     loadSegmentList();
                 } else {
-                    showToast('该内容仅 HLS 可用，请选择已启用 HLS 的文件', 'warning');
+                    showToast(BootFSI18n.t('该内容仅 HLS 可用，请选择已启用 HLS 的文件'), 'warning');
                 }
             })
             .catch(() => {
@@ -3582,11 +3583,11 @@ function showTsUploadModal() {
 function openTsUploadModalUI() {
     document.getElementById('tsFileInput').value = '';
     document.getElementById('tsFileList').innerHTML = '';
-    document.getElementById('tsFileCount').textContent = '已选择 0 个文件';
+    document.getElementById('tsFileCount').textContent = BootFSI18n.t('已选择 0 个文件');
     document.getElementById('tsUploadProgress').classList.add('hidden');
     document.getElementById('tsUploadProgressBar').style.width = '0%';
     document.getElementById('tsUploadPercent').textContent = '0%';
-    document.getElementById('tsUploadStatus').textContent = '准备上传...';
+    document.getElementById('tsUploadStatus').textContent = BootFSI18n.t('准备上传...');
     
     const modalTitle = document.getElementById('tsUploadModalTitle');
     const fileNameInput = document.getElementById('tsVideoFileName');
@@ -3595,20 +3596,20 @@ function openTsUploadModalUI() {
     const segmentActions = document.getElementById('tsSegmentActions');
     
     if (tsUploadMode === 'edit' && editingFileObject) {
-        modalTitle.textContent = '编辑 HLS 切片';
+        modalTitle.textContent = BootFSI18n.t('编辑 HLS 切片');
         fileNameInput.value = editingFileObject.fileName.split('/').pop();
         fileNameInput.disabled = true;
-        startBtn.textContent = '追加切片';
+        startBtn.textContent = BootFSI18n.t('追加切片');
         startBtn.classList.remove('theme-btn-primary');
         startBtn.classList.add('theme-btn-success');
         
         if (infoDiv) {
             infoDiv.innerHTML = `
                 <div class="flex items-center space-x-2 mb-2">
-                    <span class="px-2 py-1 text-xs rounded-md" style="background-color: rgba(16, 185, 129, 0.1); color: var(--color-success);">编辑模式</span>
+                    <span class="px-2 py-1 text-xs rounded-md" style="background-color: rgba(16, 185, 129, 0.1); color: var(--color-success);">${BootFSI18n.html('编辑模式')}</span>
                     <span class="text-xs theme-page-text-muted">UUID: ${editingFileObject.uuid}</span>
                 </div>
-                <p class="text-xs theme-page-text-secondary">新上传的切片将追加到现有播放列表末尾，右侧可拖拽调整顺序</p>
+                <p class="text-xs theme-page-text-secondary">${BootFSI18n.html('新上传的切片将追加到现有播放列表末尾，右侧可拖拽调整顺序')}</p>
             `;
             infoDiv.classList.remove('hidden');
         }
@@ -3617,21 +3618,21 @@ function openTsUploadModalUI() {
             segmentActions.classList.remove('hidden');
         }
     } else {
-        modalTitle.textContent = 'TS 切片上传';
+        modalTitle.textContent = BootFSI18n.t('TS 切片上传');
         fileNameInput.value = '';
         fileNameInput.disabled = false;
-        startBtn.textContent = '开始上传';
+        startBtn.textContent = BootFSI18n.t('开始上传');
         startBtn.classList.remove('theme-btn-success');
         startBtn.classList.add('theme-btn-primary');
         
         if (infoDiv) {
             infoDiv.innerHTML = `
                 <div class="flex items-center space-x-2 mb-2">
-                    <span class="px-2 py-1 text-xs rounded-md" style="background-color: rgba(245, 158, 11, 0.1); color: var(--color-warning);">新建模式</span>
+                    <span class="px-2 py-1 text-xs rounded-md" style="background-color: rgba(245, 158, 11, 0.1); color: var(--color-warning);">${BootFSI18n.html('新建模式')}</span>
                 </div>
                 <p class="text-xs theme-page-text-secondary"></p>
             `;
-            infoDiv.querySelector('p').textContent = `上传到 /${document.getElementById('tsUploadModal').dataset.folder}`;
+            infoDiv.querySelector('p').textContent = BootFSI18n.t('上传到 /{0}', document.getElementById('tsUploadModal').dataset.folder);
             infoDiv.classList.remove('hidden');
         }
         
@@ -3670,7 +3671,7 @@ function renderSegmentList(segments) {
     const countSpan = document.getElementById('tsSegmentCount');
     
     if (countSpan) {
-        countSpan.textContent = `共 ${segments.length} 个切片`;
+        countSpan.textContent = BootFSI18n.t('共 {0} 个切片', segments.length);
     }
     
     if (!segments || segments.length === 0) {
@@ -3679,8 +3680,8 @@ function renderSegmentList(segments) {
                 <svg class="mx-auto h-8 w-8 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"></path>
                 </svg>
-                <p>暂无切片</p>
-                <p class="text-xs mt-1">${tsUploadMode === 'edit' ? '上传切片后显示' : '选择 HLS 文件后显示'}</p>
+                <p>${BootFSI18n.html('暂无切片')}</p>
+                <p class="text-xs mt-1">${tsUploadMode === 'edit' ? BootFSI18n.t('上传切片后显示') : BootFSI18n.t('选择 HLS 文件后显示')}</p>
             </div>
         `;
         return;
@@ -3786,7 +3787,7 @@ function handleDrop(e) {
         currentSegments = currentSegments.map((seg, idx) => ({ ...seg, index: idx }));
         
         renderSegmentList(currentSegments);
-        showToast('切片顺序已更改，请点击"保存排序"生效', 'info');
+        showToast(BootFSI18n.t('切片顺序已更改，请点击"保存排序"生效'), 'info');
     }
     
     draggedSegmentIndex = null;
@@ -3801,7 +3802,7 @@ function handleDragEnd(e) {
 
 async function saveSegmentOrder() {
     if (!currentVirtualFileUuid || currentSegments.length === 0) {
-        showToast('没有切片需要保存', 'warning');
+        showToast(BootFSI18n.t('没有切片需要保存'), 'warning');
         return;
     }
     
@@ -3815,26 +3816,26 @@ async function saveSegmentOrder() {
         });
         
         if (!response.ok) {
-            throw new Error('保存失败');
+            throw new Error(BootFSI18n.t('保存失败'));
         }
         
-        showToast('切片顺序已保存', 'success');
+        showToast(BootFSI18n.t('切片顺序已保存'), 'success');
         loadSegmentList();
     } catch (error) {
         console.error('Save order error:', error);
-        showToast('保存失败: ' + error.message, 'error');
+        showToast(BootFSI18n.t('保存失败:') + ' ' + error.message, 'error');
     }
 }
 
 async function deleteSelectedSegment() {
     if (selectedSegmentIndex === null || !currentSegments[selectedSegmentIndex]) {
-        showToast('请先选择要删除的切片', 'warning');
+        showToast(BootFSI18n.t('请先选择要删除的切片'), 'warning');
         return;
     }
     
     const segment = currentSegments[selectedSegmentIndex];
     
-    if (!confirm(`确定要删除切片 "${segment.fileName}" 吗？`)) {
+    if (!confirm(BootFSI18n.t('确定要删除切片 "{0}" 吗？', segment.fileName))) {
         return;
     }
     
@@ -3844,15 +3845,15 @@ async function deleteSelectedSegment() {
         });
         
         if (!response.ok) {
-            throw new Error('删除失败');
+            throw new Error(BootFSI18n.t('删除失败'));
         }
         
-        showToast('切片已删除', 'success');
+        showToast(BootFSI18n.t('切片已删除'), 'success');
         selectedSegmentIndex = null;
         loadSegmentList();
     } catch (error) {
         console.error('Delete segment error:', error);
-        showToast('删除失败: ' + error.message, 'error');
+        showToast(BootFSI18n.t('删除失败:') + ' ' + error.message, 'error');
     }
 }
 
@@ -3878,7 +3879,7 @@ function handleTsFileSelect(e) {
         fileList.appendChild(item);
     });
     
-    document.getElementById('tsFileCount').textContent = `已选择 ${selectedTsFiles.length} 个文件`;
+    document.getElementById('tsFileCount').textContent = BootFSI18n.t('已选择 {0} 个文件', selectedTsFiles.length);
 }
 
 async function startTsUpload() {
@@ -3887,13 +3888,13 @@ async function startTsUpload() {
     const files = [...selectedTsFiles];
     
     if (files.length === 0) {
-        showToast('请先选择 TS 切片文件', 'warning');
+        showToast(BootFSI18n.t('请先选择 TS 切片文件'), 'warning');
         return;
     }
     
     const startBtn = document.getElementById('startTsUploadBtn');
     startBtn.disabled = true;
-    startBtn.textContent = '上传中...';
+    startBtn.textContent = BootFSI18n.t('上传中...');
     
     document.getElementById('tsUploadProgress').classList.remove('hidden');
     
@@ -3925,7 +3926,7 @@ async function startTsUpload() {
                     const overallTransferred = totalTransferred + event.loaded;
                     const overallPercent = Math.round((overallTransferred / totalBytes) * 100);
                     
-                    updateTsProgressWithStats(overallPercent, overallTransferred, speed, `正在上传: ${file.name}`);
+                    updateTsProgressWithStats(overallPercent, overallTransferred, speed, BootFSI18n.t('正在上传: {0}', file.name));
                     
                     lastLoaded = event.loaded;
                     lastTime = currentTime;
@@ -3940,15 +3941,15 @@ async function startTsUpload() {
                 } else {
                     try {
                         const errorData = JSON.parse(xhr.responseText);
-                        reject(new Error(errorData.error || `上传切片 ${file.name} 失败`));
+                        reject(new Error(errorData.error ? BootFSI18n.t(errorData.error) : BootFSI18n.t('上传切片 {0} 失败', file.name)));
                     } catch (e) {
-                        reject(new Error(`上传切片 ${file.name} 失败，状态码: ${xhr.status}`));
+                        reject(new Error(BootFSI18n.t('上传切片 {0} 失败，状态码: {1}', file.name, xhr.status)));
                     }
                 }
             });
             
             xhr.addEventListener('error', () => {
-                reject(new Error(`上传切片 ${file.name} 网络错误`));
+                reject(new Error(BootFSI18n.t('上传切片 {0} 网络错误', file.name)));
             });
             
             xhr.open('POST', `/hls/${currentVirtualFileUuid}/segments`);
@@ -3960,7 +3961,7 @@ async function startTsUpload() {
         let startSequence = 0;
         
         if (tsUploadMode === 'edit' && currentVirtualFileUuid) {
-            updateTsProgress(0, '正在获取现有切片信息...');
+            updateTsProgress(0, BootFSI18n.t('正在获取现有切片信息...'));
             
             const segmentInfoResponse = await fetch(`/hls/${currentVirtualFileUuid}/segments/info`);
             if (segmentInfoResponse.ok) {
@@ -3968,9 +3969,9 @@ async function startTsUpload() {
                 startSequence = segmentInfo.segmentCount || 0;
             }
             
-            updateTsProgress(5, `编辑模式: 从第 ${startSequence} 个切片开始追加`);
+            updateTsProgress(5, BootFSI18n.t('编辑模式: 从第 {0} 个切片开始追加', startSequence));
         } else {
-            updateTsProgress(0, '正在创建虚拟文件...');
+            updateTsProgress(0, BootFSI18n.t('正在创建虚拟文件...'));
             
             const createResponse = await fetch('/virtual-file', {
                 method: 'POST',
@@ -3979,13 +3980,13 @@ async function startTsUpload() {
             });
             
             if (!createResponse.ok) {
-                throw new Error('创建虚拟文件失败');
+                throw new Error(BootFSI18n.t('创建虚拟文件失败'));
             }
             
             const createData = await createResponse.json();
             currentVirtualFileUuid = createData.uuid;
             
-            updateTsProgress(5, `虚拟文件已创建: ${currentVirtualFileUuid}`);
+            updateTsProgress(5, BootFSI18n.t('虚拟文件已创建: {0}', currentVirtualFileUuid));
         }
         
         files.sort((a, b) => {
@@ -4001,17 +4002,17 @@ async function startTsUpload() {
             await uploadSegment(file, sequence);
         }
         
-        updateTsProgress(95, '正在完成播放列表...');
+        updateTsProgress(95, BootFSI18n.t('正在完成播放列表...'));
         
         const finalizeResponse = await fetch(`/hls/${currentVirtualFileUuid}/finalize`, {
             method: 'POST'
         });
         
         if (!finalizeResponse.ok) {
-            throw new Error('完成播放列表失败');
+            throw new Error(BootFSI18n.t('完成播放列表失败'));
         }
         
-        updateTsProgress(100, '上传完成!');
+        updateTsProgress(100, BootFSI18n.t('上传完成!'));
         document.getElementById('tsUploadSpeed').textContent = '-- MB/s';
         
         if (tsUploadMode === 'edit') {
@@ -4019,20 +4020,20 @@ async function startTsUpload() {
         }
         
         setTimeout(() => {
-            showToast(`TS 切片上传成功！`, 'success');
+            showToast(BootFSI18n.t('TS 切片上传成功！'), 'success');
             if (currentFolder === uploadFolder) loadFileList();
         }, 1000);
         
     } catch (error) {
         console.error('TS upload error:', error);
-        showToast('上传失败: ' + error.message, 'error');
-        updateTsProgress(0, '上传失败: ' + error.message);
+        showToast(BootFSI18n.t('上传失败:') + ' ' + error.message, 'error');
+        updateTsProgress(0, BootFSI18n.t('上传失败:') + ' ' + error.message);
     } finally {
         startBtn.disabled = false;
         if (tsUploadMode === 'edit') {
-            startBtn.textContent = '追加切片';
+            startBtn.textContent = BootFSI18n.t('追加切片');
         } else {
-            startBtn.textContent = '开始上传';
+            startBtn.textContent = BootFSI18n.t('开始上传');
         }
     }
 }
@@ -4214,7 +4215,7 @@ function loadIconView(reset = false) {
             iconPage++;
             iconHasMore = iconPage * ICON_PAGE_SIZE < (data.total || 0) && rows.length > 0;
             if (empty) {
-                empty.textContent = searchQuery ? '没有匹配的文件' : '此文件夹是空的';
+                empty.textContent = searchQuery ? BootFSI18n.t('没有匹配的文件') : BootFSI18n.t('此文件夹是空的');
                 empty.classList.toggle('hidden', grid.childElementCount > 0);
             }
             if (loadMore) loadMore.classList.toggle('hidden', !iconHasMore);
@@ -4223,7 +4224,7 @@ function loadIconView(reset = false) {
         .catch(error => {
             if (requestVersion !== folderRequestVersion) return;
             console.error('Error loading icons:', error);
-            showToast('加载文件失败', 'error');
+            showToast(BootFSI18n.t('加载文件失败'), 'error');
             iconHasMore = false;
             if (loadMore) loadMore.classList.add('hidden');
         })
@@ -4285,7 +4286,7 @@ function createIconItem(file) {
     }
     const name = document.createElement('span');
     name.className = 'icon-name';
-    name.textContent = file.fileName || (folder ? '文件夹' : '未命名');
+    name.textContent = file.fileName || (folder ? BootFSI18n.t('文件夹') : BootFSI18n.t('未命名'));
     item.append(glyph, name);
     return item;
 }
@@ -4519,7 +4520,7 @@ function updateIconDrag(x, y) {
         badge.id = 'iconDragBadge';
         document.body.appendChild(badge);
     }
-    badge.textContent = selectionCount() + ' 项';
+    badge.textContent = BootFSI18n.t('{0} 项', selectionCount());
     badge.style.left = (x + 14) + 'px';
     badge.style.top = (y + 16) + 'px';
     document.querySelectorAll('.drop-target').forEach(element => element.classList.remove('drop-target'));
@@ -4564,7 +4565,7 @@ async function moveSelectionTo(destination) {
     const folders = [];
     const selection = iconItems().filter(item => item.classList.contains('selected'));
     if (selection.some(item => item.dataset.movable === 'false')) {
-        showToast('选中项目中有无法移动的文件或文件夹', 'warning');
+        showToast(BootFSI18n.t('选中项目中有无法移动的文件或文件夹'), 'warning');
         return;
     }
     selection.forEach(item => {
@@ -4575,7 +4576,7 @@ async function moveSelectionTo(destination) {
         }
     });
     if (files.length + folders.length === 0) {
-        showToast('这些项目不能移动', 'warning');
+        showToast(BootFSI18n.t('这些项目不能移动'), 'warning');
         return;
     }
     iconMoveLock = true;
@@ -4591,12 +4592,12 @@ async function moveSelectionTo(destination) {
         }
         const result = await response.json().catch(() => ({}));
         clearSelection();
-        if (result.failures?.length) showToast(`已移动 ${result.moved} 项，${result.failures.length} 个节点的移动未确认`, 'warning');
-        else showToast(result.moved > 0 ? `已移动 ${result.moved} 项` : '已在此文件夹中', result.moved > 0 ? 'success' : 'info');
+        if (result.failures?.length) showToast(BootFSI18n.t('已移动 {0} 项，{1} 个节点的移动未确认', result.moved, result.failures.length), 'warning');
+        else showToast(result.moved > 0 ? BootFSI18n.t('已移动 {0} 项', result.moved) : BootFSI18n.t('已在此文件夹中'), result.moved > 0 ? 'success' : 'info');
         loadFileList();
     } catch (error) {
         console.error('Move error:', error);
-        showToast('移动失败', 'error');
+        showToast(BootFSI18n.t('移动失败'), 'error');
     } finally {
         iconMoveLock = false;
     }
@@ -4606,14 +4607,14 @@ async function moveErrorMessage(response) {
     let text = '';
     try { text = await response.text(); } catch (error) { text = ''; }
     if (response.status === 409) {
-        if (/itself/i.test(text)) return '不能把文件夹移到它自己或子文件夹里';
-        if (/same name|already exists/i.test(text)) return '目标里已有同名文件或文件夹';
-        if (/source node/i.test(text)) return '请在来源节点移动这些项目';
-        if (/acknowledgement/i.test(text)) return '还有上传未完成，请稍后再移动';
-        return '无法移动，请刷新后重试';
+        if (/itself/i.test(text)) return BootFSI18n.t('不能把文件夹移到它自己或子文件夹里');
+        if (/same name|already exists/i.test(text)) return BootFSI18n.t('目标里已有同名文件或文件夹');
+        if (/source node/i.test(text)) return BootFSI18n.t('请在来源节点移动这些项目');
+        if (/acknowledgement/i.test(text)) return BootFSI18n.t('还有上传未完成，请稍后再移动');
+        return BootFSI18n.t('无法移动，请刷新后重试');
     }
-    if (response.status === 404) return '要移动的文件或文件夹已经不存在';
-    if (response.status === 400) return '不能移动这些项目';
-    if (response.status === 503) return '部分节点不可达，请刷新目录确认移动结果';
-    return '移动失败';
+    if (response.status === 404) return BootFSI18n.t('要移动的文件或文件夹已经不存在');
+    if (response.status === 400) return BootFSI18n.t('不能移动这些项目');
+    if (response.status === 503) return BootFSI18n.t('部分节点不可达，请刷新目录确认移动结果');
+    return BootFSI18n.t('移动失败');
 }

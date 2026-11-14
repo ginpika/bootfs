@@ -1,17 +1,17 @@
 var TYPE_LABELS = {
-    image: '图片',
-    video: '视频',
-    audio: '音频',
-    doc: '文档',
-    zip: '压缩包',
-    other: '其他'
+    image: BootFSI18n.t('图片'),
+    video: BootFSI18n.t('视频'),
+    audio: BootFSI18n.t('音频'),
+    doc: BootFSI18n.t('文档'),
+    zip: BootFSI18n.t('压缩包'),
+    other: BootFSI18n.t('其他')
 };
 
 var CATEGORY_LABELS = {
-    FILE: '文件服务',
-    HLS: '流媒体服务',
-    S3: 'S3 接口',
-    OTHER: '静态资源和其他'
+    FILE: BootFSI18n.t('文件服务'),
+    HLS: BootFSI18n.t('流媒体服务'),
+    S3: BootFSI18n.t('S3 接口'),
+    OTHER: BootFSI18n.t('静态资源和其他')
 };
 
 var dashboardNodes = [];
@@ -39,7 +39,7 @@ function formatBytes(bytes) {
 
 function showError(msg) {
     var banner = document.getElementById('errorBanner');
-    document.getElementById('errorMsg').textContent = '加载失败: ' + (msg || '未知错误');
+    document.getElementById('errorMsg').textContent = BootFSI18n.t('加载失败:') + ' ' + (msg || BootFSI18n.t('未知错误'));
     banner.classList.remove('hidden');
 }
 
@@ -79,21 +79,21 @@ function ringSvg(percent, size, strokeColor, centerTop, centerBottom) {
 function renderNodes(nodes) {
     var grid = document.getElementById('nodesGrid');
     if (!nodes || nodes.length === 0) {
-        grid.innerHTML = '<p class="text-sm w-full" style="color: var(--color-text-muted);">无节点数据</p>';
+        grid.innerHTML = '<p class="text-sm w-full" style="color: var(--color-text-muted);">' + BootFSI18n.html('无节点数据') + '</p>';
         return;
     }
     grid.innerHTML = nodes.map(function (n) {
         var cardOpacity = n.online ? '' : 'opacity: 0.65;';
         var cardCls = 'dashboard-node theme-card theme-rounded-xl theme-shadow p-4 w-[340px] max-w-full';
         var attributes = ' role="button" tabindex="0" aria-pressed="' + (n.nodeId === selectedNodeId) +
-            '" data-node-id="' + escapeHtml(n.nodeId) + '" aria-label="查看节点 ' + escapeHtml(n.nodeId) + ' 的统计"';
+            '" data-node-id="' + escapeHtml(n.nodeId) + '" aria-label="' + BootFSI18n.html('查看节点 {0} 的统计', n.nodeId) + '"';
 
         var header = renderNodeHeader(n);
 
         if (!n.online) {
             return '<div class="' + cardCls + '"' + attributes + ' style="' + cardOpacity + '">' +
                 header +
-                '<p class="text-sm text-center py-6" style="color: var(--color-text-muted);">节点不可达，无法获取数据</p>' +
+                '<p class="text-sm text-center py-6" style="color: var(--color-text-muted);">' + BootFSI18n.html('节点不可达，无法获取数据') + '</p>' +
             '</div>';
         }
 
@@ -122,16 +122,16 @@ function selectNode(nodeId) {
 function renderSelectedNode() {
     var node = dashboardNodes.find(function (item) { return item.nodeId === selectedNodeId; });
     var available = node && node.online;
-    document.getElementById('selectedNodeTitle').textContent = node ? '节点统计 · ' + node.nodeId : '节点统计';
-    document.getElementById('selectedNodeStatus').textContent = !node ? '暂无节点数据' :
-        (node.isCurrent ? '当前访问节点 · ' : '远程节点 · ') + (node.url || '') +
-        (!available ? ' · 节点不可达，统计暂不可用' :
-            (!node.requests ? ' · 该节点未提供流量与请求数据，请升级节点' :
-                ' · 统计仅属于此节点 · 最近刷新 ' + new Date().toLocaleTimeString()));
-    renderSystem(available ? node.system : null, available ? '该节点未提供系统信息，请升级节点' : '节点不可达，系统信息暂不可用');
+    document.getElementById('selectedNodeTitle').textContent = node ? BootFSI18n.t('节点统计 ·') + ' ' + node.nodeId : BootFSI18n.t('节点统计');
+    document.getElementById('selectedNodeStatus').textContent = !node ? BootFSI18n.t('暂无节点数据') :
+        (node.isCurrent ? BootFSI18n.t('当前访问节点 ·') + ' ' : BootFSI18n.t('远程节点 ·') + ' ') + (node.url || '') +
+        (!available ? ' ' + BootFSI18n.t('· 节点不可达，统计暂不可用') :
+            (!node.requests ? ' ' + BootFSI18n.t('· 该节点未提供流量与请求数据，请升级节点') :
+                ' ' + BootFSI18n.t('· 统计仅属于此节点 · 最近刷新 {0}', new Date().toLocaleTimeString(BootFSI18n.language))));
+    renderSystem(available ? node.system : null, available ? BootFSI18n.t('该节点未提供系统信息，请升级节点') : BootFSI18n.t('节点不可达，系统信息暂不可用'));
     renderTraffic(available ? node.traffic : null);
     renderRequests(available ? node.requests : null,
-        available ? '该节点未提供请求统计' : '节点不可达，请求统计暂不可用');
+        available ? BootFSI18n.t('该节点未提供请求统计') : BootFSI18n.t('节点不可达，请求统计暂不可用'));
     renderUptime(available ? node.appStartTime : null);
     document.dispatchEvent(new Event('dashboard-node-selected'));
 }
@@ -150,45 +150,45 @@ function systemCard(title, content) {
 function renderSystem(system, emptyMessage) {
     var container = document.getElementById('systemStats');
     if (!system) {
-        container.innerHTML = systemCard('系统资源', '<p class="text-xs" style="color: var(--color-text-muted);">' + escapeHtml(emptyMessage) + '</p>');
+        container.innerHTML = systemCard(BootFSI18n.t('系统资源'), '<p class="text-xs" style="color: var(--color-text-muted);">' + escapeHtml(emptyMessage) + '</p>');
         return;
     }
     var memory = system.memory || {};
     var percent = memory.processHostPercent;
-    var runtimeLabels = {docker: 'Docker', systemd: 'systemd', container: '容器', standalone: '直接运行'};
+    var runtimeLabels = {docker: 'Docker', systemd: 'systemd', container: BootFSI18n.t('容器'), standalone: BootFSI18n.t('直接运行')};
     var jvm = '<p class="text-2xl font-bold font-display" style="color: var(--color-accent-primary);">' + formatBytes(memory.processRssBytes) + '</p>' +
-        '<p class="text-xs mb-3" style="color: var(--color-text-muted);">进程实际驻留内存（RSS） · 占宿主机 ' +
+        '<p class="text-xs mb-3" style="color: var(--color-text-muted);">' + BootFSI18n.html('进程实际驻留内存（RSS） · 占宿主机') + ' ' +
         (percent == null ? '--' : Number(percent).toFixed(2) + '%') + '</p>' +
-        '<dl>' + systemRow('堆已用 / 上限', formatBytes(memory.heapUsedBytes) + ' / ' + formatBytes(memory.heapMaxBytes)) +
-        systemRow('堆已提交', formatBytes(memory.heapCommittedBytes)) +
-        systemRow('非堆已用', formatBytes(memory.nonHeapUsedBytes)) + '</dl>' +
-        '<p class="text-xs mt-2" style="color: var(--color-text-muted);">RSS 包含堆、非堆及本地内存等；无法采集的指标显示 --。</p>';
-    var host = '<dl>' + systemRow('CPU 型号', system.cpuModel) +
-        systemRow('架构 / 宿主机逻辑 CPU', (system.architecture || '--') + ' / ' + (system.logicalProcessors || '--')) +
-        systemRow('JVM 可用 CPU', system.availableProcessors) +
-        systemRow('宿主机内存总量', formatBytes(memory.hostTotalBytes)) +
-        systemRow('宿主机已用 / 可用', formatBytes(memory.hostUsedBytes) + ' / ' + formatBytes(memory.hostAvailableBytes));
+        '<dl>' + systemRow(BootFSI18n.t('堆已用 / 上限'), formatBytes(memory.heapUsedBytes) + ' / ' + formatBytes(memory.heapMaxBytes)) +
+        systemRow(BootFSI18n.t('堆已提交'), formatBytes(memory.heapCommittedBytes)) +
+        systemRow(BootFSI18n.t('非堆已用'), formatBytes(memory.nonHeapUsedBytes)) + '</dl>' +
+        '<p class="text-xs mt-2" style="color: var(--color-text-muted);">' + BootFSI18n.html('RSS 包含堆、非堆及本地内存等；无法采集的指标显示 --。') + '</p>';
+    var host = '<dl>' + systemRow(BootFSI18n.t('CPU 型号'), system.cpuModel) +
+        systemRow(BootFSI18n.t('架构 / 宿主机逻辑 CPU'), (system.architecture || '--') + ' / ' + (system.logicalProcessors || '--')) +
+        systemRow(BootFSI18n.t('JVM 可用 CPU'), system.availableProcessors) +
+        systemRow(BootFSI18n.t('宿主机内存总量'), formatBytes(memory.hostTotalBytes)) +
+        systemRow(BootFSI18n.t('宿主机已用 / 可用'), formatBytes(memory.hostUsedBytes) + ' / ' + formatBytes(memory.hostAvailableBytes));
     if (memory.containerLimitBytes != null || memory.containerUsedBytes != null || ['docker', 'container'].includes(system.runtime)) {
-        host += systemRow('cgroup 内存用量', formatBytes(memory.containerUsedBytes)) +
-            systemRow('cgroup 内存限额', memory.containerLimitBytes == null ? '未限制或不可用' : formatBytes(memory.containerLimitBytes));
+        host += systemRow(BootFSI18n.t('cgroup 内存用量'), formatBytes(memory.containerUsedBytes)) +
+            systemRow(BootFSI18n.t('cgroup 内存限额'), memory.containerLimitBytes == null ? BootFSI18n.t('未限制或不可用') : formatBytes(memory.containerLimitBytes));
     }
     host += '</dl>';
-    var runtime = '<dl>' + systemRow('运行环境', runtimeLabels[system.runtime] || system.runtime) +
-        systemRow('操作系统', (system.os || '--') + ' ' + (system.osVersion || '')) +
-        systemRow('Java 版本', system.javaVersion) + systemRow('虚拟机', system.jvmName) + systemRow('进程 PID', system.pid) + '</dl>';
-    container.innerHTML = systemCard('JVM 进程内存', jvm) + systemCard('硬件与内存资源', host) + systemCard('节点运行环境', runtime);
+    var runtime = '<dl>' + systemRow(BootFSI18n.t('运行环境'), runtimeLabels[system.runtime] || system.runtime) +
+        systemRow(BootFSI18n.t('操作系统'), (system.os || '--') + ' ' + (system.osVersion || '')) +
+        systemRow(BootFSI18n.t('Java 版本'), system.javaVersion) + systemRow(BootFSI18n.t('虚拟机'), system.jvmName) + systemRow(BootFSI18n.t('进程 PID'), system.pid) + '</dl>';
+    container.innerHTML = systemCard(BootFSI18n.t('JVM 进程内存'), jvm) + systemCard(BootFSI18n.t('硬件与内存资源'), host) + systemCard(BootFSI18n.t('节点运行环境'), runtime);
 }
 
 function renderNodeHeader(n) {
     var badge;
     if (n.isCurrent) {
-        badge = '<span class="shrink-0 whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium" style="background-color: var(--color-accent-muted); color: var(--color-accent-primary);">当前节点</span>';
+        badge = '<span class="shrink-0 whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium" style="background-color: var(--color-accent-muted); color: var(--color-accent-primary);">' + BootFSI18n.html('当前节点') + '</span>';
     } else if (n.online) {
         badge = '<span class="inline-flex shrink-0 whitespace-nowrap items-center gap-1 text-xs font-medium" style="color: var(--color-success);">' +
-            '<span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--color-success);"></span>在线</span>';
+            '<span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--color-success);"></span>' + BootFSI18n.html('在线') + '</span>';
     } else {
         badge = '<span class="inline-flex shrink-0 whitespace-nowrap items-center gap-1 text-xs font-medium" style="color: var(--color-danger);">' +
-            '<span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--color-danger);"></span>离线</span>';
+            '<span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--color-danger);"></span>' + BootFSI18n.html('离线') + '</span>';
     }
 
     var shortId = n.nodeId.length > 16 ? n.nodeId.substring(0, 16) + '...' : n.nodeId;
@@ -218,21 +218,21 @@ function renderNodeResources(res) {
     if (!res) return '';
     return '<div class="grid grid-cols-3 gap-1.5 mb-3">' +
         '<div class="p-1.5 rounded-lg text-center" style="background-color: var(--color-bg-tertiary);">' +
-            '<p class="text-xs mb-0.5" style="color: var(--color-text-muted);">资源</p>' +
+            '<p class="text-xs mb-0.5" style="color: var(--color-text-muted);">' + BootFSI18n.html('资源') + '</p>' +
             '<p class="text-sm font-bold font-display" style="color: var(--color-text-primary);">' + (res.total != null ? res.total : '--') + '</p>' +
         '</div>' +
         '<div class="p-1.5 rounded-lg text-center" style="background-color: var(--color-bg-tertiary);">' +
-            '<p class="text-xs mb-0.5" style="color: var(--color-text-muted);">主</p>' +
+            '<p class="text-xs mb-0.5" style="color: var(--color-text-muted);">' + BootFSI18n.html('主') + '</p>' +
             '<p class="text-sm font-bold font-display" style="color: var(--color-accent-primary);">' + (res.mainCount != null ? res.mainCount : '--') + '</p>' +
         '</div>' +
         '<div class="p-1.5 rounded-lg text-center" style="background-color: var(--color-bg-tertiary);">' +
-            '<p class="text-xs mb-0.5" style="color: var(--color-text-muted);">副本</p>' +
+            '<p class="text-xs mb-0.5" style="color: var(--color-text-muted);">' + BootFSI18n.html('副本') + '</p>' +
             '<p class="text-sm font-bold font-display" style="color: var(--color-text-primary);">' + (res.replicaCount != null ? res.replicaCount : '--') + '</p>' +
         '</div>' +
     '</div>' +
     '<div class="p-1.5 rounded-lg mb-3" style="background-color: var(--color-bg-tertiary);">' +
         '<div class="flex items-center justify-between">' +
-            '<span class="text-xs" style="color: var(--color-text-muted);">文件总大小</span>' +
+            '<span class="text-xs" style="color: var(--color-text-muted);">' + BootFSI18n.html('文件总大小') + '</span>' +
             '<span class="text-sm font-bold font-display" style="color: var(--color-text-primary);">' + formatBytes(res.totalSizeBytes) + '</span>' +
         '</div>' +
     '</div>';
@@ -248,7 +248,7 @@ function renderNodeFileTypes(fileTypes) {
             label + ' <span class="font-semibold ml-1" style="color: var(--color-text-primary);">' + t.count + '</span></span>';
     });
     return '<div>' +
-        '<p class="text-xs mb-1.5" style="color: var(--color-text-muted);">文件类型</p>' +
+        '<p class="text-xs mb-1.5" style="color: var(--color-text-muted);">' + BootFSI18n.html('文件类型') + '</p>' +
         '<div class="flex flex-wrap gap-1">' + badges.join('') + '</div>' +
     '</div>';
 }
@@ -262,18 +262,18 @@ function renderTraffic(traffic) {
     var list = document.getElementById('trafficCategoryList');
     var cats = traffic && traffic.byCategory || [];
     if (cats.length === 0) {
-        list.innerHTML = '<p class="text-sm" style="color: var(--color-text-muted);">暂无数据</p>';
+        list.innerHTML = '<p class="text-sm" style="color: var(--color-text-muted);">' + BootFSI18n.html('暂无数据') + '</p>';
         return;
     }
     list.innerHTML = cats.map(function (c) {
-        var label = c.label || CATEGORY_LABELS[c.category] || c.category;
+        var label = CATEGORY_LABELS[c.category] || c.label || c.category;
         return '<div>' +
             '<div class="flex items-center justify-between mb-1">' +
                 '<span class="text-sm font-medium" style="color: var(--color-text-primary);">' + escapeHtml(label) + '</span>' +
                 '<span class="text-sm font-semibold" style="color: var(--color-accent-primary);">' + formatBytes(c.bytesOut) + '</span>' +
             '</div>' +
             '<div class="flex items-center justify-between mb-1">' +
-                '<span class="text-xs" style="color: var(--color-text-muted);">' + c.requests + ' 次请求</span>' +
+                '<span class="text-xs" style="color: var(--color-text-muted);">' + BootFSI18n.html('{0} 次请求', c.requests) + '</span>' +
                 '<span class="text-xs" style="color: var(--color-text-muted);">' + c.percent + '%</span>' +
             '</div>' +
             '<div class="w-full h-2 rounded-full overflow-hidden" style="background-color: var(--color-bg-tertiary);">' +
@@ -292,11 +292,11 @@ function renderRequests(reqs, emptyMessage) {
     var maxCount = 1;
     hourly.forEach(function (h) { if (h.count > maxCount) maxCount = h.count; });
     if (hourly.length === 0) {
-        chart.innerHTML = '<p class="text-sm w-full text-center" style="color: var(--color-text-muted);">暂无数据</p>';
+        chart.innerHTML = '<p class="text-sm w-full text-center" style="color: var(--color-text-muted);">' + BootFSI18n.html('暂无数据') + '</p>';
     } else {
         chart.innerHTML = hourly.map(function (h) {
             var heightPct = maxCount > 0 ? Math.max(2, (h.count * 100 / maxCount)) : 0;
-            var title = h.hour + ' | ' + h.count + ' 次 | ' + formatBytes(h.bytes);
+            var title = h.hour + ' | ' + BootFSI18n.t('{0} 次', h.count) + ' | ' + formatBytes(h.bytes);
             return '<div title="' + escapeHtml(title) + '" class="flex-1 rounded-t transition-all duration-300 cursor-pointer" style="height: ' + heightPct + '%; min-height: 2px; background-color: var(--color-accent-primary); opacity: 0.85;"></div>';
         }).join('');
     }
@@ -305,7 +305,7 @@ function renderRequests(reqs, emptyMessage) {
     var recent = reqs && reqs.recent || [];
     if (recent.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="px-3 py-8 text-center" style="color: var(--color-text-muted);">' +
-            escapeHtml(reqs ? '暂无请求记录' : (emptyMessage || '请求统计暂不可用')) + '</td></tr>';
+            escapeHtml(reqs ? BootFSI18n.t('暂无请求记录') : (emptyMessage || BootFSI18n.t('请求统计暂不可用'))) + '</td></tr>';
         return;
     }
     tbody.innerHTML = recent.map(function (r) {
@@ -336,7 +336,7 @@ function renderUptime(startTime) {
         uptimeTimer = null;
     }
     if (!startTime) {
-        document.getElementById('uptimeText').textContent = '运行时长暂不可用';
+        document.getElementById('uptimeText').textContent = BootFSI18n.t('运行时长暂不可用');
         return;
     }
     updateUptimeText();
@@ -346,7 +346,7 @@ function renderUptime(startTime) {
 function updateUptimeText() {
     var el = document.getElementById('uptimeText');
     if (!el || !uptimeStartTime) return;
-    el.textContent = '运行中 · ' + formatUptime(Date.now() - uptimeStartTime);
+    el.textContent = BootFSI18n.t('运行中 ·') + ' ' + formatUptime(Date.now() - uptimeStartTime);
 }
 
 function formatUptime(ms) {
@@ -357,12 +357,12 @@ function formatUptime(ms) {
     var mins = Math.floor((totalSec % 3600) / 60);
     var secs = totalSec % 60;
     if (days > 0) {
-        return days + '天 ' + hours + '时 ' + mins + '分';
+        return days + BootFSI18n.t('天') + ' ' + hours + BootFSI18n.t('时') + ' ' + mins + BootFSI18n.t('分');
     }
     if (hours > 0) {
-        return hours + '时 ' + mins + '分 ' + secs + '秒';
+        return hours + BootFSI18n.t('时') + ' ' + mins + BootFSI18n.t('分') + ' ' + secs + BootFSI18n.t('秒');
     }
-    return mins + '分 ' + secs + '秒';
+    return mins + BootFSI18n.t('分') + ' ' + secs + BootFSI18n.t('秒');
 }
 
 // ============ 数据加载 ============
@@ -392,7 +392,7 @@ function loadStats(reload) {
             renderSelectedNode();
         })
         .catch(function () {
-            showError('请求失败');
+            showError(BootFSI18n.t('请求失败'));
         })
         .finally(function () { statsRequest = null; });
     return statsRequest;

@@ -13,7 +13,7 @@ window.ClashFiles = (() => {
     }
 
     function icon() {
-        return '<div class="text-file-icon clash-file-icon" title="Clash 配置"><span class="clash-cat-mark" role="img" aria-label="Clash 小猫"></span></div>';
+        return '<div class="text-file-icon clash-file-icon" title="' + BootFSI18n.html('Clash 配置') + '"><span class="clash-cat-mark" role="img" aria-label="' + BootFSI18n.html('Clash 小猫') + '"></span></div>';
     }
 
     function reset() {
@@ -38,17 +38,17 @@ window.ClashFiles = (() => {
         try {
             const response = await fetch(path, { cache: 'no-store', ...options, signal: controller.signal });
             if (response.redirected || response.status === 401 || response.status === 403) {
-                const failure = new Error('登录已过期或没有访问权限，请重新登录后重试。');
+                const failure = new Error(BootFSI18n.t('登录已过期或没有访问权限，请重新登录后重试。'));
                 failure.fatal = true;
                 throw failure;
             }
             const payload = response.headers.get('content-type')?.includes('application/json') ? await response.json() : null;
             if (!response.ok) {
-                const failure = new Error(payload?.message || '无法读取 Clash 配置或检测延迟，请稍后重试。');
+                const failure = new Error(BootFSI18n.t(payload?.message || '无法读取 Clash 配置或检测延迟，请稍后重试。'));
                 failure.fatal = response.status < 500 && response.status !== 429;
                 throw failure;
             }
-            if (!payload || !Array.isArray(payload.nodes)) throw new Error('服务器返回了无效的节点信息。');
+            if (!payload || !Array.isArray(payload.nodes)) throw new Error(BootFSI18n.t('服务器返回了无效的节点信息。'));
             return payload;
         } finally {
             requests.delete(controller);
@@ -68,7 +68,7 @@ window.ClashFiles = (() => {
         info.append(name, address);
         const latency = document.createElement('td');
         latency.className = 'clash-node-latency';
-        latency.textContent = '等待检测…';
+        latency.textContent = BootFSI18n.t('等待检测…');
         row.append(info, latency);
         elements.rows.append(row);
         return latency;
@@ -78,15 +78,15 @@ window.ClashFiles = (() => {
         const cell = state.cells.get(String(node.id));
         if (!cell) return;
         cell.className = 'clash-node-latency';
-        const labels = { timeout: '超时', unreachable: '无法连接', unresolved: 'DNS 失败', busy: '繁忙，请重试' };
+        const labels = { timeout: BootFSI18n.t('超时'), unreachable: BootFSI18n.t('无法连接'), unresolved: BootFSI18n.t('DNS 失败'), busy: BootFSI18n.t('繁忙，请重试') };
         if (node.status === 'ok' && Number.isFinite(node.latencyMs) && node.latencyMs >= 0) {
             cell.textContent = `${Math.round(node.latencyMs)} ms`;
             cell.classList.add(node.latencyMs < 200 ? 'clash-latency-fast' : 'clash-latency-slow');
         } else {
-            cell.textContent = labels[node.status] || '检测失败';
+            cell.textContent = labels[node.status] || BootFSI18n.t('检测失败');
             cell.classList.add('clash-latency-failed');
         }
-        cell.title = node.checkedAt ? `检测时间：${new Date(node.checkedAt).toLocaleTimeString()}` : '';
+        cell.title = node.checkedAt ? BootFSI18n.t('检测时间：{0}', new Date(node.checkedAt).toLocaleTimeString(BootFSI18n.language)) : '';
     }
 
     async function measure(activeSession) {
@@ -94,13 +94,13 @@ window.ClashFiles = (() => {
         state.running = true;
         elements.refresh.disabled = true;
         showError();
-        state.cells.forEach(cell => { cell.textContent = '等待检测…'; cell.className = 'clash-node-latency'; });
+        state.cells.forEach(cell => { cell.textContent = BootFSI18n.t('等待检测…'); cell.className = 'clash-node-latency'; });
         let nextOffset = 0;
         let finished = 0;
         let latestCheck = 0;
         let failed = false;
         let stopped = false;
-        elements.status.textContent = `正在检测 0 / ${state.nodes.length} 个节点…`;
+        elements.status.textContent = BootFSI18n.t('正在检测 {0} / {1} 个节点…', 0, state.nodes.length);
         const worker = async () => {
             while (activeSession === session && !stopped && nextOffset < state.nodes.length) {
                 const offset = nextOffset;
@@ -110,7 +110,7 @@ window.ClashFiles = (() => {
                     const data = await request(`/api/file/${encodeURIComponent(state.uuid)}/clash/latency?offset=${offset}&limit=${BATCH_SIZE}`, { method: 'POST' });
                     if (activeSession !== session) return;
                     if (data.version !== state.version) {
-                        const failure = new Error('文件已更新，请重新打开详情后检测。');
+                        const failure = new Error(BootFSI18n.t('文件已更新，请重新打开详情后检测。'));
                         failure.fatal = true;
                         throw failure;
                     }
@@ -124,15 +124,15 @@ window.ClashFiles = (() => {
                     stopped = stopped || !!failure.fatal;
                 }
                 finished += nodes.length;
-                elements.status.textContent = `正在检测 ${finished} / ${state.nodes.length} 个节点…`;
+                elements.status.textContent = BootFSI18n.t('正在检测 {0} / {1} 个节点…', finished, state.nodes.length);
             }
         };
         await Promise.all([worker(), worker()]);
         if (activeSession !== session) return;
         state.running = false;
-        state.cells.forEach(cell => { if (cell.textContent === '等待检测…') cell.textContent = '未检测'; });
+        state.cells.forEach(cell => { if (cell.className === 'clash-node-latency') cell.textContent = BootFSI18n.t('未检测'); });
         elements.refresh.disabled = !state.nodes.length;
-        elements.status.textContent = `${stopped ? '检测中止' : failed ? '部分检测失败' : '检测完成'} · ${finished} / ${state.nodes.length} 个节点${latestCheck ? ` · ${new Date(latestCheck).toLocaleTimeString()}` : ''}`;
+        elements.status.textContent = BootFSI18n.t('{0} · {1} / {2} 个节点{3}', stopped ? BootFSI18n.t('检测中止') : failed ? BootFSI18n.t('部分检测失败') : BootFSI18n.t('检测完成'), finished, state.nodes.length, latestCheck ? ` · ${new Date(latestCheck).toLocaleTimeString(BootFSI18n.language)}` : '');
     }
 
     async function load(file) {
@@ -141,7 +141,7 @@ window.ClashFiles = (() => {
         const activeSession = session;
         state = { uuid: file.uuid, cells: new Map(), nodes: [], running: false, loaded: false };
         elements.section.classList.remove('hidden');
-        elements.status.textContent = '正在解析节点…';
+        elements.status.textContent = BootFSI18n.t('正在解析节点…');
         elements.refresh.disabled = true;
         elements.warnings.classList.add('hidden');
         elements.subscription.value = `${location.origin}/p/${encodeURIComponent(file.uuid)}?p=vless`;
@@ -157,13 +157,13 @@ window.ClashFiles = (() => {
             elements.warnings.textContent = warnings.join('\n');
             elements.warnings.classList.toggle('hidden', !warnings.length);
             if (!data.nodes.length) {
-                elements.status.textContent = '配置中没有可检测的代理节点。';
+                elements.status.textContent = BootFSI18n.t('配置中没有可检测的代理节点。');
                 return;
             }
             await measure(activeSession);
         } catch (failure) {
             if (activeSession !== session || failure.name === 'AbortError') return;
-            elements.status.textContent = '解析失败';
+            elements.status.textContent = BootFSI18n.t('解析失败');
             elements.refresh.disabled = false;
             showError(failure.message);
         }
@@ -185,8 +185,8 @@ window.ClashFiles = (() => {
                     elements.subscription.select();
                     if (!document.execCommand('copy')) throw new Error('copy failed');
                 }
-                showToast('订阅地址已复制', 'success');
-            } catch { showToast('复制失败，请选中订阅地址手动复制', 'error'); }
+                showToast(BootFSI18n.t('订阅地址已复制'), 'success');
+            } catch { showToast(BootFSI18n.t('复制失败，请选中订阅地址手动复制'), 'error'); }
         });
     });
 

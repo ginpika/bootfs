@@ -1,0 +1,14 @@
+<div xmlns:th="http://www.thymeleaf.org" th:fragment="picker" class="language-picker">
+    <button type="button" id="languageMenuBtn" class="theme-icon-btn" aria-expanded="false" aria-controls="languageDropdown">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"></circle>
+            <ellipse cx="12" cy="12" rx="4" ry="9"></ellipse>
+            <path d="M3 12h18"></path>
+        </svg>
+        <span lang="zh-CN">简体中文</span>
+    </button>
+    <div id="languageDropdown" class="language-dropdown theme-card" hidden>
+        <button type="button" class="theme-dropdown-item" lang="zh-CN" data-language="zh-CN" aria-pressed="true">简体中文</button>
+        <button type="button" class="theme-dropdown-item" lang="en" data-language="en" aria-pressed="false">English</button>
+    </div>
+</div>

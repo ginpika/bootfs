@@ -15,6 +15,8 @@ function dashboard(clusterState) {
     let timer = 0;
     const document = {
         activeElement: null,
+        documentElement: {},
+        querySelector() { return null; },
         hidden: false,
         getElementById(id) {
             if (!elements.has(id)) elements.set(id, {
@@ -48,7 +50,8 @@ function dashboard(clusterState) {
             return onAction(action);
         }
     });
-    const scripts = clusterState ? ['security-utils.js', 'dashboard.js', 'dashboard-cluster.js'] : ['dashboard.js'];
+    const scripts = ['security-utils.js', 'i18n.js', 'dashboard.js'];
+    if (clusterState) scripts.push('dashboard-cluster.js');
     for (const script of scripts) {
         vm.runInContext(fs.readFileSync(path.join(__dirname, '../../main/resources/static', script), 'utf8'), sandbox);
     }

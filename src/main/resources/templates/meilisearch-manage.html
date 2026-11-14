@@ -2,9 +2,12 @@
 <html lang="zh-CN">
 <head>
     <script src="/security-utils.js"></script>
+    <script src="/i18n/en.js"></script>
+    <script src="/i18n.js"></script>
+    <link rel="stylesheet" href="/language-picker.css">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>索引文档管理 - BootFS</title>
+    <title data-i18n>索引文档管理 - BootFS</title>
     <style>
         :root, :root.theme-light { --color-bg-primary:#f9fafb; --color-accent-primary:#0ea5e9; --color-text-secondary:#374151; }
         :root.theme-dark { --color-bg-primary:#0a0a0a; --color-accent-primary:#00d98a; --color-text-secondary:#a8a8a8; }
@@ -116,11 +119,11 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
                                 </svg>
                             </a>
-                            <h1 class="text-lg font-semibold font-display" style="color: var(--color-text-primary);">索引文档管理</h1>
+                            <h1 data-i18n class="text-lg font-semibold font-display" style="color: var(--color-text-primary);">索引文档管理</h1>
                         </div>
                         <div class="flex items-center space-x-3">
                             <div class="relative">
-                                <button id="themeMenuBtn" class="theme-icon-btn" title="主题">
+                                <button data-i18n-attrs="title" id="themeMenuBtn" class="theme-icon-btn" title="主题">
                                     <svg xmlns="http://www.w3.org/2000/svg"
                                         fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
                                         class="w-5 h-5">
@@ -129,19 +132,20 @@
                                     </svg>
                                 </button>
                                 <div id="themeDropdown" class="hidden absolute right-0 mt-2 w-56 theme-rounded-xl shadow-lg border py-2 z-50" style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
-                                    <div class="px-3 py-2 border-b" style="border-color: var(--color-border-primary);"><p class="text-sm font-medium" style="color: var(--color-text-primary);">选择主题</p></div>
+                                    <div class="px-3 py-2 border-b" style="border-color: var(--color-border-primary);"><p data-i18n class="text-sm font-medium" style="color: var(--color-text-primary);">选择主题</p></div>
                                     <div class="py-1">
-                                        <button onclick="setTheme('light')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #0ea5e9;"></span>浅色模式</button>
-                                        <button onclick="setTheme('dark')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #00d98a;"></span>深色模式</button>
-                                        <button onclick="setTheme('sakura')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #ec4899;"></span>樱花</button>
-                                        <button onclick="setTheme('starry-night')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #e94560;"></span>星空夜景</button>
-                                        <button onclick="setTheme('forest')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #16a34a;"></span>森林</button>
-                                        <button onclick="setTheme('ocean')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #29b6f6;"></span>海洋</button>
-                                        <button onclick="setTheme('sunset')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #f59e0b;"></span>日落</button>
-                                        <button onclick="setTheme('lavender')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #a855f7;"></span>薰衣草</button>
+                                        <button onclick="setTheme('light')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #0ea5e9;"></span><span data-i18n>浅色模式</span></button>
+                                        <button onclick="setTheme('dark')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #00d98a;"></span><span data-i18n>深色模式</span></button>
+                                        <button onclick="setTheme('sakura')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #ec4899;"></span><span data-i18n>樱花</span></button>
+                                        <button onclick="setTheme('starry-night')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #e94560;"></span><span data-i18n>星空夜景</span></button>
+                                        <button onclick="setTheme('forest')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #16a34a;"></span><span data-i18n>森林</span></button>
+                                        <button onclick="setTheme('ocean')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #29b6f6;"></span><span data-i18n>海洋</span></button>
+                                        <button onclick="setTheme('sunset')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #f59e0b;"></span><span data-i18n>日落</span></button>
+                                        <button onclick="setTheme('lavender')" class="w-full flex items-center px-3 py-2 text-sm" style="color: var(--color-text-secondary);"><span class="w-4 h-4 rounded-full mr-3" style="background-color: #a855f7;"></span><span data-i18n>薰衣草</span></button>
                                     </div>
                                 </div>
                             </div>
+                            <div th:replace="fragments/language-picker :: picker"></div>
                         </div>
                     </div>
                 </div>
@@ -151,23 +155,23 @@
                 <!-- Toolbar -->
                 <div class="theme-card theme-rounded-xl theme-shadow p-4 mb-4 flex-shrink-0">
                     <div class="flex flex-wrap items-center gap-3">
-                        <label class="text-sm font-medium" style="color: var(--color-text-secondary);">索引：</label>
+                        <label data-i18n class="text-sm font-medium" style="color: var(--color-text-secondary);">索引：</label>
                         <!-- 自定义 Select -->
                         <div class="custom-select-wrap" id="indexSelectWrap">
                             <div class="custom-select-trigger" id="indexSelectTrigger" onclick="toggleIndexSelect()">
-                                <span id="indexSelectLabel">-- 选择索引 --</span>
+                                <span data-i18n id="indexSelectLabel">-- 选择索引 --</span>
                                 <svg class="w-4 h-4 custom-select-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                             </div>
                             <div class="custom-select-dropdown" id="indexSelectDropdown"></div>
                         </div>
                         <button onclick="refreshIndexes()" class="theme-btn-secondary">
-                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>刷新
+                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg><span data-i18n>刷新</span>
                         </button>
                         <button onclick="showAddModal()" class="theme-btn-primary">
-                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>新增
+                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg><span data-i18n>新增</span>
                         </button>
                         <button onclick="clearDocuments()" class="theme-btn-danger">
-                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>清空索引
+                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg><span data-i18n>清空索引</span>
                         </button>
                         <span id="resultCount" class="text-sm" style="color: var(--color-text-muted);"></span>
                     </div>
@@ -177,13 +181,13 @@
                 <div class="flex justify-center mb-4 flex-shrink-0">
                     <div class="flex items-center w-full max-w-2xl gap-2">
                         <div class="relative flex-1">
-                            <input type="text" id="searchInput" placeholder="搜索索引文档..."
+                            <input data-i18n-attrs="placeholder" type="text" id="searchInput" placeholder="搜索索引文档..."
                                    class="theme-input w-full pl-10 pr-4 py-2 text-sm focus:outline-none">
                             <svg class="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2" style="color: var(--color-text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                             </svg>
                         </div>
-                        <button onclick="doSearch()" class="theme-btn-primary flex-shrink-0">搜索</button>
+                        <button data-i18n onclick="doSearch()" class="theme-btn-primary flex-shrink-0">搜索</button>
                     </div>
                 </div>
 
@@ -197,10 +201,10 @@
                         <div class="theme-card theme-rounded-xl theme-shadow overflow-hidden flex flex-col flex-1 min-h-0">
                             <div class="px-4 py-2.5 border-b text-xs font-medium" style="color: var(--color-text-secondary); background-color: var(--color-bg-tertiary); border-color: var(--color-border-primary);">
                                 <span class="mr-2">uuid</span>
-                                <span style="color: var(--color-text-muted);">/ 标签</span>
+                                <span data-i18n style="color: var(--color-text-muted);">/ 标签</span>
                             </div>
                             <div id="docList" class="flex-1 overflow-y-auto">
-                                <div class="px-4 py-12 text-center text-sm" style="color: var(--color-text-muted);">选择索引后可搜索文档</div>
+                                <div data-i18n class="px-4 py-12 text-center text-sm" style="color: var(--color-text-muted);">选择索引后可搜索文档</div>
                             </div>
                             <!-- 分页 -->
                             <div class="flex items-center justify-between px-4 py-2 border-t" style="border-color: var(--color-border-primary);">
@@ -219,19 +223,19 @@
                     <div class="flex-1 flex flex-col min-h-0">
                         <div class="theme-card theme-rounded-xl theme-shadow overflow-hidden flex flex-col flex-1 min-h-0">
                             <div class="flex items-center justify-between px-4 py-2.5 border-b" style="border-color: var(--color-border-primary); background-color: var(--color-bg-tertiary);">
-                                <span class="text-xs font-medium" style="color: var(--color-text-secondary);">文档详情</span>
+                                <span data-i18n class="text-xs font-medium" style="color: var(--color-text-secondary);">文档详情</span>
                                 <span id="detailDocId" class="text-xs font-mono" style="color: var(--color-accent-primary);"></span>
                             </div>
                             <div class="flex-1 flex flex-col min-h-0 p-4">
-                                <textarea id="detailContent" class="theme-input flex-1 min-h-0 w-full text-xs font-mono whitespace-pre-wrap break-all p-3 focus:outline-none resize-none overflow-y-auto" style="background-color: var(--color-bg-primary); display:none;" placeholder="点击左侧 uuid 查看文档详情"></textarea>
-                                <pre id="detailPlaceholder" class="text-xs font-mono whitespace-pre-wrap break-all" style="color: var(--color-text-muted);">点击左侧 uuid 查看文档详情</pre>
+                                <textarea data-i18n-attrs="placeholder" id="detailContent" class="theme-input flex-1 min-h-0 w-full text-xs font-mono whitespace-pre-wrap break-all p-3 focus:outline-none resize-none overflow-y-auto" style="background-color: var(--color-bg-primary); display:none;" placeholder="点击左侧 uuid 查看文档详情"></textarea>
+                                <pre data-i18n id="detailPlaceholder" class="text-xs font-mono whitespace-pre-wrap break-all" style="color: var(--color-text-muted);">点击左侧 uuid 查看文档详情</pre>
                             </div>
                             <div id="detailActions" class="hidden items-center justify-end gap-2 px-4 py-2.5 border-t" style="border-color: var(--color-border-primary); background-color: var(--color-bg-tertiary);">
                                 <button onclick="formatDocJson()" class="theme-btn-secondary theme-btn-sm">
-                                    <svg class="w-3.5 h-3.5 inline mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>整理
+                                    <svg class="w-3.5 h-3.5 inline mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg><span data-i18n>整理</span>
                                 </button>
                                 <button id="saveDocBtn" onclick="saveDocument()" class="theme-btn-primary theme-btn-sm">
-                                    <svg class="w-3.5 h-3.5 inline mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>保存
+                                    <svg class="w-3.5 h-3.5 inline mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span data-i18n>保存</span>
                                 </button>
                             </div>
                         </div>
@@ -245,24 +249,24 @@
     <div id="addModal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background-color: rgba(0,0,0,0.5);">
         <div class="theme-card theme-rounded-xl theme-shadow w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col fade-in">
             <div class="flex items-center justify-between p-4 border-b" style="border-color: var(--color-border-primary);">
-                <h2 class="text-lg font-semibold font-display" style="color: var(--color-text-primary);">新增文档</h2>
-                <button onclick="closeAddModal()" class="theme-icon-btn" title="关闭">
+                <h2 data-i18n class="text-lg font-semibold font-display" style="color: var(--color-text-primary);">新增文档</h2>
+                <button data-i18n-attrs="title" onclick="closeAddModal()" class="theme-icon-btn" title="关闭">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
             <div class="overflow-y-auto p-4 flex-1">
                 <div class="flex items-center justify-between mb-2">
-                    <p class="text-sm" style="color: var(--color-text-muted);">粘贴 JSON，支持单条对象或数组。uuid 字段为必填。</p>
+                    <p data-i18n class="text-sm" style="color: var(--color-text-muted);">粘贴 JSON，支持单条对象或数组。uuid 字段为必填。</p>
                     <button onclick="formatAddJson()" class="theme-btn-secondary theme-btn-sm">
-                        <svg class="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>整理
+                        <svg class="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg><span data-i18n>整理</span>
                     </button>
                 </div>
                 <textarea id="addDocJson" rows="14" class="theme-input w-full px-3 py-2 text-sm focus:outline-none resize-y font-mono"
                           style="background-color: var(--color-bg-primary); color: var(--color-text-primary); border-color: var(--color-border-primary);"></textarea>
             </div>
             <div class="flex justify-end gap-3 p-4 border-t" style="border-color: var(--color-border-primary);">
-                <button onclick="closeAddModal()" class="theme-btn-secondary">取消</button>
-                <button onclick="addDocument()" class="theme-btn-primary">提交</button>
+                <button data-i18n onclick="closeAddModal()" class="theme-btn-secondary">取消</button>
+                <button data-i18n onclick="addDocument()" class="theme-btn-primary">提交</button>
             </div>
         </div>
     </div>
@@ -270,11 +274,11 @@
     <!-- 确认删除 Modal -->
     <div id="confirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background-color: rgba(0,0,0,0.5);">
         <div class="theme-card theme-rounded-xl theme-shadow w-full max-w-sm mx-4 p-6 fade-in">
-            <h2 class="text-lg font-semibold mb-2 font-display" style="color: var(--color-text-primary);">确认删除</h2>
+            <h2 data-i18n class="text-lg font-semibold mb-2 font-display" style="color: var(--color-text-primary);">确认删除</h2>
             <p class="text-sm mb-4" style="color: var(--color-text-muted);" id="confirmMsg"></p>
             <div class="flex justify-end gap-3">
-                <button onclick="closeConfirmModal()" class="theme-btn-secondary">取消</button>
-                <button id="confirmDeleteBtn" class="theme-btn-danger">删除</button>
+                <button data-i18n onclick="closeConfirmModal()" class="theme-btn-secondary">取消</button>
+                <button data-i18n id="confirmDeleteBtn" class="theme-btn-danger">删除</button>
             </div>
         </div>
     </div>
@@ -330,7 +334,7 @@
 
         function selectIndexOption(uid, label) {
             currentIndexUid = uid;
-            document.getElementById('indexSelectLabel').textContent = label || '-- 选择索引 --';
+            document.getElementById('indexSelectLabel').textContent = label || BootFSI18n.t('-- 选择索引 --');
             closeIndexSelect();
             // 重新渲染下拉选项更新选中态
             renderIndexDropdown();
@@ -342,7 +346,7 @@
             if (currentIndexUid) {
                 loadDocuments();
             } else {
-                document.getElementById('docList').innerHTML = '<div class="px-4 py-12 text-center text-sm" style="color: var(--color-text-muted);">选择索引后可搜索文档</div>';
+                document.getElementById('docList').innerHTML = '<div class="px-4 py-12 text-center text-sm" style="color: var(--color-text-muted);">' + BootFSI18n.html('选择索引后可搜索文档') + '</div>';
                 document.getElementById('resultCount').textContent = '';
                 document.getElementById('pageInfo').textContent = '-';
                 document.getElementById('prevBtn').disabled = true;
@@ -353,7 +357,7 @@
 
         function renderIndexDropdown() {
             var dd = document.getElementById('indexSelectDropdown');
-            var html = '<div class="custom-select-option' + (currentIndexUid === '' ? ' selected' : '') + '" onclick="selectIndexOption(\'\', \'-- 选择索引 --\')">-- 选择索引 --</div>';
+            var html = '<div class="custom-select-option' + (currentIndexUid === '' ? ' selected' : '') + '" onclick="selectIndexOption(\'\', this.textContent)">' + BootFSI18n.html('-- 选择索引 --') + '</div>';
             indexOptions.forEach(function (opt) {
                 var sel = opt.uid === currentIndexUid ? ' selected' : '';
                 html += '<div class="custom-select-option' + sel + '" onclick="selectIndexOption(\'' + escapeJs(opt.uid) + '\', \'' + escapeJs(opt.label) + '\')">' + escapeHtml(opt.label) + '</div>';
@@ -390,7 +394,7 @@
                     indexOptions = [];
                     if (res.succeed && res.data) {
                         res.data.forEach(function (idx) {
-                            indexOptions.push({ uid: idx.uid, label: idx.uid + ' (' + idx.numberOfDocuments + ' 条)' });
+                            indexOptions.push({ uid: idx.uid, label: BootFSI18n.t('{0} ({1} 条)', idx.uid, idx.numberOfDocuments) });
                         });
                     }
                     renderIndexDropdown();
@@ -398,14 +402,14 @@
                         var found = indexOptions.some(function (o) { return o.uid === currentIndexUid; });
                         if (!found) {
                             currentIndexUid = '';
-                            document.getElementById('indexSelectLabel').textContent = '-- 选择索引 --';
+                            document.getElementById('indexSelectLabel').textContent = BootFSI18n.t('-- 选择索引 --');
                         }
                     }
                 }).catch(function (err) { console.error('获取索引失败', err); });
         }
 
         function doSearch() {
-            if (!currentIndexUid) { toast('请先选择索引'); return; }
+            if (!currentIndexUid) { toast(BootFSI18n.t('请先选择索引')); return; }
             var q = document.getElementById('searchInput').value.trim();
             lastSearchQuery = q;
             currentPage = 0;
@@ -416,42 +420,42 @@
         function loadDocuments() {
             searchMode = false;
             var tbody = document.getElementById('docList');
-            tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-text-muted);">加载中...</div>';
+            tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-text-muted);">' + BootFSI18n.html('加载中...') + '</div>';
 
             var url = '/api/meilisearch/indexes/' + encodeURIComponent(currentIndexUid) + '/documents?offset=' + (currentPage * pageSize) + '&limit=' + pageSize;
             fetch(url)
                 .then(r => r.json())
                 .then(res => {
-                    if (!res.succeed) { tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-danger);">查询失败: ' + escapeHtml(res.message || '') + '</div>'; return; }
+                    if (!res.succeed) { tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-danger);">' + BootFSI18n.html('查询失败:') + ' ' + escapeHtml(BootFSI18n.t(res.message || '')) + '</div>'; return; }
                     var data = res.data;
                     var results = data.results || [];
                     currentResults = results;
                     totalDocs = data.total || 0;
                     renderList(results, null);
-                }).catch(function () { tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-danger);">请求失败</div>'; });
+                }).catch(function () { tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-danger);">' + BootFSI18n.html('请求失败') + '</div>'; });
         }
 
         function executeSearch(q) {
             var tbody = document.getElementById('docList');
-            tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-text-muted);">搜索中...</div>';
+            tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-text-muted);">' + BootFSI18n.html('搜索中...') + '</div>';
 
             var url = '/api/meilisearch/indexes/' + encodeURIComponent(currentIndexUid) + '/search?q=' + encodeURIComponent(q) + '&offset=' + (currentPage * pageSize) + '&limit=' + pageSize;
             fetch(url)
                 .then(r => r.json())
                 .then(res => {
-                    if (!res.succeed) { tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-danger);">搜索失败: ' + escapeHtml(res.message || '') + '</div>'; return; }
+                    if (!res.succeed) { tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-danger);">' + BootFSI18n.html('搜索失败:') + ' ' + escapeHtml(BootFSI18n.t(res.message || '')) + '</div>'; return; }
                     var data = res.data;
                     var hits = data.hits || [];
                     var results = hits.map(function (h) { return h; });
                     currentResults = results;
                     totalDocs = data.estimatedTotalHits || data.totalHits || 0;
-                    renderList(results, q ? ('搜索 "' + q + '"') : null);
-                }).catch(function () { tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-danger);">请求失败</div>'; });
+                    renderList(results, q ? BootFSI18n.t('搜索 "{0}"', q) : null);
+                }).catch(function () { tbody.innerHTML = '<div class="px-4 py-8 text-center text-sm" style="color: var(--color-danger);">' + BootFSI18n.html('请求失败') + '</div>'; });
         }
 
         function renderList(results, modeLabel) {
             var el = document.getElementById('docList');
-            document.getElementById('resultCount').textContent = '共 ' + totalDocs + ' 条';
+            document.getElementById('resultCount').textContent = BootFSI18n.t('共') + ' ' + totalDocs + ' ' + BootFSI18n.t('条');
             document.getElementById('pageInfo').textContent = (currentPage + 1) + ' / ' + Math.max(1, Math.ceil(totalDocs / pageSize));
             document.getElementById('prevBtn').disabled = currentPage === 0;
             document.getElementById('nextBtn').disabled = (currentPage + 1) * pageSize >= totalDocs;
@@ -459,13 +463,13 @@
             var infoEl = document.getElementById('searchResultInfo');
             if (modeLabel) {
                 infoEl.classList.remove('hidden');
-                infoEl.textContent = modeLabel + ' — ' + totalDocs + ' 条结果';
+                infoEl.textContent = modeLabel + ' — ' + totalDocs + ' ' + BootFSI18n.t('条结果');
             } else {
                 infoEl.classList.add('hidden');
             }
 
             if (results.length === 0) {
-                el.innerHTML = '<div class="px-4 py-12 text-center text-sm" style="color: var(--color-text-muted);">无结果</div>';
+                el.innerHTML = '<div class="px-4 py-12 text-center text-sm" style="color: var(--color-text-muted);">' + BootFSI18n.html('无结果') + '</div>';
                 return;
             }
 
@@ -484,7 +488,7 @@
                     '</div>' +
                     '<button onclick="event.stopPropagation(); showConfirmDelete(\'' + escapeJs(String(docId)) + '\')" ' +
                         'class="ml-2 opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs rounded transition-opacity" ' +
-                        'style="color: var(--color-danger); background-color: rgba(239,68,68,0.1);">删除</button>' +
+                        'style="color: var(--color-danger); background-color: rgba(239,68,68,0.1);">' + BootFSI18n.html('删除') + '</button>' +
                 '</div>';
             }).join('');
         }
@@ -498,7 +502,7 @@
             actions.classList.add('hidden');
             actions.classList.remove('flex');
             ph.style.display = 'block';
-            ph.textContent = '加载中...';
+            ph.textContent = BootFSI18n.t('加载中...');
             document.getElementById('detailDocId').textContent = docId;
             renderCurrentList();
 
@@ -512,16 +516,16 @@
                         actions.classList.remove('hidden');
                         actions.classList.add('flex');
                     } else {
-                        ph.textContent = '获取失败: ' + escapeHtml(res.message || '');
+                        ph.textContent = BootFSI18n.t('获取失败:') + ' ' + escapeHtml(BootFSI18n.t(res.message || ''));
                     }
-                }).catch(function () { ph.textContent = '请求失败'; });
+                }).catch(function () { ph.textContent = BootFSI18n.t('请求失败'); });
         }
 
         function saveDocument() {
             var ta = document.getElementById('detailContent');
             var raw = ta.value.trim();
-            if (!raw) { toast('内容为空'); return; }
-            try { JSON.parse(raw); } catch (e) { toast('JSON 格式无效: ' + e.message, 'error'); return; }
+            if (!raw) { toast(BootFSI18n.t('内容为空')); return; }
+            try { JSON.parse(raw); } catch (e) { toast(BootFSI18n.t('JSON 格式无效:') + ' ' + e.message, 'error'); return; }
 
             fetch('/api/meilisearch/indexes/' + encodeURIComponent(currentIndexUid) + '/documents', {
                 method: 'POST',
@@ -531,24 +535,24 @@
             .then(r => r.json())
             .then(res => {
                 if (res.succeed) {
-                    toast('保存成功', 'warn');
+                    toast(BootFSI18n.t('保存成功'), 'warn');
                 } else {
-                    toast('保存失败: ' + escapeHtml(res.message || ''), 'error');
+                    toast(BootFSI18n.t('保存失败:') + ' ' + escapeHtml(BootFSI18n.t(res.message || '')), 'error');
                 }
             })
-            .catch(function () { toast('请求失败', 'error'); });
+            .catch(function () { toast(BootFSI18n.t('请求失败'), 'error'); });
         }
 
         function formatDocJson() {
             var ta = document.getElementById('detailContent');
             var raw = ta.value.trim();
-            if (!raw) { toast('内容为空'); return; }
+            if (!raw) { toast(BootFSI18n.t('内容为空')); return; }
             try {
                 var obj = JSON.parse(raw);
                 ta.value = JSON.stringify(obj, null, 2);
-                toast('JSON 格式正确，已整理', 'warn');
+                toast(BootFSI18n.t('JSON 格式正确，已整理'), 'warn');
             } catch (e) {
-                toast('JSON 格式无效: ' + e.message, 'error');
+                toast(BootFSI18n.t('JSON 格式无效:') + ' ' + e.message, 'error');
             }
         }
 
@@ -559,14 +563,14 @@
             ta.value = '';
             ta.style.display = 'none';
             ph.style.display = 'block';
-            ph.textContent = '点击左侧 uuid 查看文档详情';
+            ph.textContent = BootFSI18n.t('点击左侧 uuid 查看文档详情');
             actions.classList.add('hidden');
             actions.classList.remove('flex');
             document.getElementById('detailDocId').textContent = '';
         }
 
         function renderCurrentList() {
-            var modeLabel = searchMode && lastSearchQuery ? ('搜索 "' + lastSearchQuery + '"') : null;
+            var modeLabel = searchMode && lastSearchQuery ? BootFSI18n.t('搜索 "{0}"', lastSearchQuery) : null;
             renderList(currentResults, modeLabel);
         }
 
@@ -580,7 +584,7 @@
 
         function showConfirmDelete(docId) {
             pendingDeleteId = docId;
-            document.getElementById('confirmMsg').textContent = '确定要删除文档: ' + docId + ' 吗？';
+            document.getElementById('confirmMsg').textContent = BootFSI18n.t('确定要删除文档: {0} 吗？', docId);
             document.getElementById('confirmModal').classList.remove('hidden');
             document.getElementById('confirmDeleteBtn').onclick = function () { confirmDeleteSingle(); };
         }
@@ -603,13 +607,13 @@
                         }
                         searchMode ? executeSearch(lastSearchQuery) : loadDocuments();
                         refreshIndexes();
-                    } else { toast('删除失败: ' + escapeHtml(res.message || ''), 'error'); }
-                }).catch(function () { toast('请求失败', 'error'); });
+                    } else { toast(BootFSI18n.t('删除失败:') + ' ' + escapeHtml(BootFSI18n.t(res.message || '')), 'error'); }
+                }).catch(function () { toast(BootFSI18n.t('请求失败'), 'error'); });
         }
 
         function clearDocuments() {
-            if (!currentIndexUid) { toast('请先选择索引'); return; }
-            var confirmed = showConfirmToast('确定要清空索引 "' + currentIndexUid + '" 中的所有文档吗？此操作不可恢复！', function () {
+            if (!currentIndexUid) { toast(BootFSI18n.t('请先选择索引')); return; }
+            var confirmed = showConfirmToast(BootFSI18n.t('确定要清空索引 "{0}" 中的所有文档吗？此操作不可恢复！', currentIndexUid), function () {
                 fetch('/api/meilisearch/indexes/' + encodeURIComponent(currentIndexUid) + '/documents', { method: 'DELETE' })
                     .then(r => r.json())
                     .then(res => {
@@ -619,8 +623,8 @@
                             resetDetailPanel();
                             loadDocuments();
                             refreshIndexes();
-                        } else { toast('清空失败: ' + escapeHtml(res.message || ''), 'error'); }
-                    }).catch(function () { toast('请求失败', 'error'); });
+                        } else { toast(BootFSI18n.t('清空失败:') + ' ' + escapeHtml(BootFSI18n.t(res.message || '')), 'error'); }
+                    }).catch(function () { toast(BootFSI18n.t('请求失败'), 'error'); });
             });
         }
 
@@ -631,8 +635,8 @@
             el.className = 'toast toast-warn';
             el.style.cssText = 'display:flex;align-items:center;gap:12px;';
             el.innerHTML = '<span style="flex:1;">' + escapeHtml(msg) + '</span>' +
-                '<button class="theme-btn-warning theme-btn-sm">确认</button>' +
-                '<button class="theme-btn-secondary theme-btn-sm">取消</button>';
+                '<button class="theme-btn-warning theme-btn-sm">' + BootFSI18n.html('确认') + '</button>' +
+                '<button class="theme-btn-secondary theme-btn-sm">' + BootFSI18n.html('取消') + '</button>';
             c.appendChild(el);
             var btns = el.querySelectorAll('button');
             btns[0].onclick = function () { el.classList.add('toast-out'); setTimeout(function () { el.remove(); }, 200); onConfirm(); };
@@ -641,7 +645,7 @@
         }
 
         function showAddModal() {
-            if (!currentIndexUid) { toast('请先选择索引'); return; }
+            if (!currentIndexUid) { toast(BootFSI18n.t('请先选择索引')); return; }
             var template = {
                 "uuid": "",
                 "title": "",
@@ -658,20 +662,20 @@
         function formatAddJson() {
             var ta = document.getElementById('addDocJson');
             var raw = ta.value.trim();
-            if (!raw) { toast('文本框为空'); return; }
+            if (!raw) { toast(BootFSI18n.t('文本框为空')); return; }
             try {
                 var obj = JSON.parse(raw);
                 ta.value = JSON.stringify(obj, null, 2);
-                toast('整理完成，JSON 合法');
+                toast(BootFSI18n.t('整理完成，JSON 合法'));
             } catch (e) {
-                toast('JSON 格式无效: ' + e.message, 'error');
+                toast(BootFSI18n.t('JSON 格式无效:') + ' ' + e.message, 'error');
             }
         }
 
         function addDocument() {
             var raw = document.getElementById('addDocJson').value.trim();
-            if (!raw) { toast('请输入 JSON'); return; }
-            try { JSON.parse(raw); } catch (e) { toast('JSON 格式无效: ' + e.message, 'error'); return; }
+            if (!raw) { toast(BootFSI18n.t('请输入 JSON')); return; }
+            try { JSON.parse(raw); } catch (e) { toast(BootFSI18n.t('JSON 格式无效:') + ' ' + e.message, 'error'); return; }
 
             fetch('/api/meilisearch/indexes/' + encodeURIComponent(currentIndexUid) + '/documents', {
                 method: 'POST',
@@ -686,10 +690,10 @@
                     searchMode ? executeSearch(lastSearchQuery) : loadDocuments();
                     refreshIndexes();
                 } else {
-                    toast('新增失败: ' + escapeHtml(res.message || ''), 'error');
+                    toast(BootFSI18n.t('新增失败:') + ' ' + escapeHtml(BootFSI18n.t(res.message || '')), 'error');
                 }
             })
-            .catch(function () { toast('请求失败', 'error'); });
+            .catch(function () { toast(BootFSI18n.t('请求失败'), 'error'); });
         }
 
         function escapeHtml(str) {

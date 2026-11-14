@@ -15,6 +15,8 @@
         window.__galleryUrls = fetch('/setu-urls?count=240', { headers: { Accept: 'application/json' } });
     </script>
     <script src="/security-utils.js"></script>
+    <script src="/i18n/en.js"></script>
+    <script src="/i18n.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gallery</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -243,14 +245,14 @@
         <svg class="hero" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
         </svg>
-        <h3>暂无公开图片</h3>
-        <p>还没有公开的图片，快去管理页面上传并发布一些吧！</p>
+        <h3 data-i18n>暂无公开图片</h3>
+        <p data-i18n>还没有公开的图片，快去管理页面上传并发布一些吧！</p>
         <div class="empty-action">
             <a href="/" class="theme-btn-primary">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
                 </svg>
-                前往管理页面
+                <span data-i18n>前往管理页面</span>
             </a>
         </div>
     </div>
@@ -260,7 +262,7 @@
 </div>
 <div id="loader">
     <div class="spinner"></div>
-    <p style="color:white;">少女祈祷中...</p>
+    <p data-i18n style="color:white;">少女祈祷中...</p>
 </div>
 </body>
 
@@ -316,7 +318,7 @@
 
             function failedTile() {
                 const errorDiv = document.createElement('div');
-                errorDiv.textContent = '加载失败';
+                errorDiv.textContent = BootFSI18n.t('加载失败');
                 errorDiv.style.color = '#e74c3c';
                 errorDiv.style.textAlign = 'center';
                 errorDiv.style.padding = '20px';
@@ -349,7 +351,7 @@
                     const uuid = res.substring(res.lastIndexOf('/') + 1).split(/[?#]/)[0];
                     const img = new Image();
                     img.decoding = 'async';
-                    img.alt = '随机图片';
+                    img.alt = BootFSI18n.t('随机图片');
                     if (index < COLUMN_COUNT) img.fetchPriority = 'high';
 
                     function settle() {
@@ -482,7 +484,7 @@
                 })
                 .catch(function () {
                     const label = document.querySelector('#loader p');
-                    if (label) label.textContent = '画廊加载失败';
+                    if (label) label.textContent = BootFSI18n.t('画廊加载失败');
                 });
         })();
     </script>

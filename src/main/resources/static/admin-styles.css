@@ -874,3 +874,30 @@ input[type="checkbox"]:checked {
     color: var(--color-accent-text);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
+@media (max-width: 639px) {
+    label.header-upload.theme-btn-primary,
+    button.header-replica-toggle.theme-btn-secondary {
+        padding-inline: 0.375rem;
+    }
+
+    header .file-header-toolbar {
+        display: grid;
+        grid-template-rows: 40px 40px;
+        gap: 0;
+        height: 88px;
+        padding-block: 4px;
+    }
+
+    .file-header-search {
+        grid-row: 2;
+    }
+
+    .file-header-actions {
+        grid-row: 1;
+        justify-content: flex-end;
+    }
+
+    #localFolderPanel {
+        top: 88px;
+    }
+}

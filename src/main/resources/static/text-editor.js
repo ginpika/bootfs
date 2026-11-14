@@ -19,10 +19,10 @@ window.TextFileEditor = (() => {
         if (!fileName) return null;
         const name = fileName.split(/[\\/]/).pop().toLowerCase();
         const extension = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : '';
-        if (configNames.has(name) || name === '.env' || name.startsWith('.env.') || configExtensions.has(extension)) return { kind: 'config', label: '配置文件' };
-        if (dataExtensions.has(extension)) return { kind: 'data', label: '结构化文本' };
-        if (textExtensions.has(extension)) return { kind: 'text', label: '文本文件' };
-        if (codeExtensions.has(extension)) return { kind: 'code', label: '代码文件' };
+        if (configNames.has(name) || name === '.env' || name.startsWith('.env.') || configExtensions.has(extension)) return { kind: 'config', label: BootFSI18n.t('配置文件') };
+        if (dataExtensions.has(extension)) return { kind: 'data', label: BootFSI18n.t('结构化文本') };
+        if (textExtensions.has(extension)) return { kind: 'text', label: BootFSI18n.t('文本文件') };
+        if (codeExtensions.has(extension)) return { kind: 'code', label: BootFSI18n.t('代码文件') };
         return null;
     }
 
@@ -70,11 +70,11 @@ window.TextFileEditor = (() => {
         const changed = dirty();
         const tooLarge = state?.loaded && encodedSize(serializedContent()) > MAX_BYTES;
         elements.save.disabled = !state?.loaded || state.saving || !changed || tooLarge;
-        elements.save.textContent = state?.saving ? '正在保存…' : '保存';
+        elements.save.textContent = state?.saving ? BootFSI18n.t('正在保存…') : BootFSI18n.t('保存');
         elements.reload.disabled = !!state?.saving || !!state?.loading;
         elements.charset.disabled = !!state?.saving || !!state?.loading;
         elements.surface.setAttribute('aria-busy', String(!!state?.loading || !!state?.saving));
-        elements.status.textContent = state?.saving ? '正在保存…' : state?.loading ? '正在加载…' : !state?.loaded ? '加载失败' : tooLarge ? '内容超过 2 MiB，无法保存' : changed ? '有未保存的修改' : '已保存';
+        elements.status.textContent = state?.saving ? BootFSI18n.t('正在保存…') : state?.loading ? BootFSI18n.t('正在加载…') : !state?.loaded ? BootFSI18n.t('加载失败') : tooLarge ? BootFSI18n.t('内容超过 2 MiB，无法保存') : changed ? BootFSI18n.t('有未保存的修改') : BootFSI18n.t('已保存');
     }
 
     function updateMetrics() {
@@ -89,23 +89,23 @@ window.TextFileEditor = (() => {
             const position = elements.content.selectionStart;
             const line = value.slice(0, position).split('\n').length;
             const column = position - (position === 0 ? -1 : value.lastIndexOf('\n', position - 1));
-            elements.cursor.textContent = `行 ${line}，列 ${column} · 共 ${lines} 行`;
+            elements.cursor.textContent = BootFSI18n.t('行 {0}，列 {1} · 共 {2} 行', line, column, lines);
             elements.numbers.scrollTop = elements.content.scrollTop;
         });
     }
 
     async function readResponse(response) {
-        if (response.redirected || response.status === 401 || response.status === 403) throw new Error('登录已过期或没有编辑权限，请重新登录后重试。');
+        if (response.redirected || response.status === 401 || response.status === 403) throw new Error(BootFSI18n.t('登录已过期或没有编辑权限，请重新登录后重试。'));
         const json = response.headers.get('content-type')?.includes('application/json');
         const payload = json ? await response.json() : null;
         if (!response.ok) {
-            if (response.status === 409) throw new Error('文件内容或信息已变化。你的修改已保留，请先复制内容，再重新加载最新内容。');
-            if (response.status === 413) throw new Error('文件超过 2 MiB，无法在内置编辑器中打开或保存。');
-            if (response.status === 415) throw new Error('此文件无法按 UTF-8 或 GBK 读取，可能含有二进制内容。也可以切换读取编码后重试。');
-            if (response.status === 404) throw new Error('文件不存在或已被删除。');
-            throw new Error(payload?.message || '操作失败，请稍后重试。');
+            if (response.status === 409) throw new Error(BootFSI18n.t('文件内容或信息已变化。你的修改已保留，请先复制内容，再重新加载最新内容。'));
+            if (response.status === 413) throw new Error(BootFSI18n.t('文件超过 2 MiB，无法在内置编辑器中打开或保存。'));
+            if (response.status === 415) throw new Error(BootFSI18n.t('此文件无法按 UTF-8 或 GBK 读取，可能含有二进制内容。也可以切换读取编码后重试。'));
+            if (response.status === 404) throw new Error(BootFSI18n.t('文件不存在或已被删除。'));
+            throw new Error(BootFSI18n.t(payload?.message || '操作失败，请稍后重试。'));
         }
-        if (!payload || typeof payload.version !== 'string') throw new Error('服务器返回了无效响应，请重新登录或稍后重试。');
+        if (!payload || typeof payload.version !== 'string') throw new Error(BootFSI18n.t('服务器返回了无效响应，请重新登录或稍后重试。'));
         return payload;
     }
 
@@ -124,7 +124,7 @@ window.TextFileEditor = (() => {
             const response = await fetch(`/api/file/${encodeURIComponent(state.uuid)}/text${query}`, { cache: 'no-store' });
             const data = await readResponse(response);
             if (activeSession !== session || !isOpen()) return;
-            if (typeof data.content !== 'string') throw new Error('服务器未返回文本内容。');
+            if (typeof data.content !== 'string') throw new Error(BootFSI18n.t('服务器未返回文本内容。'));
             if (data.fileName) elements.name.textContent = data.fileName;
             state.version = data.version;
             state.encoding = data.encoding === 'GBK' ? 'GBK' : 'UTF-8';
@@ -140,7 +140,7 @@ window.TextFileEditor = (() => {
             elements.content.focus();
         } catch (failure) {
             if (activeSession !== session || !isOpen()) return;
-            error(failure.message || '读取失败，请检查网络后重试。');
+            error(failure.message || BootFSI18n.t('读取失败，请检查网络后重试。'));
         } finally {
             if (activeSession === session && isOpen()) {
                 state.loading = false;
@@ -169,7 +169,7 @@ window.TextFileEditor = (() => {
     function close() {
         if (!isOpen()) return true;
         if (state?.saving) return false;
-        if (dirty() && !window.confirm('有未保存的修改，确定放弃修改并关闭吗？')) return false;
+        if (dirty() && !window.confirm(BootFSI18n.t('有未保存的修改，确定放弃修改并关闭吗？'))) return false;
         ++session;
         elements.modal.classList.add('hidden');
         elements.content.value = '';
@@ -197,7 +197,7 @@ window.TextFileEditor = (() => {
             });
             const data = await readResponse(response);
             if (activeSession !== session) return;
-            if (data.uuid !== previousUuid) throw new Error('保存响应的 UUID 与原文件不一致，请重新加载确认。');
+            if (data.uuid !== previousUuid) throw new Error(BootFSI18n.t('保存响应的 UUID 与原文件不一致，请重新加载确认。'));
             state.version = data.version;
             state.encoding = data.encoding || state.encoding;
             state.baselineEncoding = data.detectedEncoding || state.encoding;
@@ -206,9 +206,9 @@ window.TextFileEditor = (() => {
             state.baseline = savedValue;
             updateSelectedToolbar();
             loadFileList();
-            showToast('文本已保存', 'success');
+            showToast(BootFSI18n.t('文本已保存'), 'success');
         } catch (failure) {
-            if (activeSession === session) error(failure.message || '保存失败，请检查网络后重试。');
+            if (activeSession === session) error(failure.message || BootFSI18n.t('保存失败，请检查网络后重试。'));
         } finally {
             if (activeSession === session) {
                 state.saving = false;
@@ -238,7 +238,7 @@ window.TextFileEditor = (() => {
 
     function toggleTabMode() {
         tabIndents = !tabIndents;
-        elements.tabMode.textContent = tabIndents ? 'Tab 缩进' : 'Tab 导航';
+        elements.tabMode.textContent = tabIndents ? BootFSI18n.t('Tab 缩进') : BootFSI18n.t('Tab 导航');
         elements.tabMode.setAttribute('aria-pressed', String(tabIndents));
     }
 
@@ -251,14 +251,14 @@ window.TextFileEditor = (() => {
         elements.tabMode.addEventListener('click', toggleTabMode);
         elements.charset.addEventListener('change', () => {
             if (!state) return;
-            if (dirty() && !window.confirm('切换读取编码会重新加载文件并放弃当前修改，是否继续？')) {
+            if (dirty() && !window.confirm(BootFSI18n.t('切换读取编码会重新加载文件并放弃当前修改，是否继续？'))) {
                 elements.charset.value = state.readEncoding;
                 return;
             }
             load();
         });
         elements.reload.addEventListener('click', () => {
-            if (!dirty() || window.confirm('重新加载会放弃当前修改，是否继续？')) load();
+            if (!dirty() || window.confirm(BootFSI18n.t('重新加载会放弃当前修改，是否继续？'))) load();
         });
         elements.content.addEventListener('input', () => { updateStatus(); updateMetrics(); });
         elements.content.addEventListener('select', updateMetrics);

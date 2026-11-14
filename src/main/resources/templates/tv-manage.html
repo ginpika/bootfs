@@ -2,9 +2,11 @@
 <html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
 <head>
     <script src="/security-utils.js"></script>
+    <script src="/i18n/en.js"></script>
+    <script src="/i18n.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TV 节目单管理</title>
+    <title data-i18n>TV 节目单管理</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -107,41 +109,41 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
-            返回首页
+            <span data-i18n>返回首页</span>
         </a>
     </div>
 
     <div class="max-w-5xl mx-auto p-5">
         <div class="flex justify-between items-center mb-5 p-5 theme-rounded-xl" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-            <h1 class="text-xl font-bold font-display" style="color: var(--color-text-primary);">TV 节目单管理</h1>
+            <h1 data-i18n class="text-xl font-bold font-display" style="color: var(--color-text-primary);">TV 节目单管理</h1>
             <a href="/tv" class="theme-btn-primary">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M5 4l14 8-14 8V4z"/>
                 </svg>
-                前往 TV
+                <span data-i18n>前往 TV</span>
             </a>
         </div>
 
         <div class="flex gap-5 mb-5 p-4 theme-rounded-xl text-sm" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
             <div class="flex items-center gap-2">
-                <span style="color: var(--color-text-secondary);">已选视频:</span>
+                <span data-i18n style="color: var(--color-text-secondary);">已选视频:</span>
                 <span class="font-semibold" style="color: var(--color-accent-primary);" id="selectedCount">0</span>
             </div>
             <div class="flex items-center gap-2">
-                <span style="color: var(--color-text-secondary);">总切片数:</span>
+                <span data-i18n style="color: var(--color-text-secondary);">总切片数:</span>
                 <span class="font-semibold" style="color: var(--color-accent-primary);" id="totalSegments" th:text="${stats.allTsListSize}">0</span>
             </div>
             <div class="flex items-center gap-2">
-                <span style="color: var(--color-text-secondary);">总时长:</span>
-                <span class="font-semibold" style="color: var(--color-accent-primary);" id="totalDuration" th:text="${stats.totalDurationFormatted}">0秒</span>
+                <span data-i18n style="color: var(--color-text-secondary);">总时长:</span>
+                <span class="font-semibold" style="color: var(--color-accent-primary);" id="totalDuration" th:attr="data-duration-seconds=${stats.totalDuration}" th:text="${stats.totalDurationFormatted}">0秒</span>
             </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div class="theme-rounded-xl p-5" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
                 <div class="flex justify-between items-center mb-4 pb-3" style="border-bottom: 1px solid var(--color-border-primary);">
-                    <h2 class="text-base font-semibold" style="color: var(--color-text-primary);">可选视频</h2>
-                    <span class="px-2 py-0.5 text-xs theme-rounded-lg" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);" id="availableCount">0 个</span>
+                    <h2 data-i18n class="text-base font-semibold" style="color: var(--color-text-primary);">可选视频</h2>
+                    <span data-i18n class="px-2 py-0.5 text-xs theme-rounded-lg" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);" id="availableCount">0 个</span>
                 </div>
                 <div class="flex flex-col gap-2 min-h-[400px] max-h-[500px] overflow-y-auto" id="availableList">
                 </div>
@@ -149,8 +151,8 @@
 
             <div class="theme-rounded-xl p-5" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
                 <div class="flex justify-between items-center mb-4 pb-3" style="border-bottom: 1px solid var(--color-border-primary);">
-                    <h2 class="text-base font-semibold" style="color: var(--color-text-primary);">播放列表 (拖拽排序)</h2>
-                    <span class="px-2 py-0.5 text-xs theme-rounded-lg" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);" id="playlistCount">0 个</span>
+                    <h2 data-i18n class="text-base font-semibold" style="color: var(--color-text-primary);">播放列表 (拖拽排序)</h2>
+                    <span data-i18n class="px-2 py-0.5 text-xs theme-rounded-lg" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);" id="playlistCount">0 个</span>
                 </div>
                 <div class="flex flex-col gap-2 min-h-[400px] max-h-[500px] overflow-y-auto" id="playlistList">
                 </div>
@@ -158,15 +160,15 @@
         </div>
 
         <div class="flex gap-3 mt-5 justify-end">
-            <button class="theme-btn-secondary" onclick="selectAll()">全选</button>
-            <button class="theme-btn-secondary" onclick="clearAll()">清空</button>
+            <button data-i18n class="theme-btn-secondary" onclick="selectAll()">全选</button>
+            <button data-i18n class="theme-btn-secondary" onclick="clearAll()">清空</button>
             <button class="theme-btn-success" onclick="savePlaylist()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
                     <polyline points="17,21 17,13 7,13 7,21"/>
                     <polyline points="7,3 7,8 15,8"/>
                 </svg>
-                保存并重新初始化
+                <span data-i18n>保存并重新初始化</span>
             </button>
         </div>
     </div>
@@ -198,7 +200,7 @@
                 })
                 .catch(err => {
                     console.error('Failed to load videos:', err);
-                    showToast('加载视频列表失败', true);
+                    showToast(BootFSI18n.t('加载视频列表失败'), true);
                 });
         }
 
@@ -233,7 +235,7 @@
             item.style.backgroundColor = 'var(--color-bg-tertiary)';
             item.dataset.uuid = video.uuid;
 
-            const duration = formatDuration(video.totalDuration);
+            const duration = BootFSI18n.duration(video.totalDuration);
 
             item.innerHTML = `
                 <div class="drag-handle" style="color: var(--color-text-muted); cursor: grab;">
@@ -249,7 +251,7 @@
                 <div class="checkbox ${inPlaylist ? 'checked' : ''}" data-uuid="${video.uuid}"></div>
                 <div class="flex-1 min-w-0">
                     <div class="text-sm font-medium truncate" style="color: var(--color-text-primary);" title="${BootFSSecurity.html(video.fileName)}">${BootFSSecurity.html(video.fileName)}</div>
-                    <div class="text-xs mt-1" style="color: var(--color-text-muted);">${video.segmentCount} 个切片 · ${duration}</div>
+                    <div class="text-xs mt-1" style="color: var(--color-text-muted);">${BootFSI18n.html('{0} 个切片 · {1}', video.segmentCount, duration)}</div>
                 </div>
                 ${inPlaylist ? `<div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white" style="background-color: var(--color-accent-primary);">${order}</div>` : ''}
             `;
@@ -296,10 +298,10 @@
             const totalDuration = selectedVideos.reduce((sum, v) => sum + v.totalDuration, 0);
 
             document.getElementById('selectedCount').textContent = playlistUuids.length;
-            document.getElementById('availableCount').textContent = (allVideos.length - playlistUuids.length) + ' 个';
-            document.getElementById('playlistCount').textContent = playlistUuids.length + ' 个';
+            document.getElementById('availableCount').textContent = BootFSI18n.t('{0} 个', allVideos.length - playlistUuids.length);
+            document.getElementById('playlistCount').textContent = BootFSI18n.t('{0} 个', playlistUuids.length);
             document.getElementById('totalSegments').textContent = totalSegments;
-            document.getElementById('totalDuration').textContent = formatDuration(totalDuration);
+            document.getElementById('totalDuration').textContent = BootFSI18n.duration(totalDuration);
         }
 
         function savePlaylist() {
@@ -313,14 +315,14 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    showToast(data.message);
+                    showToast(BootFSI18n.t('播放列表已保存，TV 服务已重新初始化'));
                 } else {
-                    showToast('保存失败', true);
+                    showToast(BootFSI18n.t('保存失败'), true);
                 }
             })
             .catch(err => {
                 console.error('Failed to save playlist:', err);
-                showToast('保存失败', true);
+                showToast(BootFSI18n.t('保存失败'), true);
             });
         }
 
@@ -392,17 +394,6 @@
                 const badge = item.querySelector('.w-6.h-6.rounded-full');
                 if (badge) badge.textContent = index + 1;
             });
-        }
-
-        function formatDuration(seconds) {
-            if (!seconds || seconds === 0) return '0秒';
-            const h = Math.floor(seconds / 3600);
-            const m = Math.floor((seconds % 3600) / 60);
-            const s = Math.floor(seconds % 60);
-            
-            if (h > 0) return `${h}小时${m}分${s}秒`;
-            if (m > 0) return `${m}分${s}秒`;
-            return `${s}秒`;
         }
 
         function showToast(message, isError = false) {

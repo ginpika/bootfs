@@ -27,7 +27,7 @@
                 '<ul class="pagination-jump">',
                 '<li class=""><span>' + this.options.pageGo() + '</span></li>',
                 '<li class=""><input type="text" style="width: 100px" class="page-input" value="' + this.options.pageNumber + '"   /></li>',
-                '<li class="page-go"><a class="jump-go" href="">点击跳转</a></li>',
+                '<li class="page-go"><a class="jump-go" href="">' + BootFSI18n.html('点击跳转') + '</a></li>',
                 '</ul>');
 
         // 放到原先的分页组件后面

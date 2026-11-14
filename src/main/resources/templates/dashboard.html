@@ -3,9 +3,12 @@
 
 <head>
     <script src="/security-utils.js"></script>
+    <script src="/i18n/en.js"></script>
+    <script src="/i18n.js"></script>
+    <link rel="stylesheet" href="/language-picker.css">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>系统仪表盘 - BootFS</title>
+    <title data-i18n>系统仪表盘 - BootFS</title>
     <style>
         :root,
         :root.theme-light {
@@ -125,18 +128,18 @@
                                         d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
                                 </svg>
                             </a>
-                            <h1 class="text-lg font-semibold font-display" style="color: var(--color-text-primary);">
+                            <h1 data-i18n class="text-lg font-semibold font-display" style="color: var(--color-text-primary);">
                                 系统仪表盘</h1>
                             <div class="hidden sm:flex items-center gap-2 px-2.5 py-1 theme-rounded-lg"
                                 style="background-color: var(--color-bg-tertiary);">
                                 <span class="w-2 h-2 rounded-full animate-pulse"
                                     style="background-color: var(--color-success);"></span>
-                                <span id="uptimeText" class="text-xs font-medium"
+                                <span data-i18n id="uptimeText" class="text-xs font-medium"
                                     style="color: var(--color-text-secondary);">运行中 · --</span>
                             </div>
                         </div>
                         <div class="flex items-center space-x-3">
-                            <button onclick="loadStats()" class="theme-icon-btn" title="刷新">
+                            <button data-i18n-attrs="title" onclick="loadStats()" class="theme-icon-btn" title="刷新">
                                 <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2" style="color: var(--color-text-primary);">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -145,7 +148,7 @@
                                 </svg>
                             </button>
                             <div class="relative">
-                                <button id="themeMenuBtn" class="theme-icon-btn" title="主题">
+                                <button data-i18n-attrs="title" id="themeMenuBtn" class="theme-icon-btn" title="主题">
                                     <svg xmlns="http://www.w3.org/2000/svg"
                                         fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
                                         class="w-5 h-5">
@@ -157,7 +160,7 @@
                                     class="hidden absolute right-0 mt-2 w-56 theme-rounded-xl shadow-lg border py-2 z-50"
                                     style="background-color: var(--color-bg-secondary); border-color: var(--color-border-primary);">
                                     <div class="px-3 py-2 border-b" style="border-color: var(--color-border-primary);">
-                                        <p class="text-sm font-medium" style="color: var(--color-text-primary);">选择主题
+                                        <p data-i18n class="text-sm font-medium" style="color: var(--color-text-primary);">选择主题
                                         </p>
                                     </div>
                                     <div class="py-1">
@@ -165,45 +168,46 @@
                                             class="w-full flex items-center px-3 py-2 text-sm"
                                             style="color: var(--color-text-secondary);"><span
                                                 class="w-4 h-4 rounded-full mr-3"
-                                                style="background-color: #0ea5e9;"></span>浅色模式</button>
+                                                style="background-color: #0ea5e9;"></span><span data-i18n>浅色模式</span></button>
                                         <button onclick="setTheme('dark')"
                                             class="w-full flex items-center px-3 py-2 text-sm"
                                             style="color: var(--color-text-secondary);"><span
                                                 class="w-4 h-4 rounded-full mr-3"
-                                                style="background-color: #00d98a;"></span>深色模式</button>
+                                                style="background-color: #00d98a;"></span><span data-i18n>深色模式</span></button>
                                         <button onclick="setTheme('sakura')"
                                             class="w-full flex items-center px-3 py-2 text-sm"
                                             style="color: var(--color-text-secondary);"><span
                                                 class="w-4 h-4 rounded-full mr-3"
-                                                style="background-color: #ec4899;"></span>樱花</button>
+                                                style="background-color: #ec4899;"></span><span data-i18n>樱花</span></button>
                                         <button onclick="setTheme('starry-night')"
                                             class="w-full flex items-center px-3 py-2 text-sm"
                                             style="color: var(--color-text-secondary);"><span
                                                 class="w-4 h-4 rounded-full mr-3"
-                                                style="background-color: #e94560;"></span>星空夜景</button>
+                                                style="background-color: #e94560;"></span><span data-i18n>星空夜景</span></button>
                                         <button onclick="setTheme('forest')"
                                             class="w-full flex items-center px-3 py-2 text-sm"
                                             style="color: var(--color-text-secondary);"><span
                                                 class="w-4 h-4 rounded-full mr-3"
-                                                style="background-color: #16a34a;"></span>森林</button>
+                                                style="background-color: #16a34a;"></span><span data-i18n>森林</span></button>
                                         <button onclick="setTheme('ocean')"
                                             class="w-full flex items-center px-3 py-2 text-sm"
                                             style="color: var(--color-text-secondary);"><span
                                                 class="w-4 h-4 rounded-full mr-3"
-                                                style="background-color: #29b6f6;"></span>海洋</button>
+                                                style="background-color: #29b6f6;"></span><span data-i18n>海洋</span></button>
                                         <button onclick="setTheme('sunset')"
                                             class="w-full flex items-center px-3 py-2 text-sm"
                                             style="color: var(--color-text-secondary);"><span
                                                 class="w-4 h-4 rounded-full mr-3"
-                                                style="background-color: #f59e0b;"></span>日落</button>
+                                                style="background-color: #f59e0b;"></span><span data-i18n>日落</span></button>
                                         <button onclick="setTheme('lavender')"
                                             class="w-full flex items-center px-3 py-2 text-sm"
                                             style="color: var(--color-text-secondary);"><span
                                                 class="w-4 h-4 rounded-full mr-3"
-                                                style="background-color: #a855f7;"></span>薰衣草</button>
+                                                style="background-color: #a855f7;"></span><span data-i18n>薰衣草</span></button>
                                     </div>
                                 </div>
                             </div>
+                            <div th:replace="fragments/language-picker :: picker"></div>
                         </div>
                     </div>
                 </div>
@@ -213,33 +217,33 @@
             <main class="flex-1 overflow-y-auto p-4 theme-page-bg">
                 <div id="errorBanner" class="hidden mb-3 theme-card theme-rounded-xl theme-shadow p-3"
                     style="border-left: 4px solid var(--color-danger);">
-                    <p class="text-sm" style="color: var(--color-danger);" id="errorMsg">加载失败</p>
+                    <p data-i18n class="text-sm" style="color: var(--color-danger);" id="errorMsg">加载失败</p>
                 </div>
 
                 <!-- Section 1: 节点详情 -->
                 <section class="mb-5">
                     <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
-                        <h2 class="text-xs font-semibold font-display uppercase tracking-wider"
+                        <h2 data-i18n class="text-xs font-semibold font-display uppercase tracking-wider"
                             style="color: var(--color-text-muted);">节点详情</h2>
                         <div class="ml-auto flex items-center gap-2">
-                            <button id="clusterRemoveOpen" type="button" disabled class="theme-btn-danger"
+                            <button data-i18n id="clusterRemoveOpen" type="button" disabled class="theme-btn-danger"
                                 aria-haspopup="dialog" aria-controls="clusterRemoveDialog">移除节点</button>
-                            <button id="clusterLinkOpen" type="button" class="px-3 py-2 text-sm font-medium theme-rounded-lg theme-btn-primary"
+                            <button data-i18n id="clusterLinkOpen" type="button" class="px-3 py-2 text-sm font-medium theme-rounded-lg theme-btn-primary"
                                 aria-haspopup="dialog" aria-controls="clusterLinkDialog">连接 BootFS 节点</button>
                         </div>
                     </div>
-                    <p id="clusterSummary" role="status" aria-live="polite" class="text-sm mb-3" style="color: var(--color-text-secondary);">正在读取组网状态…</p>
+                    <p data-i18n id="clusterSummary" role="status" aria-live="polite" class="text-sm mb-3" style="color: var(--color-text-secondary);">正在读取组网状态…</p>
                     <p id="clusterRemoveFeedback" role="status" class="text-sm mb-3 break-words empty:hidden" style="color: var(--color-success);"></p>
-                    <p class="text-xs mb-3" style="color: var(--color-text-muted);">点击节点卡片，查看对应节点的系统资源、流量与请求。每 15 秒自动刷新。</p>
+                    <p data-i18n class="text-xs mb-3" style="color: var(--color-text-muted);">点击节点卡片，查看对应节点的系统资源、流量与请求。每 15 秒自动刷新。</p>
                     <div id="nodesGrid" class="flex flex-wrap gap-4">
-                        <p class="text-sm w-full" style="color: var(--color-text-muted);">加载中...</p>
+                        <p data-i18n class="text-sm w-full" style="color: var(--color-text-muted);">加载中...</p>
                     </div>
                 </section>
 
                 <section class="mb-5" aria-labelledby="selectedNodeTitle">
-                    <h2 id="selectedNodeTitle" class="text-sm font-semibold font-display mb-1"
+                    <h2 data-i18n id="selectedNodeTitle" class="text-sm font-semibold font-display mb-1"
                         style="color: var(--color-text-primary);">节点统计</h2>
-                    <p id="selectedNodeStatus" role="status" aria-live="polite" class="text-xs mb-3 break-words"
+                    <p data-i18n id="selectedNodeStatus" role="status" aria-live="polite" class="text-xs mb-3 break-words"
                         style="color: var(--color-text-muted);">请选择节点</p>
                     <p id="clusterCoordinatorStatus" hidden class="text-xs mb-3 break-words"
                         style="color: var(--color-text-secondary);"></p>
@@ -248,14 +252,14 @@
 
                 <!-- 所选节点流量与请求 -->
                 <section>
-                    <h2 class="text-xs font-semibold font-display uppercase tracking-wider mb-3"
+                    <h2 data-i18n class="text-xs font-semibold font-display uppercase tracking-wider mb-3"
                         style="color: var(--color-text-muted);">所选节点流量与请求</h2>
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
                         <!-- 左列：24h 图表 + 流量统计 堆叠 -->
                         <div class="lg:col-span-1 space-y-4">
                             <div class="theme-card theme-rounded-xl theme-shadow p-4">
                                 <div class="flex items-center justify-between mb-3">
-                                    <h3 class="text-sm font-semibold font-display"
+                                    <h3 data-i18n class="text-sm font-semibold font-display"
                                         style="color: var(--color-text-primary);">24 小时请求分析</h3>
                                     <svg class="w-4 h-4" style="color: var(--color-text-muted);" fill="none"
                                         stroke="currentColor" viewBox="0 0 24 24">
@@ -265,22 +269,22 @@
                                 </div>
                                 <div class="grid grid-cols-2 gap-2 mb-3">
                                     <div class="p-2 rounded-lg" style="background-color: var(--color-bg-tertiary);">
-                                        <p class="text-xs mb-0.5" style="color: var(--color-text-muted);">24h 请求数</p>
+                                        <p data-i18n class="text-xs mb-0.5" style="color: var(--color-text-muted);">24h 请求数</p>
                                         <p id="reqTotal24h" class="text-lg font-bold font-display"
                                             style="color: var(--color-accent-primary);">--</p>
                                     </div>
                                     <div class="p-2 rounded-lg" style="background-color: var(--color-bg-tertiary);">
-                                        <p class="text-xs mb-0.5" style="color: var(--color-text-muted);">24h 流量</p>
+                                        <p data-i18n class="text-xs mb-0.5" style="color: var(--color-text-muted);">24h 流量</p>
                                         <p id="reqBytes24h" class="text-lg font-bold font-display"
                                             style="color: var(--color-text-primary);">--</p>
                                     </div>
                                 </div>
                                 <div id="reqHourlyChart" class="flex items-end gap-0.5 h-24"></div>
-                                <p class="text-xs mt-1.5" style="color: var(--color-text-muted);">每小时请求次数（悬停查看明细）</p>
+                                <p data-i18n class="text-xs mt-1.5" style="color: var(--color-text-muted);">每小时请求次数（悬停查看明细）</p>
                             </div>
                             <div class="theme-card theme-rounded-xl theme-shadow p-4">
                                 <div class="flex items-center justify-between mb-3">
-                                    <h3 class="text-sm font-semibold font-display"
+                                    <h3 data-i18n class="text-sm font-semibold font-display"
                                         style="color: var(--color-text-primary);">流量统计</h3>
                                     <svg class="w-4 h-4" style="color: var(--color-text-muted);" fill="none"
                                         stroke="currentColor" viewBox="0 0 24 24">
@@ -291,8 +295,8 @@
                                 <div class="flex items-baseline gap-2 mb-3">
                                     <span id="trafficTotal" class="text-xl font-bold font-display"
                                         style="color: var(--color-accent-primary);">--</span>
-                                    <span class="text-xs" style="color: var(--color-text-muted);">总流出 · <span
-                                            id="trafficTotalReqs">--</span> 次</span>
+                                    <span class="text-xs" style="color: var(--color-text-muted);"><span data-i18n>总流出 ·</span> <span
+                                            id="trafficTotalReqs">--</span> <span data-i18n>次</span></span>
                                 </div>
                                 <div id="trafficCategoryList" class="space-y-2"></div>
                             </div>
@@ -300,7 +304,7 @@
                         <!-- 右列：宽幅请求表格 -->
                         <div id="recentRequestsCard" class="dashboard-recent-card theme-card theme-rounded-xl theme-shadow p-4 lg:col-span-2">
                             <div class="flex items-center justify-between mb-3 shrink-0">
-                                <h3 class="text-sm font-semibold font-display"
+                                <h3 data-i18n class="text-sm font-semibold font-display"
                                     style="color: var(--color-text-primary);">最近请求</h3>
                                 <svg class="w-4 h-4" style="color: var(--color-text-muted);" fill="none"
                                     stroke="currentColor" viewBox="0 0 24 24">
@@ -323,27 +327,27 @@
                                     </colgroup>
                                     <thead style="position: sticky; top: 0; z-index: 10;">
                                         <tr style="background-color: var(--color-bg-tertiary);">
-                                            <th class="px-2 py-1.5 text-left font-medium"
+                                            <th data-i18n class="px-2 py-1.5 text-left font-medium"
                                                 style="color: var(--color-text-secondary);">时间</th>
-                                            <th class="px-2 py-1.5 text-left font-medium"
+                                            <th data-i18n class="px-2 py-1.5 text-left font-medium"
                                                 style="color: var(--color-text-secondary);">方法</th>
-                                            <th class="px-2 py-1.5 text-left font-medium"
+                                            <th data-i18n class="px-2 py-1.5 text-left font-medium"
                                                 style="color: var(--color-text-secondary);">请求者 IP</th>
-                                            <th class="px-2 py-1.5 text-left font-medium"
+                                            <th data-i18n class="px-2 py-1.5 text-left font-medium"
                                                 style="color: var(--color-text-secondary);">路径</th>
-                                            <th class="px-2 py-1.5 text-left font-medium"
+                                            <th data-i18n class="px-2 py-1.5 text-left font-medium"
                                                 style="color: var(--color-text-secondary);">类别</th>
-                                            <th class="px-2 py-1.5 text-right font-medium"
+                                            <th data-i18n class="px-2 py-1.5 text-right font-medium"
                                                 style="color: var(--color-text-secondary);">状态</th>
-                                            <th class="px-2 py-1.5 text-right font-medium"
+                                            <th data-i18n class="px-2 py-1.5 text-right font-medium"
                                                 style="color: var(--color-text-secondary);">字节</th>
-                                            <th class="px-2 py-1.5 text-right font-medium"
+                                            <th data-i18n class="px-2 py-1.5 text-right font-medium"
                                                 style="color: var(--color-text-secondary);">耗时</th>
                                         </tr>
                                     </thead>
                                     <tbody id="recentReqBody">
                                         <tr>
-                                            <td colspan="8" class="px-2 py-6 text-center"
+                                            <td data-i18n colspan="8" class="px-2 py-6 text-center"
                                                 style="color: var(--color-text-muted);">加载中...</td>
                                         </tr>
                                     </tbody>
@@ -359,31 +363,31 @@
     <dialog id="clusterLinkDialog" aria-labelledby="clusterLinkTitle" class="theme-card theme-rounded-xl theme-shadow p-0 w-full max-w-md"
         style="color: var(--color-text-primary); background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
         <form id="clusterLinkForm" class="p-6 space-y-4">
-            <h2 id="clusterLinkTitle" class="text-lg font-semibold font-display">连接 BootFS 节点</h2>
-            <p class="text-sm" style="color: var(--color-text-secondary);">在另一台 BootFS 上生成验证码，然后输入它的地址和验证码即可连接。文件和元数据保留在各自节点，可随时退群继续独立使用。</p>
+            <h2 data-i18n id="clusterLinkTitle" class="text-lg font-semibold font-display">连接 BootFS 节点</h2>
+            <p data-i18n class="text-sm" style="color: var(--color-text-secondary);">在另一台 BootFS 上生成验证码，然后输入它的地址和验证码即可连接。文件和元数据保留在各自节点，可随时退群继续独立使用。</p>
             <div>
                 <label for="clusterLinkUrl" class="block text-sm font-medium mb-2">BootFS URL</label>
                 <input id="clusterLinkUrl" type="url" required placeholder="http://192.168.1.10:8181" autocomplete="url"
                     aria-describedby="clusterLinkHelp clusterLinkMessage" class="w-full px-3 py-2 theme-rounded-lg border"
                     style="background-color: var(--color-bg-primary); color: var(--color-text-primary); border-color: var(--color-border-primary);">
-                <p id="clusterLinkHelp" class="text-xs mt-2" style="color: var(--color-text-muted);">节点 HTTP 地址需互通，无需配置 Raft 端口。</p>
+                <p data-i18n id="clusterLinkHelp" class="text-xs mt-2" style="color: var(--color-text-muted);">节点 HTTP 地址需互通，无需配置 Raft 端口。</p>
             </div>
             <div>
-                <label for="clusterLinkCode" class="block text-sm font-medium mb-2">对方的验证码</label>
-                <input id="clusterLinkCode" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{8}" maxlength="8" required placeholder="8 位数字"
+                <label data-i18n for="clusterLinkCode" class="block text-sm font-medium mb-2">对方的验证码</label>
+                <input data-i18n-attrs="placeholder" id="clusterLinkCode" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{8}" maxlength="8" required placeholder="8 位数字"
                     class="w-full px-3 py-2 theme-rounded-lg border" style="background-color: var(--color-bg-primary); color: var(--color-text-primary); border-color: var(--color-border-primary);">
             </div>
             <div class="p-3 theme-rounded-lg" style="background-color: var(--color-bg-tertiary);">
                 <div class="flex items-center justify-between gap-3">
-                    <span class="text-sm">让其他节点连接本机</span>
-                    <button id="clusterPairingGenerate" type="button" disabled class="text-sm px-3 py-2 theme-rounded-lg theme-btn-secondary disabled:opacity-50">生成本机验证码</button>
+                    <span data-i18n class="text-sm">让其他节点连接本机</span>
+                    <button data-i18n id="clusterPairingGenerate" type="button" disabled class="text-sm px-3 py-2 theme-rounded-lg theme-btn-secondary disabled:opacity-50">生成本机验证码</button>
                 </div>
                 <p id="clusterPairingCode" role="status" aria-live="polite" class="text-sm mt-2" style="color: var(--color-text-secondary);"></p>
             </div>
             <p id="clusterLinkMessage" role="status" aria-live="polite" class="text-sm break-words" style="color: var(--color-text-secondary);"></p>
             <div class="flex justify-end gap-2 pt-2">
-                <button id="clusterLinkClose" type="button" class="px-4 py-2 text-sm theme-rounded-lg theme-btn-secondary">关闭</button>
-                <button id="clusterLinkSubmit" type="submit" disabled class="px-4 py-2 text-sm font-medium theme-rounded-lg theme-btn-primary disabled:opacity-50">连接</button>
+                <button data-i18n id="clusterLinkClose" type="button" class="px-4 py-2 text-sm theme-rounded-lg theme-btn-secondary">关闭</button>
+                <button data-i18n id="clusterLinkSubmit" type="submit" disabled class="px-4 py-2 text-sm font-medium theme-rounded-lg theme-btn-primary disabled:opacity-50">连接</button>
             </div>
         </form>
     </dialog>
@@ -391,14 +395,14 @@
         class="theme-card theme-rounded-xl theme-shadow p-0 w-full max-w-md"
         style="color: var(--color-text-primary); background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
         <div class="p-6 space-y-4">
-            <h2 id="clusterRemoveTitle" class="text-lg font-semibold font-display">从集群中移除节点</h2>
+            <h2 data-i18n id="clusterRemoveTitle" class="text-lg font-semibold font-display">从集群中移除节点</h2>
             <p id="clusterRemoveTarget" class="text-sm font-medium break-words"></p>
             <p id="clusterRemoveDescription" class="text-sm" style="color: var(--color-text-secondary);"></p>
-            <a id="clusterRemoveCoordinator" class="text-sm underline" style="color: var(--color-accent-primary);" hidden>打开调度节点的仪表盘</a>
+            <a data-i18n id="clusterRemoveCoordinator" class="text-sm underline" style="color: var(--color-accent-primary);" hidden>打开调度节点的仪表盘</a>
             <p id="clusterRemoveMessage" role="alert" class="text-sm break-words empty:hidden" style="color: var(--color-danger);"></p>
             <div class="flex justify-end gap-2 pt-2">
-                <button id="clusterRemoveCancel" type="button" autofocus class="theme-btn-secondary">取消</button>
-                <button id="clusterRemoveConfirm" type="button" class="theme-btn-danger">确认移除</button>
+                <button data-i18n id="clusterRemoveCancel" type="button" autofocus class="theme-btn-secondary">取消</button>
+                <button data-i18n id="clusterRemoveConfirm" type="button" class="theme-btn-danger">确认移除</button>
             </div>
         </div>
     </dialog>

@@ -4,7 +4,7 @@
 
 # BootFS
 
-**Self-hosted media management and storage, decentralized by design.**
+**Self-hosted media management and storage, decentralized by design.**(Support English since v1.0.3.1)
 
 Browse, organize and share your images, videos, audio and creative work. Run one node independently, or connect it to other BootFS nodes when you need to.
 

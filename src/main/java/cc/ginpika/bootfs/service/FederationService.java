@@ -53,13 +53,38 @@ public class FederationService {
     }
     @FunctionalInterface private interface Query { JSONObject run(String node,String url) throws IOException; }
     private Map<String,JSONObject> fanout(Query query) {
+        return fanout(peers(), query);
+    }
+    private Map<String,JSONObject> fanout(Map<String,String> endpoints, Query query) {
         Map<String,Future<JSONObject>> jobs=new TreeMap<>();
-        peers().forEach((node,url) -> { try { jobs.put(node,queries.submit(() -> query.run(node,url))); } catch(RejectedExecutionException saturated) { jobs.put(node,CompletableFuture.failedFuture(saturated)); } });
+        endpoints.forEach((node,url) -> { try { jobs.put(node,queries.submit(() -> query.run(node,url))); } catch(RejectedExecutionException saturated) { jobs.put(node,CompletableFuture.failedFuture(saturated)); } });
         Map<String,JSONObject> results=new TreeMap<>(); long deadline=System.nanoTime()+TimeUnit.MILLISECONDS.toNanos(2500);
         jobs.forEach((node,future) -> {
             try { results.put(node,future.get(Math.max(1,deadline-System.nanoTime()),TimeUnit.NANOSECONDS)); }
             catch(Exception unavailable) { future.cancel(true); }
         }); return results;
+    }
+
+    public record FolderListings(Map<String, JSONObject> pages, Set<String> unavailableNodes) {}
+
+    public FolderListings folderListings(String folder, boolean includeAll, long fileLimit) {
+        Map<String, String> endpoints = peers();
+        JSONObject request = new JSONObject(Map.of("folder", folder, "includeAll", includeAll, "fileLimit", fileLimit));
+        Map<String, JSONObject> pages = fanout(endpoints, (node, url) -> {
+            JSONObject page = call(url, "data/folders", request);
+            if (page == null || page.getJSONArray("folders") == null || page.getJSONArray("files") == null)
+                throw new IOException("Invalid peer folder listing");
+            for (Object raw : page.getJSONArray("files")) {
+                JSONObject file = (JSONObject) raw;
+                file.put("originNodeId", node);
+                file.put("originEndpoint", url);
+                file.put("url", url + "/f/" + file.getString("uuid"));
+            }
+            return page;
+        });
+        Set<String> unavailable = new TreeSet<>(endpoints.keySet());
+        unavailable.removeAll(pages.keySet());
+        return new FolderListings(pages, unavailable);
     }
     public JSONObject localSearch(JSONObject request) {
         String query=request.getString("query");

@@ -27,10 +27,17 @@ public class FolderService {
     @Autowired(required = false) private FederationService federation;
 
     public JSONObject describe(String folder, JSONObject source, boolean marker) {
+        return describe(folder, source, marker, true);
+    }
+
+    public JSONObject describe(String folder, JSONObject source, boolean marker, boolean persist) {
         JSONObject descriptor = initial(folder, source, marker, config.getBucket());
-        if (source.getString("originEndpoint") != null) return descriptor;
+        String key = folderKey(folder);
+        if (!persist) {
+            String raw = metadata.getOne(key);
+            return raw == null ? descriptor : JSONObject.parseObject(raw);
+        }
         synchronized (files) {
-            String key = folderKey(folder);
             String raw = metadata.getOne(key);
             if (raw != null) return JSONObject.parseObject(raw);
             // A list can still hold an older snapshot after a delete or rename completed.
@@ -75,20 +82,17 @@ public class FolderService {
         }
     }
 
-    /** Move files and folders into an existing directory. Root is the empty destination. */
-    public JSONObject move(String destination, List<String> filesToMove, List<String> foldersToMove) {
-        if (destination == null) destination = "";
+    public record FileMove(String objectKey, String uuid) {}
+
+    /** Apply one owner's batch under a path resolved by the requesting node. */
+    public JSONObject moveOwned(String destination, List<FileMove> filesToMove, List<String> foldersToMove) {
         if (!destination.isEmpty()) requireFolder(destination);
-        List<String> fileKeys = distinct(filesToMove);
+        List<FileMove> fileKeys = distinct(filesToMove);
         List<String> folderPaths = distinct(foldersToMove);
         if (fileKeys.isEmpty() && folderPaths.isEmpty()) throw badRequest("Nothing to move");
         if (fileKeys.size() + folderPaths.size() > 500) throw badRequest("Too many items");
         synchronized (files) {
-            if (!destination.isEmpty()) {
-                requireLocal(destination);
-                requireNoPendingPath(destination, true);
-                result(destination);
-            }
+            if (!destination.isEmpty()) requireNoPendingPath(destination, true);
             List<Move> plan = planMove(destination, fileKeys, folderPaths);
             JSONObject response = new JSONObject();
             response.put("destination", destination);
@@ -99,7 +103,7 @@ public class FolderService {
             Map<String, String> names = new HashMap<>();
             for (Move move : plan) {
                 if (move.directory) stageDirectoryRelocation(move.source, move.target, expected, puts, deletes, names);
-                else stageFileRelocation(move.source, move.target, expected, puts, deletes, names);
+                else stageFileRelocation(move.source, move.target, move.uuid, expected, puts, deletes, names);
             }
             if (!metadata.compareAndWrite(expected, puts, deletes)) throw conflict("The folder changed; refresh and retry");
             applyLocalNames(names);
@@ -107,7 +111,7 @@ public class FolderService {
         }
     }
 
-    private List<Move> planMove(String destination, List<String> fileKeys, List<String> folderPaths) {
+    private List<Move> planMove(String destination, List<FileMove> fileKeys, List<String> folderPaths) {
         List<Move> plan = new ArrayList<>();
         Set<String> reserved = new HashSet<>();
         for (String folder : folderPaths) {
@@ -128,10 +132,12 @@ public class FolderService {
             String bucket = bucketPrefix();
             String sibling = target.substring(0, target.length() - 1);
             if (metadata.getOne(bucket + sibling) != null) throw conflict("A file with this name already exists");
-            plan.add(new Move(folder, target, true));
+            plan.add(new Move(folder, target, true, null));
         }
-        for (String key : fileKeys) {
+        for (FileMove file : fileKeys) {
+            String key = file.objectKey();
             requireObjectKey(key);
+            if (file.uuid() != null && !file.uuid().matches("[A-Za-z0-9_-]+")) throw badRequest("Invalid resource identity");
             for (String folder : folderPaths) {
                 if (key.startsWith(folder)) throw badRequest("Choose a folder or its contents, not both");
             }
@@ -139,9 +145,12 @@ public class FolderService {
             String name = key.substring(key.lastIndexOf('/') + 1);
             String target = destination + name;
             requireObjectKey(target);
-            if (target.equals(key)) continue;
+            if (target.equals(key)) {
+                if (file.uuid() != null) fileSource(key, file.uuid());
+                continue;
+            }
             reserve(reserved, target);
-            plan.add(new Move(key, target, false));
+            plan.add(new Move(key, target, false, file.uuid()));
         }
         return plan;
     }
@@ -197,68 +206,96 @@ public class FolderService {
         });
     }
 
-    private void stageFileRelocation(String source, String target, Map<String, String> expected,
+    private record FileSource(String uuid, String binding, String document) {}
+
+    private FileSource fileSource(String source, String expectedUuid) {
+        String raw = metadata.getOne(bucketPrefix() + source);
+        if (raw != null) {
+            String uuid = JSONObject.parseObject(raw).getString("uuid");
+            if (uuid == null || (expectedUuid != null && !expectedUuid.equals(uuid)) || !isOwnedFile(uuid)) throw fileMissing();
+            return new FileSource(uuid, raw, metadata.getOne("/documents/full-text/" + uuid));
+        }
+        if (expectedUuid != null) {
+            String document = metadata.getOne("/documents/full-text/" + expectedUuid);
+            if (isOwnedFile(expectedUuid) && matchesUnboundSource(source, expectedUuid, document))
+                return new FileSource(expectedUuid, null, document);
+            throw fileMissing();
+        }
+        for (String document : metadata.scan("/documents/full-text/").values()) {
+            JSONObject row = JSONObject.parseObject(document);
+            String uuid = row.getString("uuid");
+            if (uuid != null && isOwnedFile(uuid) && matchesUnboundSource(source, uuid, document))
+                return new FileSource(uuid, null, document);
+        }
+        throw fileMissing();
+    }
+
+    private boolean isOwnedFile(String uuid) {
+        return uuid.matches("[A-Za-z0-9_-]+") && metadata.getOne("/tombstones/" + uuid) == null
+                && metadata.getOne("/nodes/" + context.uuid + "/catalog/" + uuid) != null;
+    }
+
+    private boolean matchesUnboundSource(String source, String uuid, String rawDocument) {
+        JSONObject document = rawDocument == null ? null : JSONObject.parseObject(rawDocument);
+        if (document != null && document.getBooleanValue("_bootfsDeleted")) return false;
+        FileObject file = context.STORAGE.get(uuid);
+        String name = document == null ? (file == null ? null : file.getFileName())
+                : documentName(document);
+        return source.equals(name) && metadata.scan(bucketPrefix()).values().stream()
+                .noneMatch(raw -> uuid.equals(JSONObject.parseObject(raw).getString("uuid")));
+    }
+
+    private void stageFileRelocation(String source, String target, String expectedUuid, Map<String, String> expected,
                                      Map<String, String> puts, Set<String> deletes, Map<String, String> names) {
         String bucket = bucketPrefix();
+        FileSource original = fileSource(source, expectedUuid);
         if (puts.containsKey(bucket + target) || metadata.getOne(bucket + target) != null)
             throw conflict("A file with this name already exists");
         if (!metadata.scan(bucket + target + "/").isEmpty() || !matchingDocuments(target + "/").isEmpty())
             throw conflict("A folder with this name already exists");
-        String raw = metadata.getOne(bucket + source);
-        String uuid = null;
+        if (matchingDocuments(target).values().stream().map(JSONObject::parseObject)
+                .anyMatch(document -> target.equals(documentName(document)))) throw conflict("A file with this name already exists");
+        String uuid = original.uuid(), raw = original.binding(), documentRaw = original.document();
+        expected.put("/tombstones/" + uuid, null);
+        String replicaKey = "/replica-sources/" + uuid, replica = metadata.getOne(replicaKey);
+        if (replica != null) {
+            JSONObject branch = JSONObject.parseObject(replica);
+            branch.put("forked", true);
+            expected.put(replicaKey, replica);
+            puts.put(replicaKey, branch.toJSONString());
+        }
+        names.put(uuid, target);
         if (raw != null) {
             JSONObject binding = JSONObject.parseObject(raw);
-            uuid = binding.getString("uuid");
-            if (uuid == null || uuid.isBlank() || metadata.getOne("/tombstones/" + uuid) != null) throw fileMissing();
             binding.put("key", target);
             expected.put(bucket + source, raw);
             expected.put(bucket + target, null);
             puts.put(bucket + target, binding.toJSONString());
             deletes.add(bucket + source);
-            names.put(uuid, target);
-        }
-        String documentKey = uuid == null ? null : "/documents/full-text/" + uuid;
-        String documentRaw = documentKey == null ? null : metadata.getOne(documentKey);
-        if (raw == null) {
-            for (Map.Entry<String, String> entry : metadata.scan("/documents/full-text/").entrySet()) {
-                JSONObject document = JSONObject.parseObject(entry.getValue());
-                if (document.getBooleanValue("_bootfsDeleted")) continue;
-                String name = document.getString("fileName");
-                if (name == null) name = document.getString("title");
-                if (!source.equals(name)) continue;
-                uuid = document.getString("uuid");
-                if (uuid != null && metadata.getOne("/tombstones/" + uuid) != null) continue;
-                documentKey = entry.getKey();
-                documentRaw = entry.getValue();
-                break;
-            }
-            if (documentRaw == null) throw fileMissing();
-            names.put(uuid, target);
         }
         if (documentRaw != null) {
+            String documentKey = "/documents/full-text/" + uuid;
             JSONObject document = JSONObject.parseObject(documentRaw);
-            if (document.getString("originEndpoint") != null) throw conflict("Manage this file on its source node");
-            String oldName = document.getString("fileName");
-            if (oldName == null) oldName = document.getString("title");
-            String newName = rewriteFileName(oldName, source, target);
+            if (document.getBooleanValue("_bootfsDeleted")) throw fileMissing();
+            String newName = rewriteFileName(documentName(document), source, target);
             document.put("fileName", newName);
             document.put("title", newName);
             expected.put(documentKey, documentRaw);
             puts.put(documentKey, document.toJSONString());
             names.put(uuid, newName);
         }
-        String movedId = uuid;
-        metadata.scan("/nodes/").forEach((key, rawCatalog) -> {
-            if (!key.contains("/catalog/") || movedId == null) return;
+        String key = "/nodes/" + context.uuid + "/catalog/" + uuid;
+        String rawCatalog = metadata.getOne(key);
+        if (rawCatalog != null) {
             JSONObject catalog = JSONObject.parseObject(rawCatalog);
-            if (!movedId.equals(catalog.getString("uuid"))) return;
             String oldName = catalog.getString("fileName");
-            String newName = rewriteFileName(oldName == null ? names.get(movedId) : oldName, source, target);
-            if (newName.equals(oldName)) return;
-            catalog.put("fileName", newName);
-            expected.put(key, rawCatalog);
-            puts.put(key, catalog.toJSONString());
-        });
+            String newName = rewriteFileName(oldName == null ? names.get(uuid) : oldName, source, target);
+            if (!newName.equals(oldName)) {
+                catalog.put("fileName", newName);
+                expected.put(key, rawCatalog);
+                puts.put(key, catalog.toJSONString());
+            }
+        }
     }
 
     /** A renamed display name without a slash stays visible; a stored path follows the file into the new folder. */
@@ -284,20 +321,13 @@ public class FolderService {
         if (!reserved.add(path) || reserved.contains(sibling)) throw conflict("Two items would have the same name");
     }
 
-    private static List<String> distinct(List<String> values) {
+    private static <T> List<T> distinct(List<T> values) {
         if (values == null || values.isEmpty()) return List.of();
-        if (values.contains(null)) throw badRequest("Invalid move");
+        if (values.stream().anyMatch(Objects::isNull)) throw badRequest("Invalid move");
         return new ArrayList<>(new LinkedHashSet<>(values));
     }
 
-    private static final class Move {
-        final String source;
-        final String target;
-        final boolean directory;
-        Move(String source, String target, boolean directory) {
-            this.source = source; this.target = target; this.directory = directory;
-        }
-    }
+    private record Move(String source, String target, boolean directory, String uuid) {}
 
     public JSONObject delete(String folder) {
         requireFolder(folder);
@@ -410,11 +440,14 @@ public class FolderService {
         Map<String, String> result = new LinkedHashMap<>();
         metadata.scan("/documents/full-text/").forEach((key, raw) -> {
             JSONObject doc = JSONObject.parseObject(raw);
-            String name = doc.getString("fileName"); if (name == null) name = doc.getString("title");
+            String name = documentName(doc);
             if (name != null && name.startsWith(folder) && !doc.getBooleanValue("_bootfsDeleted")
                     && metadata.getOne("/tombstones/" + doc.getString("uuid")) == null) result.put(key, raw);
         });
         return result;
+    }
+    private static String documentName(JSONObject document) {
+        return Objects.toString(document.getString("fileName"), document.getString("title"));
     }
     private void requireLocal(String folder) {
         if (federation == null || federation.peers().isEmpty()) return;

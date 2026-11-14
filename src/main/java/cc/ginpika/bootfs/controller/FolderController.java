@@ -2,8 +2,11 @@ package cc.ginpika.bootfs.controller;
 
 import cc.ginpika.bootfs.core.Context;
 import cc.ginpika.bootfs.domain.dto.Tag;
+import cc.ginpika.bootfs.kernel.cluster.ClusterHttp;
+import cc.ginpika.bootfs.kernel.metadata.MetadataException;
 import cc.ginpika.bootfs.s3.S3Config;
 import cc.ginpika.bootfs.s3.S3ConcurrentWriteException;
+import cc.ginpika.bootfs.service.FederationService;
 import cc.ginpika.bootfs.service.FileService;
 import cc.ginpika.bootfs.service.FolderService;
 import cc.ginpika.bootfs.service.etcd.EtcdService;
@@ -11,6 +14,7 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -21,6 +25,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.function.Supplier;
 
 /** The browser and S3 share the same logical paths; slashes are never local disk paths. */
 @RestController
@@ -30,19 +35,64 @@ public class FolderController {
     private final FileService fileService;
     private final EtcdService etcdService;
     private final S3Config s3Config;
-    @Autowired(required = false) private cc.ginpika.bootfs.service.FederationService federation;
+    @Autowired(required = false) private FederationService federation;
     @Autowired(required = false) private FolderService folderService;
+
+    private static final Comparator<JSONObject> FILE_ORDER =
+            Comparator.<JSONObject, Long>comparing(row -> row.getLong("createdAt"), Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(row -> row.getString("fileName"), Comparator.nullsLast(Comparator.naturalOrder()))
+                    .thenComparing(row -> row.getString("uuid"))
+                    .thenComparing(row -> row.getString("objectKey"));
 
     @GetMapping("/api/folders")
     public JSONObject list(@RequestParam(defaultValue = "") String folder,
                            @RequestParam(defaultValue = "0") int pageNumber,
                            @RequestParam(defaultValue = "10") int pageSize,
                            @RequestParam(defaultValue = "") String search) {
-        validateFolder(folder);
         if (pageNumber < 0 || pageSize < 1 || pageSize > 1000) throw badRequest("Invalid pagination");
         String directives = search.toLowerCase(Locale.ROOT);
         boolean includeAll = directives.contains("meta:all");
         boolean local = directives.contains("meta:local");
+        long fileLimit = (long) pageNumber + pageSize;
+        JSONObject listing = listLocal(folder, includeAll, local, fileLimit, true);
+        TreeMap<String, JSONObject> folders = new TreeMap<>();
+        for (Object raw : listing.getJSONArray("folders")) {
+            JSONObject row = (JSONObject) raw;
+            folders.put(row.getString("folderPath"), row);
+        }
+        List<JSONObject> files = new ArrayList<>(listing.getJSONArray("files").toJavaList(JSONObject.class));
+        long fileCount = listing.getLongValue("fileCount");
+        Set<String> unavailable = Set.of();
+        if (!local && federation != null) {
+            FederationService.FolderListings remote = federation.folderListings(folder, includeAll, fileLimit);
+            unavailable = remote.unavailableNodes();
+            for (JSONObject page : remote.pages().values()) {
+                for (Object raw : page.getJSONArray("folders")) {
+                    JSONObject row = (JSONObject) raw;
+                    row.put("managed", false);
+                    folders.merge(row.getString("folderPath"), row, (existing, peer) -> {
+                        existing.put("managed", false);
+                        return existing;
+                    });
+                }
+                files.addAll(page.getJSONArray("files").toJavaList(JSONObject.class));
+                fileCount += page.getLongValue("fileCount");
+            }
+        }
+        files.sort(FILE_ORDER.thenComparing(row -> Objects.toString(row.getString("originNodeId"), context.uuid)));
+        List<JSONObject> entries = new ArrayList<>(folders.values());
+        entries.addAll(files);
+        JSONObject result = new JSONObject();
+        result.put("folder", folder); result.put("pageNumber", pageNumber); result.put("pageSize", pageSize);
+        result.put("total", fileCount + folders.size());
+        result.put("partial", !unavailable.isEmpty()); result.put("unavailableNodes", unavailable);
+        result.put("rows", entries.stream().skip(pageNumber).limit(pageSize).toList());
+        return result;
+    }
+
+    private JSONObject listLocal(String folder, boolean includeAll, boolean local, long fileLimit, boolean persistDescriptors) {
+        validateFolder(folder);
+        if (fileLimit < 0 || fileLimit > (long) Integer.MAX_VALUE + 1000) throw badRequest("Invalid pagination");
         Set<String> localResourceIds = etcdService.localResourceIds();
         Map<String, JSONObject> resources = new LinkedHashMap<>();
         Set<String> archived = new HashSet<>();
@@ -52,6 +102,8 @@ public class FolderController {
             if (uuid == null || (localResourceIds != null && !localResourceIds.contains(uuid))) return;
             if (document.getBooleanValue("_bootfsDeleted")) { archived.add(uuid); return; }
             JSONObject row = new JSONObject(document);
+            row.remove("originNodeId");
+            row.remove("originEndpoint");
             row.put("fileName", document.getString("fileName") == null ? document.getString("title") : document.getString("fileName"));
             row.put("createdAt", document.getLong("fileCreatedAt"));
             JSONArray tags = document.getJSONArray("tags");
@@ -86,55 +138,23 @@ public class FolderController {
         Set<String> bound = new HashSet<>(bindings.values());
         TreeMap<String, JSONObject> folders = new TreeMap<>();
         List<JSONObject> files = new ArrayList<>();
-        bindings.forEach((key, uuid) -> addEntry(folder, key, resources.get(uuid), includeAll, local, deleted, folders, files));
+        bindings.forEach((key, uuid) -> addEntry(folder, key, resources.get(uuid), includeAll, local, persistDescriptors, deleted, folders, files));
         // Catalog-only resources and derived objects retain their existing root visibility rules.
         resources.forEach((uuid, resource) -> {
             if (!bound.contains(uuid)) addEntry(folder, resource.getString("fileName"), resource,
-                    includeAll, local, deleted, folders, files);
+                    includeAll, local, persistDescriptors, deleted, folders, files);
         });
-        List<JSONObject> entries = new ArrayList<>(folders.values());
-        Set<String> unavailable = new TreeSet<>();
-        if (!local && federation != null && !federation.peers().isEmpty()) {
-            Set<String> seen = new HashSet<>();
-            for (int offset = 0; ; offset += 1000) {
-                JSONObject page = federation.search("", List.of(), offset, 1000, includeAll);
-                JSONArray missing = page.getJSONArray("unavailableNodes");
-                if (missing != null) unavailable.addAll(missing.toJavaList(String.class));
-                JSONArray hits = page.getJSONArray("hits");
-                if (hits == null || hits.isEmpty()) break;
-                for (Object hit : hits) {
-                    JSONObject resource = JSONObject.from(hit);
-                    String endpoint = resource.getString("originEndpoint");
-                    String uuid = resource.getString("uuid");
-                    if (endpoint == null || uuid == null || resource.getBooleanValue("_bootfsDeleted")
-                            || !seen.add(endpoint + "/" + uuid)) continue;
-                    String key = resource.getString("fileName");
-                    if (key == null) key = resource.getString("title");
-                    resource.put("fileName", key);
-                    resource.put("createdAt", resource.getLong("fileCreatedAt"));
-                    resource.put("url", endpoint + "/f/" + uuid);
-                    JSONArray tags = resource.getJSONArray("tags");
-                    if (tags != null) resource.put("tags", tags.stream().map(tag -> tag instanceof String ? Tag.fromIndexFormat((String)tag) : tag).toList());
-                    addEntry(folder, key, resource, includeAll, false, Collections.emptySet(), folders, files);
-                }
-                if (offset + hits.size() >= page.getIntValue("total")) break;
-            }
-            // Remote paths may introduce folders before local file pagination.
-            entries = new ArrayList<>(folders.values());
-        }
-        files.sort(Comparator.<JSONObject, Long>comparing(row -> row.getLong("createdAt"), Comparator.nullsLast(Comparator.reverseOrder()))
-                .thenComparing(row -> row.getString("fileName"), Comparator.nullsLast(Comparator.naturalOrder()))
-                .thenComparing(row -> row.getString("uuid")));
-        entries.addAll(files);
-        JSONObject result = new JSONObject();
-        result.put("folder", folder); result.put("pageNumber", pageNumber); result.put("pageSize", pageSize);
-        result.put("total", entries.size());
-        result.put("partial", !unavailable.isEmpty()); result.put("unavailableNodes", unavailable);
-        result.put("rows", entries.stream().skip(pageNumber).limit(pageSize).toList());
-        return result;
+        files.sort(FILE_ORDER);
+        return new JSONObject(Map.of("folders", new JSONArray(new ArrayList<>(folders.values())),
+                "files", new JSONArray(files.stream().limit(fileLimit).toList()), "fileCount", files.size()));
     }
 
-    private void addEntry(String folder, String key, JSONObject resource, boolean includeAll, boolean local,
+    @PostMapping("/api/cluster/data/folders")
+    public JSONObject peerListing(@RequestBody JSONObject body) {
+        return listLocal(body.getString("folder"), body.getBooleanValue("includeAll"), false, body.getLongValue("fileLimit"), false);
+    }
+
+    private void addEntry(String folder, String key, JSONObject resource, boolean includeAll, boolean local, boolean persistDescriptors,
                           Set<String> deleted, Map<String, JSONObject> folders, List<JSONObject> files) {
         if (key == null || resource == null || !key.startsWith(folder)) return;
         String uuid = resource.getString("uuid");
@@ -148,21 +168,19 @@ public class FolderController {
             String path = folder + relative.substring(0, slash + 1);
             JSONObject row = folders.computeIfAbsent(path, ignored -> {
                 JSONObject descriptor = folderService == null ? FolderService.initial(path, resource, key.equals(path), s3Config.getBucket())
-                        : folderService.describe(path, resource, key.equals(path));
+                        : folderService.describe(path, resource, key.equals(path), persistDescriptors);
                 descriptor.put("folder", true); descriptor.put("folderPath", path);
                 descriptor.put("fileName", relative.substring(0, slash)); descriptor.put("size", 0);
                 descriptor.put("managed", true);
                 return descriptor;
             });
-            if (resource.getString("originEndpoint") != null) {
-                row.put("managed", false); row.put("originEndpoint", resource.getString("originEndpoint"));
-            }
         } else {
             JSONObject row = new JSONObject(resource);
             String displayName = resource.getString("fileName");
             if (displayName == null || displayName.endsWith("/")) displayName = relative;
             else displayName = displayName.substring(displayName.lastIndexOf('/') + 1);
             row.put("fileName", displayName); row.put("objectKey", key); row.remove("path");
+            row.put("url", context.buildUrl(uuid));
             files.add(row);
         }
     }
@@ -205,14 +223,129 @@ public class FolderController {
     }
 
     @PostMapping("/api/folders/move")
-    public JSONObject move(@RequestBody JSONObject body) {
+    public ResponseEntity<JSONObject> move(@RequestBody JSONObject body) {
+        return moveResponse(() -> moveSelection(body));
+    }
+
+    private JSONObject moveSelection(JSONObject body) {
         if (body == null) throw badRequest("Nothing to move");
-        String destination = body.getString("destination");
+        String destination = Objects.toString(body.getString("destination"), "");
+        JSONArray folderPaths = body.getJSONArray("folders");
+        List<String> folders = folderPaths == null ? List.of() : folderPaths.toJavaList(String.class);
         JSONArray files = body.getJSONArray("files");
-        JSONArray folders = body.getJSONArray("folders");
-        return folderService.move(destination == null ? "" : destination,
-                files == null ? List.of() : files.toJavaList(String.class),
-                folders == null ? List.of() : folders.toJavaList(String.class));
+        if ((long) folders.size() + (files == null ? 0 : files.size()) > 500)
+            throw badRequest("Too many items");
+        folders.forEach(FolderService::requireFolder);
+        Map<String, List<FolderService.FileMove>> filesByNode = new LinkedHashMap<>();
+        if (files != null) for (Object raw : files) {
+            if (raw instanceof String key) {
+                FolderService.requireObjectKey(key);
+                filesByNode.computeIfAbsent(context.uuid, ignored -> new ArrayList<>()).add(new FolderService.FileMove(key, null));
+            } else if (raw instanceof Map<?, ?>) {
+                JSONObject file = JSONObject.from(raw);
+                FolderService.FileMove source = readFileMove(file);
+                String node = Objects.toString(file.getString("originNodeId"), context.uuid);
+                filesByNode.computeIfAbsent(node, ignored -> new ArrayList<>()).add(source);
+            } else throw badRequest("Invalid move");
+        }
+        if (!folders.isEmpty()) filesByNode.putIfAbsent(context.uuid, List.of());
+        if (filesByNode.isEmpty()) throw badRequest("Nothing to move");
+        Map<String, String> peers = federation == null ? Map.of() : federation.peers();
+        for (String node : filesByNode.keySet()) {
+            if (!context.uuid.equals(node) && !peers.containsKey(node))
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "The file owner is no longer reachable");
+        }
+        if (!destination.isEmpty()) requireDestination(destination);
+
+        int moved = 0, completed = 0;
+        JSONArray failures = new JSONArray();
+        ResponseStatusException firstFailure = null;
+        for (var batch : filesByNode.entrySet()) {
+            String node = batch.getKey();
+            try {
+                JSONObject result = context.uuid.equals(node)
+                        ? folderService.moveOwned(destination, batch.getValue(), folders)
+                        : moveAtPeer(peers.get(node), destination, batch.getValue());
+                moved += result.getIntValue("moved");
+                completed++;
+            } catch (ResponseStatusException | MetadataException error) {
+                ResponseStatusException failure = error instanceof ResponseStatusException status ? status
+                        : new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Authoritative metadata is unavailable");
+                if (firstFailure == null) firstFailure = failure;
+                failures.add(new JSONObject(Map.of("nodeId", node, "status", failure.getRawStatusCode())));
+            }
+        }
+        if (completed == 0 && firstFailure != null) throw firstFailure;
+        return new JSONObject(Map.of("destination", destination, "moved", moved, "failures", failures));
+    }
+
+    private void requireDestination(String destination) {
+        FolderService.requireFolder(destination);
+        int slash = destination.lastIndexOf('/', destination.length() - 2);
+        String parent = destination.substring(0, slash + 1);
+        if (containsFolder(listLocal(parent, true, false, 0, false), destination)) return;
+        if (federation != null) {
+            FederationService.FolderListings remote = federation.folderListings(parent, true, 0);
+            if (remote.pages().values().stream().anyMatch(page -> containsFolder(page, destination))) return;
+            if (!remote.unavailableNodes().isEmpty())
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Some folder owners are unavailable");
+        }
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Folder does not exist");
+    }
+
+    private boolean containsFolder(JSONObject listing, String folder) {
+        return listing.getJSONArray("folders").stream()
+                .anyMatch(raw -> folder.equals(((JSONObject) raw).getString("folderPath")));
+    }
+
+    private JSONObject moveAtPeer(String endpoint, String destination, List<FolderService.FileMove> sources) {
+        JSONObject request = new JSONObject(Map.of("destination", destination, "files",
+                sources.stream().map(file -> Map.of("objectKey", file.objectKey(), "uuid", file.uuid())).toList()));
+        try {
+            JSONObject response = federation.call(endpoint, "data/folders/move", request);
+            if (response == null || !response.containsKey("moved")) throw new IOException("Invalid peer move response");
+            return response;
+        } catch (ClusterHttp.HttpFailure failure) {
+            if (failure.status == 400 || failure.status == 404 || failure.status == 409) {
+                HttpStatus status = HttpStatus.valueOf(failure.status);
+                throw new ResponseStatusException(status, failure.getMessage());
+            }
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "The file owner is unavailable");
+        } catch (IOException failure) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "The file owner is unavailable");
+        }
+    }
+
+    @PostMapping("/api/cluster/data/folders/move")
+    public ResponseEntity<JSONObject> peerMove(@RequestBody JSONObject body) {
+        return moveResponse(() -> movePeerSelection(body));
+    }
+
+    private JSONObject movePeerSelection(JSONObject body) {
+        JSONArray files = body.getJSONArray("files");
+        if (files == null || files.isEmpty() || files.size() > 500) throw badRequest("Invalid move selection");
+        List<FolderService.FileMove> sources = new ArrayList<>();
+        for (Object raw : files) {
+            if (!(raw instanceof Map<?, ?>)) throw badRequest("Invalid move");
+            sources.add(readFileMove(JSONObject.from(raw)));
+        }
+        return folderService.moveOwned(Objects.toString(body.getString("destination"), ""), sources, List.of());
+    }
+
+    private static ResponseEntity<JSONObject> moveResponse(Supplier<JSONObject> action) {
+        try {
+            return ResponseEntity.ok(action.get());
+        } catch (ResponseStatusException failure) {
+            return ResponseEntity.status(failure.getRawStatusCode()).body(new JSONObject(Map.of("error",
+                    Objects.toString(failure.getReason(), "Move failed"))));
+        }
+    }
+
+    private static FolderService.FileMove readFileMove(JSONObject file) {
+        String key = file.getString("objectKey"), uuid = file.getString("uuid");
+        FolderService.requireObjectKey(key);
+        if (uuid == null || !uuid.matches("[A-Za-z0-9_-]+")) throw badRequest("Invalid resource identity");
+        return new FolderService.FileMove(key, uuid);
     }
 
     @DeleteMapping("/api/folders")

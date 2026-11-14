@@ -190,11 +190,15 @@ class FolderControllerTest {
     @Test void independentNodeResourcesRemainVisibleInFoldersAndReportUnavailableNodes() {
         FederationService federation = mock(FederationService.class);
         ReflectionTestUtils.setField(controller, "federation", federation);
-        when(federation.peers()).thenReturn(Map.of("remote", "https://remote.example"));
-        JSONObject hit = new JSONObject(Map.of("uuid", "remote-file", "fileName", "共享/file.txt",
-                "originEndpoint", "https://remote.example", "originNodeId", "remote", "fileCreatedAt", 20));
-        when(federation.search("", List.of(), 0, 1000, false)).thenReturn(new JSONObject(Map.of(
-                "hits", new JSONArray(List.of(hit)), "total", 1, "partial", true, "unavailableNodes", List.of("offline"))));
+        JSONObject folder = new JSONObject(Map.of("folder", true, "folderPath", "共享/", "fileName", "共享"));
+        JSONObject fileRow = new JSONObject(Map.of("uuid", "remote-file", "fileName", "file.txt", "objectKey", "共享/file.txt",
+                "originEndpoint", "https://remote.example", "originNodeId", "remote", "url", "https://remote.example/f/remote-file"));
+        when(federation.folderListings("", false, 10)).thenReturn(new FederationService.FolderListings(
+                Map.of("remote", new JSONObject(Map.of("folders", new JSONArray(List.of(folder)), "files", new JSONArray(), "fileCount", 0))),
+                Set.of("offline")));
+        when(federation.folderListings("共享/", false, 10)).thenReturn(new FederationService.FolderListings(
+                Map.of("remote", new JSONObject(Map.of("folders", new JSONArray(), "files", new JSONArray(List.of(fileRow)), "fileCount", 1))),
+                Set.of("offline")));
         JSONObject root = controller.list("", 0, 10, "");
         assertEquals("共享", root.getJSONArray("rows").getJSONObject(0).getString("fileName"));
         assertTrue(root.getBooleanValue("partial"));

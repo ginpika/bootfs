@@ -88,6 +88,19 @@ class DynamicClusterTest {
     void flush() throws Exception { for(int i=0;i<3;i++) for(Node n:nodes) n.store.advance(); }
     @AfterEach void close() throws Exception { for(Node node:nodes) node.close(); }
 
+    @Test void generatedNodeIdentityUsesTheOriginalFormatAndExistingIdentityIsReadAsStored() throws Exception {
+        TfsConfig config = new TfsConfig();
+        config.setRootPath(root.resolve("generated").toString());
+        String generated = new NodeIdentity(config).id();
+        assertTrue(generated.matches("[A-Za-z0-9]{16}"));
+        assertEquals(generated, new NodeIdentity(config).id());
+
+        config.setRootPath(Files.createDirectory(root.resolve("existing")).toString());
+        String existing = UUID.randomUUID().toString();
+        Files.writeString(Path.of(config.getRootPath(), "uuid"), existing);
+        assertEquals(existing, new NodeIdentity(config).id());
+    }
+
     @Test @Timeout(30) void fullLifetimeStandaloneClusterAStandaloneClusterBPreservesLocalAuthority() throws Exception {
         Node a=new Node("a"), x=new Node("x"), b=new Node("b"); x.resource("mine","private original"); a.resource("a-only","alpha"); b.resource("b-only","beta");
         Map<String,String> original=new TreeMap<>(x.store.scan("")); String owner=x.store.nodeId(); String initial=x.store.status().getString("groupId");

@@ -57,6 +57,7 @@ let totalPages = 1;
 let pageSize = 10;
 let selectedFiles = new Set();
 let selectedFolders = new Set();
+const selectedIconFiles = new Map();
 let currentView = localStorage.getItem('tfs-view') || 'list'; // 'list', 'grid' (waterfall) or 'icons'
 if (currentView !== 'grid' && currentView !== 'icons') currentView = 'list';
 let showAllFiles = localStorage.getItem('tfs-show-all') === 'true';
@@ -368,7 +369,7 @@ function initializeEventListeners() {
                 selectAllIcons();
             }
         }
-        if (e.key === 'Delete' && (selectedFiles.size > 0 || selectedFolders.size > 0)) {
+        if (e.key === 'Delete' && selectionCount() > 0) {
             e.preventDefault();
             showDeleteConfirm();
         }
@@ -1509,7 +1510,7 @@ function toggleFileSelection(uuid, selected) {
 
 // Update selected toolbar
 function selectionCount() {
-    return selectedFiles.size + selectedFolders.size;
+    return (currentView === 'icons' ? selectedIconFiles.size : selectedFiles.size) + selectedFolders.size;
 }
 
 function updateSelectedToolbar() {
@@ -1546,6 +1547,7 @@ function updateSelectedToolbar() {
 function clearSelection() {
     selectedFiles.clear();
     selectedFolders.clear();
+    selectedIconFiles.clear();
     
     // 清除列表视图的选中状态
     const listContainer = document.getElementById('fileListTableBody');
@@ -4299,12 +4301,12 @@ function createIconItem(file) {
     const folder = !!file.folder;
     item.className = 'icon-item';
     item.dataset.kind = folder ? 'folder' : 'file';
-    item.dataset.key = folder ? 'folder:' + file.folderPath : 'file:' + (file.uuid || file.objectKey || file.fileName);
+    item.dataset.key = folder ? 'folder:' + file.folderPath
+        : JSON.stringify(['file', file.originNodeId, file.uuid, file.objectKey || file.fileName]);
     if (folder) item.dataset.folderPath = file.folderPath || '';
     else item.dataset.objectKey = file.objectKey || '';
     if (file.uuid) item.dataset.uuid = file.uuid;
-    const movable = folder ? file.managed !== false : !file.originEndpoint && !!file.objectKey;
-    item.dataset.managed = movable ? 'true' : 'false';
+    item.dataset.movable = (folder ? file.managed !== false : !!(file.objectKey && file.uuid)) ? 'true' : 'false';
     item.dataset.tags = (file.tags || []).map(tag => {
         return tag.namespace && tag.namespace !== 'manual' ? `${tag.namespace}:${tag.name}` : tag.name;
     }).join('\n');
@@ -4376,18 +4378,25 @@ function iconItems() {
 function addIconToSelection(item) {
     if (!item) return;
     if (item.dataset.kind === 'folder') selectedFolders.add(item.dataset.folderPath);
-    else if (item.dataset.uuid) selectedFiles.add(item.dataset.uuid);
+    else if (item.dataset.uuid) {
+        selectedIconFiles.set(item.dataset.key, item.dataset.uuid);
+        selectedFiles.add(item.dataset.uuid);
+    }
 }
 
 function removeIconFromSelection(item) {
     if (!item) return;
     if (item.dataset.kind === 'folder') selectedFolders.delete(item.dataset.folderPath);
-    else selectedFiles.delete(item.dataset.uuid);
+    else {
+        selectedIconFiles.delete(item.dataset.key);
+        if (![...selectedIconFiles.values()].includes(item.dataset.uuid)) selectedFiles.delete(item.dataset.uuid);
+    }
 }
 
 function selectOnlyIcon(item) {
     selectedFiles.clear();
     selectedFolders.clear();
+    selectedIconFiles.clear();
     addIconToSelection(item);
     iconAnchorKey = item.dataset.key;
     updateSelectedToolbar();
@@ -4410,6 +4419,7 @@ function selectIconRange(item) {
     const end = Math.max(anchor, current);
     selectedFiles.clear();
     selectedFolders.clear();
+    selectedIconFiles.clear();
     for (let index = start; index <= end; index++) addIconToSelection(items[index]);
     updateSelectedToolbar();
 }
@@ -4417,6 +4427,7 @@ function selectIconRange(item) {
 function selectAllIcons() {
     selectedFiles.clear();
     selectedFolders.clear();
+    selectedIconFiles.clear();
     iconItems().forEach(addIconToSelection);
     updateSelectedToolbar();
 }
@@ -4425,7 +4436,7 @@ function syncIconSelection() {
     iconItems().forEach(item => {
         const selected = item.dataset.kind === 'folder'
             ? selectedFolders.has(item.dataset.folderPath)
-            : selectedFiles.has(item.dataset.uuid);
+            : selectedIconFiles.has(item.dataset.key);
         item.classList.toggle('selected', selected);
         item.setAttribute('aria-pressed', String(selected));
     });
@@ -4464,7 +4475,7 @@ function onIconPointerDown(event) {
             x: event.clientX,
             y: event.clientY,
             additive: event.metaKey || event.ctrlKey,
-            baseFiles: new Set(selectedFiles),
+            baseFiles: new Map(selectedIconFiles),
             baseFolders: new Set(selectedFolders)
         };
     }
@@ -4504,8 +4515,7 @@ function onIconPointerUp(event) {
     clearIconDragVisuals();
     if (event.type === 'pointercancel') return;
     if (state.mode === 'drag') {
-        if (target && canDropInto(target.destination, target.managed)) moveSelectionTo(target.destination);
-        else if (target && !target.managed) showToast('请在来源节点移动这些项目', 'warning');
+        if (target && canDropInto(target.destination)) moveSelectionTo(target.destination);
         return;
     }
     if (!state.moved && state.mode === 'maybe-marquee' && !state.additive) clearSelection();
@@ -4545,8 +4555,12 @@ function placeIconMarquee(x1, y1, x2, y2) {
 function applyMarqueeSelection(rect, state) {
     selectedFiles.clear();
     selectedFolders.clear();
+    selectedIconFiles.clear();
     if (state.additive) {
-        state.baseFiles.forEach(uuid => selectedFiles.add(uuid));
+        state.baseFiles.forEach((uuid, key) => {
+            selectedFiles.add(uuid);
+            selectedIconFiles.set(key, uuid);
+        });
         state.baseFolders.forEach(path => selectedFolders.add(path));
     }
     iconItems().forEach(item => {
@@ -4571,7 +4585,7 @@ function updateIconDrag(x, y) {
     badge.style.top = (y + 16) + 'px';
     document.querySelectorAll('.drop-target').forEach(element => element.classList.remove('drop-target'));
     const target = dropTargetAt(x, y);
-    if (target && canDropInto(target.destination, target.managed)) target.element.classList.add('drop-target');
+    if (target && canDropInto(target.destination)) target.element.classList.add('drop-target');
 }
 
 function dropTargetAt(x, y) {
@@ -4580,16 +4594,16 @@ function dropTargetAt(x, y) {
         if (!element || !element.closest) continue;
         const item = element.closest('.icon-cell')?.firstElementChild;
         if (item && item.dataset.kind === 'folder' && !item.classList.contains('is-dragging')) {
-            return {destination: item.dataset.folderPath || '', element: item, managed: item.dataset.managed !== 'false'};
+            return {destination: item.dataset.folderPath || '', element: item};
         }
         const crumb = element.closest('#folderBreadcrumbs button');
-        if (crumb) return {destination: crumb.dataset.folderPath || '', element: crumb, managed: true};
+        if (crumb) return {destination: crumb.dataset.folderPath || '', element: crumb};
     }
     return null;
 }
 
-function canDropInto(destination, managed) {
-    if (!managed || selectionCount() === 0) return false;
+function canDropInto(destination) {
+    if (selectionCount() === 0) return false;
     if (destination === currentFolder) return false;
     for (const path of selectedFolders) {
         if (destination === path || destination.startsWith(path)) return false;
@@ -4609,10 +4623,17 @@ async function moveSelectionTo(destination) {
     if (iconMoveLock) return;
     const files = [];
     const folders = [];
-    iconItems().forEach(item => {
-        if (!item.classList.contains('selected') || item.dataset.managed === 'false') return;
+    const selection = iconItems().filter(item => item.classList.contains('selected'));
+    if (selection.some(item => item.dataset.movable === 'false')) {
+        showToast('选中项目中有无法移动的文件或文件夹', 'warning');
+        return;
+    }
+    selection.forEach(item => {
         if (item.dataset.kind === 'folder') folders.push(item.dataset.folderPath);
-        else if (item.dataset.objectKey) files.push(item.dataset.objectKey);
+        else {
+            const file = iconRecords.get(item.dataset.key);
+            files.push({objectKey: file.objectKey, uuid: file.uuid, originNodeId: file.originNodeId});
+        }
     });
     if (files.length + folders.length === 0) {
         showToast('这些项目不能移动', 'warning');
@@ -4631,7 +4652,8 @@ async function moveSelectionTo(destination) {
         }
         const result = await response.json().catch(() => ({}));
         clearSelection();
-        showToast(result.moved > 0 ? `已移动 ${result.moved} 项` : '已在此文件夹中', result.moved > 0 ? 'success' : 'info');
+        if (result.failures?.length) showToast(`已移动 ${result.moved} 项，${result.failures.length} 个节点的移动未确认`, 'warning');
+        else showToast(result.moved > 0 ? `已移动 ${result.moved} 项` : '已在此文件夹中', result.moved > 0 ? 'success' : 'info');
         loadFileList();
     } catch (error) {
         console.error('Move error:', error);
@@ -4653,5 +4675,6 @@ async function moveErrorMessage(response) {
     }
     if (response.status === 404) return '要移动的文件或文件夹已经不存在';
     if (response.status === 400) return '不能移动这些项目';
+    if (response.status === 503) return '部分节点不可达，请刷新目录确认移动结果';
     return '移动失败';
 }

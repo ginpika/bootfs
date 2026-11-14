@@ -37,3 +37,40 @@ test('media URL interpolation rejects executable schemes and escapes attribute d
     const html = app.createWaterfallCard({uuid: 'safe', fileName: 'album.zip', albumAvailable: '1', thumbUrl: 'javascript:alert(1)', tags: []});
     assert.ok(!html.includes('javascript:'));
 });
+
+test('dragging a file sends its object key and owner without selecting other aliases', async () => {
+    const app = ui();
+    const file = {uuid: 'same-id', objectKey: 'reports/original.txt', originNodeId: 'node-b'};
+    const alias = {uuid: file.uuid, objectKey: 'reports/alias.txt', originNodeId: 'node-a'};
+    const icon = (key, resource) => {
+        let selected = false;
+        return {
+            dataset: {kind: 'file', key, uuid: resource.uuid, movable: 'true'},
+            classList: {
+                toggle(name, value) { if (name === 'selected') selected = value; },
+                contains(name) { return name === 'selected' && selected; }
+            },
+            setAttribute() {}
+        };
+    };
+    app.items = [icon('file', file), icon('alias', alias)];
+    app.records = [['file', file], ['alias', alias]];
+    app.document.querySelectorAll = () => app.items;
+    let body;
+    app.fetch = async (url, request) => {
+        assert.equal(url, '/api/folders/move');
+        body = JSON.parse(request.body);
+        return {ok: true, json: async () => ({moved: 1})};
+    };
+    vm.runInContext(`
+        currentView = 'icons';
+        iconRecords = new Map(records);
+        updateSelectedToolbar = syncIconSelection;
+        clearSelection = () => {};
+        showToast = () => {};
+        loadFileList = () => {};
+        selectOnlyIcon(items[0]);
+    `, app);
+    await app.moveSelectionTo('archive/');
+    assert.deepEqual(body, {destination: 'archive/', files: [file], folders: []});
+});

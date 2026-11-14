@@ -1,10 +1,10 @@
 package cc.ginpika.bootfs.kernel.cluster;
 
 import cc.ginpika.bootfs.config.TfsConfig;
+import cc.ginpika.bootfs.core.IdGenerator;
 import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.nio.file.*;
-import java.util.UUID;
 
 /** A stable storage identity, shared by local catalogs and cluster registration. */
 @Component
@@ -22,7 +22,7 @@ public final class NodeIdentity {
                 throw new IOException("Configured node identity differs from existing storage identity");
             }
         } else {
-            id = configured == null || configured.isBlank() ? UUID.randomUUID().toString() : configured;
+            id = configured == null || configured.isBlank() ? IdGenerator.getUniqueId() : configured;
             if (!id.matches("[A-Za-z0-9_-]+")) throw new IOException("Invalid node identity");
             Files.writeString(identity, id, StandardOpenOption.CREATE_NEW, StandardOpenOption.SYNC);
             try (java.nio.channels.FileChannel directory = java.nio.channels.FileChannel.open(root,StandardOpenOption.READ)) {

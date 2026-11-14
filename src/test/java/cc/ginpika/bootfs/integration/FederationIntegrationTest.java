@@ -355,6 +355,66 @@ class FederationIntegrationTest {
         assertEquals(binding, frontend.store().get(bindingKey));
     }
 
+    @Test @Timeout(90) void nodesBrowseAndMoveFilesUsingTheOwnersObjectKeys() throws Exception {
+        Node a = new Node("move-a", false), b = new Node("move-b", false);
+        join(a, b);
+        assertEquals(200, request(a, "POST", "/api/folders", "{\"name\":\"archive\"}", null).statusCode());
+        assertEquals(200, request(b, "POST", "/api/folders", "{\"name\":\"empty\"}", null).statusCode());
+        String local = a.bean(FileService.class).publishS3(new java.io.ByteArrayInputStream(new byte[]{1}),
+                "reports/original.txt", "bootfs", "text/plain", null, null).file().getUuid();
+        String remote = b.bean(FileService.class).publishS3(new java.io.ByteArrayInputStream(new byte[]{2}),
+                "reports/original.txt", "bootfs", "text/plain", null, null).file().getUuid();
+        assertEquals(200, request(b, "PUT", "/api/file/" + remote + "/rename", "{\"fileName\":\"display.txt\"}", null).statusCode());
+
+        var rootListing = request(a, "GET", "/api/folders?pageSize=20", null, null);
+        assertEquals(200, rootListing.statusCode(), rootListing.body());
+        assertEquals(List.of("archive/", "empty/", "reports/"), JSON.parseObject(rootListing.body()).getJSONArray("rows").stream()
+                .map(raw -> ((JSONObject) raw).getString("folderPath")).toList());
+        var reportListing = request(a, "GET", "/api/folders?folder=reports%2F&pageSize=1", null, null);
+        assertEquals(200, reportListing.statusCode(), reportListing.body());
+        assertEquals(2, JSON.parseObject(reportListing.body()).getIntValue("total"));
+        JSONObject row = JSON.parseObject(reportListing.body()).getJSONArray("rows").getJSONObject(0);
+        if (!remote.equals(row.getString("uuid"))) {
+            row = JSON.parseObject(request(a, "GET", "/api/folders?folder=reports%2F&pageNumber=1&pageSize=1", null, null).body())
+                    .getJSONArray("rows").getJSONObject(0);
+        }
+        assertEquals(remote, row.getString("uuid"));
+        assertEquals("display.txt", row.getString("fileName"));
+        assertEquals("reports/original.txt", row.getString("objectKey"));
+        assertEquals(b.id, row.getString("originNodeId"));
+        assertFalse(row.containsKey("path"));
+
+        b.setSso(true);
+        String move = new JSONObject(Map.of("destination", "archive/", "files", List.of(row))).toJSONString();
+        assertEquals(401, request(b, "POST", "/api/cluster/data/folders/move", move, null).statusCode());
+        var moved = request(a, "POST", "/api/folders/move", move, null);
+        assertEquals(200, moved.statusCode(), moved.body());
+        assertEquals(1, JSON.parseObject(moved.body()).getIntValue("moved"));
+        assertNull(b.store().get("/s3/bootfs/reports/original.txt"));
+        assertEquals(remote, JSON.parseObject(b.store().get("/s3/bootfs/archive/original.txt")).getString("uuid"));
+        assertEquals(local, JSON.parseObject(a.store().get("/s3/bootfs/reports/original.txt")).getString("uuid"));
+        assertNull(a.store().get("/s3/bootfs/archive/original.txt"));
+        assertNull(a.store().get("/documents/full-text/" + remote));
+        assertArrayEquals(new byte[]{2}, Files.readAllBytes(Path.of(b.bean(Context.class).query(remote).getPath())));
+        JSONObject archived = JSON.parseObject(request(a, "GET", "/api/folders?folder=archive%2F", null, null).body())
+                .getJSONArray("rows").getJSONObject(0);
+        assertEquals(remote, archived.getString("uuid"));
+        assertEquals("display.txt", archived.getString("fileName"));
+        assertEquals("archive/original.txt", archived.getString("objectKey"));
+        assertEquals(404, request(a, "POST", "/api/folders/move", move, null).statusCode());
+
+        String moveLocal = new JSONObject(Map.of("destination", "empty/", "files", List.of(Map.of(
+                "objectKey", "reports/original.txt", "uuid", local)))).toJSONString();
+        assertEquals(200, request(a, "POST", "/api/folders/move", moveLocal, null).statusCode());
+        assertEquals(local, JSON.parseObject(a.store().get("/s3/bootfs/empty/original.txt")).getString("uuid"));
+        b.close();
+        JSONObject partial = JSON.parseObject(request(a, "GET", "/api/folders?folder=empty%2F", null, null).body());
+        assertTrue(partial.getBooleanValue("partial"));
+        assertEquals(List.of(b.id), partial.getJSONArray("unavailableNodes").toJavaList(String.class));
+        assertEquals(1, partial.getIntValue("total"));
+        assertEquals(503, request(a, "POST", "/api/folders/move", move, null).statusCode());
+    }
+
     @Test @Timeout(90) void federatedQueryAndMutationRunAtTheOwnerAndDepartingNodeKeepsAllOfItsData() throws Exception {
         Node a=new Node("alpha",false),x=new Node("portable",false),b=new Node("beta",false);
         String own=x.upload("own.txt","portable original"),other=a.upload("other.txt","alpha original"); b.upload("b.txt","beta original");

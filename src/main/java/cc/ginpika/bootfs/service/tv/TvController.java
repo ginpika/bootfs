@@ -39,7 +39,7 @@ public class TvController {
     }
 
     @GetMapping("/tv/manage")
-    public ModelAndView managePage() { return new ModelAndView("tv-manage", "stats", tv.getStatus()); }
+    public ModelAndView managePage() { return new ModelAndView("tv-manage"); }
 
     @GetMapping(value = "/tv/playlist.m3u8", produces = "application/vnd.apple.mpegurl")
     @ResponseBody

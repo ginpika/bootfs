@@ -74,14 +74,25 @@ class FederationIntegrationTest {
         coordinator.close();
 
         String first = viewer.upload("first.webp", "first");
+        assertEquals("no-store", request(viewer, "GET", "/gallery", null, null)
+                .headers().firstValue("Cache-Control").orElseThrow());
+        var unpublished = request(viewer, "GET", "/gallery/image/" + viewer.id + "/" + first, null, null);
+        assertEquals(404, unpublished.statusCode());
+        assertEquals("no-store", unpublished.headers().firstValue("Cache-Control").orElseThrow());
+        var empty = galleryWall(viewer, null);
+        assertEquals(404, empty.statusCode());
+        assertEquals("no-store", empty.headers().firstValue("Cache-Control").orElseThrow());
         assertEquals(200, request(viewer, "POST", "/publicAccess/" + first, null, null).statusCode());
         var initial = galleryWall(viewer, null);
         assertEquals(200, initial.statusCode());
+        assertEquals("no-store", initial.headers().firstValue("Cache-Control").orElseThrow());
         String initialTag = initial.headers().firstValue("ETag").orElseThrow();
         assertEquals(List.of("/gallery/image/" + viewer.id + "/" + first), JSON.parseArray(initial.body()).toJavaList(String.class));
 
         String next = publisher.upload("next.webp", "next");
-        assertEquals(304, galleryWall(viewer, initialTag).statusCode(), "Uploading alone does not change the public wall");
+        var unchanged = galleryWall(viewer, initialTag);
+        assertEquals(304, unchanged.statusCode(), "Uploading alone does not change the public wall");
+        assertEquals("no-store", unchanged.headers().firstValue("Cache-Control").orElseThrow());
         assertEquals(200, request(publisher, "POST", "/publicAccess/" + next, null, null).statusCode());
         var refreshed = galleryWall(viewer, initialTag);
         assertEquals(200, refreshed.statusCode(), refreshed.body());

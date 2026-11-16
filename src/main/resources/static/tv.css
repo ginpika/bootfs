@@ -124,18 +124,6 @@
     flex-direction: column;
     min-height: 340px;
 }
-.tv-chat-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 9px 14px;
-    border-bottom: 1px solid var(--color-border-primary);
-}
-.tv-chat-heading h2 {
-    margin: 0;
-    font: 700 15px/1.4 'Space Grotesk', system-ui, sans-serif;
-}
 .tv-label { color: var(--color-text-tertiary); font-size: 12px; }
 .tv-chat-log {
     flex: 1 1 0;
@@ -176,6 +164,8 @@
 }
 .tv-chat-form button { flex: none; }
 .tv-chat-error { color: var(--color-danger); margin: 6px 0 0; font-size: 12px; }
+.tv-chat-connection { margin: 0; }
+.tv-chat-connection:not(:empty) { margin-top: 6px; }
 .tv-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 @media (min-width: 821px) and (min-height: 420px) {

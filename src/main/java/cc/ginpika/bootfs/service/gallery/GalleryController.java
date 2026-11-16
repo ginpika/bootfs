@@ -58,9 +58,9 @@ public class GalleryController {
     public ResponseEntity<?> image(@PathVariable String node, @PathVariable String uuid,
                                    @RequestParam(defaultValue = "false") boolean thumbnail,
                                    HttpServletRequest request, HttpServletResponse response) throws IOException {
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
         if (!GalleryService.validId(node) || !GalleryService.validId(uuid)) return ResponseEntity.notFound().build();
         if (context.uuid.equals(node)) return gallery.localImage(uuid, thumbnail, request);
-        response.setHeader("Cache-Control", "no-store");
         response.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
         federation.streamPeerAsset(node, "gallery/" + uuid + "?thumbnail=" + thumbnail,
                 "HEAD".equals(request.getMethod()), response);

@@ -43,10 +43,7 @@
         </section>
 
         <aside class="tv-panel tv-chat" aria-labelledby="chatTitle">
-            <div class="tv-chat-heading">
-                <h2 id="chatTitle" data-i18n>弹幕列表</h2>
-                <span id="chatConnection" class="tv-label" role="status"></span>
-            </div>
+            <h2 id="chatTitle" class="tv-sr-only" data-i18n>弹幕列表</h2>
             <div id="chatLog" class="tv-chat-log" role="log" aria-labelledby="chatTitle" tabindex="0">
                 <div id="chatEmpty" class="tv-chat-empty">
                     <p id="chatEmptyText" data-i18n>正在载入聊天…</p>
@@ -67,6 +64,7 @@
                     </button>
                 </form>
                 <p id="chatError" class="tv-chat-error" role="status" hidden></p>
+                <p id="chatConnection" class="tv-chat-connection tv-label" role="status"></p>
             </div>
         </aside>
     </main>

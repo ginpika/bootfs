@@ -1,383 +1,141 @@
 <!DOCTYPE html>
 <html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
 <head>
-    <script src="/security-utils.js"></script>
-    <script src="/i18n/en.js"></script>
-    <script src="/i18n.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n>TV 节目单管理</title>
+    <link rel="icon" href="/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+        try {
+            document.documentElement.classList.add('theme-' + (localStorage.getItem('tfs-theme') || 'light'));
+        } catch {}
+    </script>
     <link rel="stylesheet" href="/themes.css">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    borderRadius: {
-                        none: '0px',
-                        sm: '4px',
-                        DEFAULT: '6px',
-                        md: '6px',
-                        lg: '6px',
-                        xl: '8px',
-                        '2xl': '8px',
-                        '3xl': '8px',
-                        full: '9999px',
-                    },
-                    fontFamily: {
-                        display: ['Space Grotesk', 'system-ui', 'sans-serif'],
-                        body: ['Outfit', 'system-ui', 'sans-serif'],
-                    }
-                }
-            }
-        }
-        
-        function initTheme() {
-            const savedTheme = localStorage.getItem('tfs-theme') || 'light';
-            const root = document.documentElement;
-            root.className = '';
-            root.classList.add(`theme-${savedTheme}`);
-        }
-        
-        initTheme();
-    </script>
-    <style>
-        body {
-            font-family: 'Outfit', system-ui, sans-serif;
-            background-color: var(--color-bg-primary);
-            color: var(--color-text-primary);
-            min-height: 100vh;
-        }
-        
-        .video-item {
-            cursor: grab;
-            transition: all 0.2s ease;
-            border: 1px solid transparent;
-            user-select: none;
-        }
-        
-        .video-item:hover {
-            border-color: var(--color-border-secondary);
-        }
-        
-        .video-item.sortable-chosen {
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            border-color: var(--color-accent-primary);
-        }
-        
-        .video-item.sortable-ghost {
-            opacity: 0.4;
-            background-color: var(--color-accent-muted);
-        }
-        
-        .checkbox {
-            width: 20px;
-            height: 20px;
-            border-radius: var(--radius-xs);
-            border: 2px solid var(--color-border-secondary);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            background-color: var(--color-bg-secondary);
-        }
-        
-        .checkbox:hover {
-            border-color: var(--color-accent-primary);
-        }
-        
-        .checkbox.checked {
-            background-color: var(--color-accent-primary);
-            border-color: var(--color-accent-primary);
-        }
-        
-        .checkbox.checked::after {
-            content: '✓';
-            color: var(--color-accent-text);
-            font-size: 12px;
-        }
-    </style>
+    <link rel="stylesheet" href="/language-picker.css">
+    <link rel="stylesheet" href="/tv-manage.css">
+    <script defer src="/i18n/en.js"></script>
+    <script defer src="/i18n.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script defer src="/tv-manage.js"></script>
 </head>
-<body class="font-body">
-    <div class="max-w-5xl mx-auto p-5">
-        <div class="flex flex-wrap gap-3 justify-between items-center mb-5 p-5 theme-rounded-xl" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-            <h1 data-i18n class="text-xl font-bold font-display" style="color: var(--color-text-primary);">TV 节目单管理</h1>
-            <a href="/tv" class="theme-btn-primary">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M5 4l14 8-14 8V4z"/>
+<body class="schedule-page">
+    <header class="schedule-topbar">
+        <div class="schedule-toolbar">
+            <a href="/" class="theme-icon-btn" data-i18n-attrs="title aria-label" title="回到首页" aria-label="回到首页">
+                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-2m-7 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1"></path>
                 </svg>
-                <span data-i18n>前往 TV</span>
             </a>
-        </div>
-
-        <div class="flex flex-wrap gap-5 mb-5 p-4 theme-rounded-xl text-sm" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-            <div class="flex items-center gap-2">
-                <span data-i18n style="color: var(--color-text-secondary);">已选视频:</span>
-                <span class="font-semibold" style="color: var(--color-accent-primary);" id="selectedCount">0</span>
-            </div>
-            <div class="flex items-center gap-2">
-                <span data-i18n style="color: var(--color-text-secondary);">总切片数:</span>
-                <span class="font-semibold" style="color: var(--color-accent-primary);" id="totalSegments" th:text="${stats.allTsListSize}">0</span>
-            </div>
-            <div class="flex items-center gap-2">
-                <span data-i18n style="color: var(--color-text-secondary);">总时长:</span>
-                <span class="font-semibold" style="color: var(--color-accent-primary);" id="totalDuration" th:attr="data-duration-seconds=${stats.totalDuration}" th:text="${stats.totalDurationFormatted}">0秒</span>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div class="theme-rounded-xl p-5" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-                <div class="flex justify-between items-center mb-4 pb-3" style="border-bottom: 1px solid var(--color-border-primary);">
-                    <h2 data-i18n class="text-base font-semibold" style="color: var(--color-text-primary);">可选视频</h2>
-                    <span data-i18n class="px-2 py-0.5 text-xs theme-rounded-lg" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);" id="availableCount">0 个</span>
-                </div>
-                <div class="flex flex-col gap-2 min-h-[400px] max-h-[500px] overflow-y-auto" id="availableList">
-                </div>
-            </div>
-
-            <div class="theme-rounded-xl p-5" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-                <div class="flex justify-between items-center mb-4 pb-3" style="border-bottom: 1px solid var(--color-border-primary);">
-                    <h2 data-i18n class="text-base font-semibold" style="color: var(--color-text-primary);">播放列表 (拖拽排序)</h2>
-                    <span data-i18n class="px-2 py-0.5 text-xs theme-rounded-lg" style="background-color: var(--color-bg-tertiary); color: var(--color-text-secondary);" id="playlistCount">0 个</span>
-                </div>
-                <div class="flex flex-col gap-2 min-h-[400px] max-h-[500px] overflow-y-auto" id="playlistList">
-                </div>
-            </div>
-        </div>
-
-        <div class="flex gap-3 mt-5 justify-end">
-            <button data-i18n class="theme-btn-secondary" onclick="selectAll()">全选</button>
-            <button data-i18n class="theme-btn-secondary" onclick="clearAll()">清空</button>
-            <button class="theme-btn-success" onclick="savePlaylist()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
-                    <polyline points="17,21 17,13 7,13 7,21"/>
-                    <polyline points="7,3 7,8 15,8"/>
-                </svg>
-                <span data-i18n>保存并重新初始化</span>
-            </button>
-        </div>
-    </div>
-
-    <div class="fixed bottom-5 right-5 px-4 py-2.5 theme-rounded-xl text-sm font-medium opacity-0 translate-y-5 transition-all duration-300 z-50" style="background-color: var(--color-success); color: white;" id="toast"></div>
-
-    <script>
-        let allVideos = [];
-        let playlistUuids = [];
-        let sortableInstance = null;
-        let availableSortableInstance = null;
-
-        document.addEventListener('DOMContentLoaded', function() {
-            loadVideos();
-        });
-
-        function loadVideos() {
-            fetch('/tv/api/videos')
-                .then(response => response.json())
-                .then(videos => {
-                    allVideos = videos;
-                    return fetch('/tv/api/playlist');
-                })
-                .then(response => response.json())
-                .then(uuids => {
-                    playlistUuids = uuids;
-                    renderLists();
-                    initDragAndDrop();
-                })
-                .catch(err => {
-                    console.error('Failed to load videos:', err);
-                    showToast(BootFSI18n.t('加载视频列表失败'), true);
-                });
-        }
-
-        function renderLists() {
-            const availableList = document.getElementById('availableList');
-            const playlistList = document.getElementById('playlistList');
-            
-            availableList.innerHTML = '';
-            playlistList.innerHTML = '';
-
-            const playlistSet = new Set(playlistUuids);
-
-            playlistUuids.forEach((uuid, index) => {
-                const video = allVideos.find(v => v.key === uuid);
-                if (video) {
-                    playlistList.appendChild(createVideoItem(video, index + 1, true));
-                }
-            });
-
-            allVideos.forEach(video => {
-                if (video.available && !playlistSet.has(video.key)) {
-                    availableList.appendChild(createVideoItem(video, -1, false));
-                }
-            });
-
-            updateStats();
-        }
-
-        function createVideoItem(video, order, inPlaylist) {
-            const item = document.createElement('div');
-            item.className = 'video-item px-4 py-3 theme-rounded-lg flex items-center gap-3';
-            item.style.backgroundColor = 'var(--color-bg-tertiary)';
-            item.dataset.uuid = video.key;
-
-            const duration = BootFSI18n.duration(video.totalDuration);
-
-            item.innerHTML = `
-                <div class="drag-handle" style="color: var(--color-text-muted); cursor: grab;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="9" cy="6" r="1.5"/>
-                        <circle cx="15" cy="6" r="1.5"/>
-                        <circle cx="9" cy="12" r="1.5"/>
-                        <circle cx="15" cy="12" r="1.5"/>
-                        <circle cx="9" cy="18" r="1.5"/>
-                        <circle cx="15" cy="18" r="1.5"/>
+            <div class="schedule-filters">
+                <div class="schedule-search">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                     </svg>
+                    <input id="videoSearch" class="theme-input" type="search" placeholder="搜索视频…" aria-label="搜索视频…"
+                           data-i18n-attrs="placeholder aria-label" autocomplete="off" disabled>
                 </div>
-                <button type="button" role="checkbox" aria-checked="${inPlaylist}" aria-label="${BootFSSecurity.html(video.fileName)}"
-                        class="checkbox ${inPlaylist ? 'checked' : ''}" data-uuid="${BootFSSecurity.html(video.key)}"></button>
-                <div class="flex-1 min-w-0">
-                    <div class="text-sm font-medium truncate" style="color: var(--color-text-primary);" title="${BootFSSecurity.html(video.fileName)}">${BootFSSecurity.html(video.fileName)}</div>
-                    <div class="text-xs mt-1" style="color: var(--color-text-muted);">${BootFSI18n.html('{0} 个切片 · {1}', video.segmentCount, duration)}</div>
-                    <div class="text-xs truncate" style="color: var(--color-text-secondary);">${BootFSI18n.html('节点 {0}', video.nodeId)}${video.available ? '' : ' · ' + BootFSI18n.html('资源暂不可用')}</div>
+                <select id="sourceFilter" class="theme-input" data-i18n-attrs="aria-label" aria-label="来源节点" disabled>
+                    <option value="" data-i18n>所有节点</option>
+                </select>
+            </div>
+            <div class="schedule-toolbar-actions">
+                <div th:replace="fragments/language-picker :: picker"></div>
+                <a href="/tv" class="theme-btn-secondary" data-i18n>前往 TV</a>
+                <button id="saveSchedule" class="theme-btn-primary" type="button" data-i18n disabled>保存节目单</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="schedule-main">
+        <div class="schedule-heading">
+            <h1 data-i18n>TV 节目单管理</h1>
+            <p id="saveStatus" class="schedule-feedback" role="status"></p>
+        </div>
+        <div id="loadNotice" class="schedule-notice theme-card theme-rounded-xl" hidden>
+            <span data-i18n role="status">加载视频列表失败</span>
+            <button class="theme-btn-secondary theme-btn-sm" id="retryLoad" type="button" data-i18n>重试</button>
+        </div>
+
+        <div class="schedule-panels">
+            <section class="schedule-panel theme-card theme-rounded-xl" aria-labelledby="availableTitle">
+                <div class="schedule-panel-heading">
+                    <div class="schedule-panel-title">
+                        <h2 id="availableTitle" data-i18n>可选视频</h2>
+                        <span id="availableCount" class="schedule-count"></span>
+                    </div>
+                    <button id="addAll" class="theme-btn-secondary theme-btn-sm" type="button" data-i18n disabled>添加全部</button>
                 </div>
-                ${inPlaylist ? `<div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white" style="background-color: var(--color-accent-primary);">${order}</div>` : ''}
-            `;
+                <div class="schedule-columns" aria-hidden="true">
+                    <span class="schedule-file-column" data-i18n>视频信息</span>
+                    <span data-i18n>时长</span>
+                    <span data-i18n>操作</span>
+                </div>
+                <ul id="availableList" class="schedule-list" role="list">
+                    <li class="schedule-empty" data-i18n>加载中...</li>
+                </ul>
+            </section>
 
-            return item;
-        }
+            <section class="schedule-panel theme-card theme-rounded-xl" aria-labelledby="playlistTitle">
+                <div class="schedule-panel-heading">
+                    <div class="schedule-panel-title">
+                        <h2 id="playlistTitle" data-i18n>播放列表</h2>
+                        <span id="playlistCount" class="schedule-count"></span>
+                    </div>
+                    <button id="clearSchedule" class="theme-btn-secondary theme-btn-sm" type="button" data-i18n disabled>清空</button>
+                </div>
+                <div class="schedule-columns schedule-queue" aria-hidden="true">
+                    <span data-i18n>顺序</span>
+                    <span data-i18n>视频信息</span>
+                    <span data-i18n>时长</span>
+                    <span data-i18n>操作</span>
+                </div>
+                <ol id="playlistList" class="schedule-list schedule-queue" role="list">
+                    <li class="schedule-empty" data-i18n>加载中...</li>
+                </ol>
+                <footer id="playlistStats" class="schedule-summary" hidden></footer>
+            </section>
+        </div>
+    </main>
 
-        function handleCheckboxClick(e) {
-            const checkbox = e.target.closest('.checkbox');
-            if (checkbox) {
-                e.preventDefault();
-                e.stopPropagation();
-                const uuid = checkbox.dataset.uuid;
-                toggleVideo(uuid);
-            }
-        }
-
-        function toggleVideo(uuid) {
-            const index = playlistUuids.indexOf(uuid);
-            if (index > -1) {
-                playlistUuids.splice(index, 1);
-            } else {
-                playlistUuids.push(uuid);
-            }
-            renderLists();
-            initDragAndDrop();
-        }
-
-        function selectAll() {
-            const selected = new Set(playlistUuids);
-            allVideos.filter(video => video.available).forEach(video => selected.add(video.key));
-            playlistUuids = [...selected];
-            renderLists();
-            initDragAndDrop();
-        }
-
-        function clearAll() {
-            playlistUuids = [];
-            renderLists();
-            initDragAndDrop();
-        }
-
-        function updateStats() {
-            const selectedVideos = allVideos.filter(v => playlistUuids.includes(v.key));
-            const totalSegments = selectedVideos.reduce((sum, v) => sum + v.segmentCount, 0);
-            const totalDuration = selectedVideos.reduce((sum, v) => sum + v.totalDuration, 0);
-
-            document.getElementById('selectedCount').textContent = playlistUuids.length;
-            document.getElementById('availableCount').textContent = BootFSI18n.t('{0} 个', allVideos.filter(v => v.available && !playlistUuids.includes(v.key)).length);
-            document.getElementById('playlistCount').textContent = BootFSI18n.t('{0} 个', playlistUuids.length);
-            document.getElementById('totalSegments').textContent = totalSegments;
-            document.getElementById('totalDuration').textContent = BootFSI18n.duration(totalDuration);
-        }
-
-        function savePlaylist() {
-            fetch('/tv/api/playlist', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-BootFS-Request': '1'
-                },
-                body: JSON.stringify(playlistUuids)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showToast(BootFSI18n.t('播放列表已保存，TV 服务已重新初始化'));
-                } else {
-                    showToast(BootFSI18n.t('保存失败'), true);
-                }
-            })
-            .catch(err => {
-                console.error('Failed to save playlist:', err);
-                showToast(BootFSI18n.t('保存失败'), true);
-            });
-        }
-
-        function initDragAndDrop() {
-            const playlistList = document.getElementById('playlistList');
-            const availableList = document.getElementById('availableList');
-            
-            if (sortableInstance) sortableInstance.destroy();
-            if (availableSortableInstance) availableSortableInstance.destroy();
-            
-            document.removeEventListener('click', handleCheckboxClick);
-            document.addEventListener('click', handleCheckboxClick);
-            if (typeof Sortable === 'undefined') return;
-            
-            const onDragStart = function() {
-                playlistList.style.overflowY = 'visible';
-                availableList.style.overflowY = 'visible';
-            };
-            const onDragEnd = function() {
-                playlistList.style.overflowY = '';
-                availableList.style.overflowY = '';
-                playlistUuids = Array.from(playlistList.querySelectorAll('.video-item'), item => item.dataset.uuid);
-                renderLists();
-            };
-            
-            availableSortableInstance = new Sortable(availableList, {
-                group: 'tv-playlist',
-                sort: false,
-                animation: 150,
-                ghostClass: 'sortable-ghost',
-                chosenClass: 'sortable-chosen',
-                onStart: onDragStart,
-                onEnd: onDragEnd
-            });
-            
-            sortableInstance = new Sortable(playlistList, {
-                group: 'tv-playlist',
-                animation: 150,
-                ghostClass: 'sortable-ghost',
-                chosenClass: 'sortable-chosen',
-                onStart: onDragStart,
-                onEnd: onDragEnd
-            });
-        }
-
-        function showToast(message, isError = false) {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.style.backgroundColor = isError ? 'var(--color-danger)' : 'var(--color-success)';
-            
-            setTimeout(() => {
-                toast.style.opacity = '1';
-                toast.style.transform = 'translateY(0)';
-            }, 10);
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                toast.style.transform = 'translateY(20px)';
-            }, 3000);
-        }
-    </script>
+    <template id="videoRow">
+        <li class="schedule-row" tabindex="-1">
+            <span class="schedule-video-icon theme-rounded-lg" aria-hidden="true">
+                <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                    <circle cx="12" cy="12" r="9"></circle>
+                </svg>
+            </span>
+            <span class="schedule-position" hidden>
+                <svg class="schedule-grip" width="15" height="18" fill="currentColor" viewBox="0 0 16 20" aria-hidden="true">
+                    <circle cx="5" cy="4" r="1.25"></circle><circle cx="11" cy="4" r="1.25"></circle>
+                    <circle cx="5" cy="10" r="1.25"></circle><circle cx="11" cy="10" r="1.25"></circle>
+                    <circle cx="5" cy="16" r="1.25"></circle><circle cx="11" cy="16" r="1.25"></circle>
+                </svg>
+                <span class="schedule-order"></span>
+            </span>
+            <div class="schedule-file">
+                <span class="schedule-filename" dir="auto"></span>
+                <span class="schedule-source"></span>
+            </div>
+            <span class="schedule-duration"></span>
+            <div class="schedule-row-actions">
+                <button type="button" class="theme-icon-btn theme-btn-sm" data-action="add">
+                    <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+                </button>
+                <button type="button" class="theme-icon-btn theme-btn-sm" data-action="up" hidden>
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 6-6 6 6"></path></svg>
+                </button>
+                <button type="button" class="theme-icon-btn theme-btn-sm" data-action="down" hidden>
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 10 6 6 6-6"></path></svg>
+                </button>
+                <button type="button" class="theme-icon-btn theme-btn-sm" data-action="remove" hidden>
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path></svg>
+                </button>
+            </div>
+        </li>
+    </template>
 </body>
 </html>

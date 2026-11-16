@@ -8,6 +8,7 @@ import cc.ginpika.bootfs.sso.SsoConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -16,6 +17,7 @@ import org.springframework.web.servlet.ModelAndView;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.util.*;
 import lombok.RequiredArgsConstructor;
 
@@ -111,7 +113,8 @@ public class WebUIController {
 
     // Embed image-hosting background random read template
     @GetMapping("/gallery")
-    public ModelAndView randomPicture() {
+    public ModelAndView randomPicture(HttpServletResponse response) {
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
         ModelAndView mv = new ModelAndView();
         mv.setViewName("gallery");
         return mv;

@@ -35,7 +35,7 @@ public class TvController {
 
     @GetMapping({"/tv", "/tv/"})
     public ModelAndView tvPage() {
-        return new ModelAndView("tv", Map.of("stats", tv.getStatus(), "messageLimit", TvService.MESSAGE_LIMIT));
+        return new ModelAndView("tv", "messageLimit", TvService.MESSAGE_LIMIT);
     }
 
     @GetMapping("/tv/manage")

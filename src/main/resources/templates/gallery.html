@@ -12,7 +12,7 @@
         }
 
         initTheme();
-        window.__galleryUrls = fetch('/setu-urls?count=240', { headers: { Accept: 'application/json' } });
+        window.__galleryUrls = fetch('/setu-urls?count=240', { cache: 'no-store', headers: { Accept: 'application/json' } });
     </script>
     <script src="/security-utils.js"></script>
     <script src="/i18n/en.js"></script>
@@ -277,10 +277,13 @@
             const IMAGES_PER_COLUMN = 30;
             const TOTAL = COLUMN_COUNT * IMAGES_PER_COLUMN;
             const SCROLL_SPEED = 0.2; // 像素/帧
+            const REFRESH_INTERVAL_MS = 10000;
 
             // 状态管理
             let columns = [];
             let scrollSpeed = SCROLL_SPEED;
+            let tiles = [];
+            let wallVersion;
 
             // 创建列
             function createColumns() {
@@ -325,30 +328,54 @@
                 return errorDiv;
             }
 
-            // 地址一次取齐，缩略图同时开始下载。先出来的几张就揭开画廊，其余格子继续填。
+            function prioritizeVisibleImages(urls) {
+                const shown = new Set(tiles.map(tile => tile.url));
+                const additions = [...new Set(urls.filter(url => !shown.has(url)))];
+                if (!additions.length) return;
+                const visible = tiles.flatMap((tile, index) => {
+                    const box = tile.element.getBoundingClientRect();
+                    const width = Math.min(box.right, innerWidth) - Math.max(box.left, 0);
+                    const height = Math.min(box.bottom, innerHeight) - Math.max(box.top, 0);
+                    return width > 0 && height > 0 ? [{ index, area: width * height }] : [];
+                }).sort((a, b) => b.area - a.area);
+                visible.slice(0, Math.min(8, additions.length)).forEach(({ index }, i) => {
+                    const from = urls.indexOf(additions[i]);
+                    [urls[index], urls[from]] = [urls[from], urls[index]];
+                });
+            }
+
             function mountImages(urls) {
+                const initial = !tiles.length;
+                if (!initial) prioritizeVisibleImages(urls);
                 let settled = 0;
-                let revealed = false;
+                let revealed = !initial;
                 const revealAt = Math.min(COLUMN_COUNT, urls.length);
 
                 function reveal() {
-                    if (revealed) return;
+                    if (revealed || !tiles.length) return;
                     revealed = true;
-                    $($(".container")[0]).fadeIn(600);
+                    $("#empty-state").addClass("hidden");
+                    $(gallery.parentElement).fadeIn(600);
                     $("#loader").hide();
                 }
 
                 urls.forEach((res, index) => {
-                    const columnIndex = Math.floor(index / IMAGES_PER_COLUMN);
-                    const imageScroll = document.getElementById(`imageScroll-${columnIndex}`);
-                    const container = document.createElement('div');
-                    container.className = 'image-container';
-                    const spinner = document.createElement('div');
-                    spinner.className = 'loading-spinner';
-                    container.appendChild(spinner);
-                    imageScroll.appendChild(container);
+                    let tile = tiles[index];
+                    if (!tile) {
+                        const element = document.createElement('div');
+                        element.className = 'image-container';
+                        const spinner = document.createElement('div');
+                        spinner.className = 'loading-spinner';
+                        element.append(spinner);
+                        columns[Math.floor(index / IMAGES_PER_COLUMN)].element.append(element);
+                        tile = { element };
+                        tiles[index] = tile;
+                    }
+                    if (tile.url === res) return;
+                    tile.url = res;
 
                     const img = new Image();
+                    tile.image = img;
                     img.decoding = 'async';
                     img.alt = BootFSI18n.t('随机图片');
                     if (index < COLUMN_COUNT) img.fetchPriority = 'high';
@@ -358,17 +385,19 @@
                     }
 
                     img.onload = function () {
-                        container.replaceChildren(img);
+                        if (tile.image !== img || !tile.element.isConnected) return;
+                        tile.element.replaceChildren(img);
                         settle();
                     };
 
                     img.onerror = function () {
+                        if (tile.image !== img || !tile.element.isConnected) return;
                         if (!img.dataset.fallback) {
                             img.dataset.fallback = '1';
                             img.src = res;
                             return;
                         }
-                        container.replaceChildren(failedTile());
+                        tile.element.replaceChildren(failedTile());
                         settle();
                     };
 
@@ -379,22 +408,22 @@
                     img.src = res + '?thumbnail=true';
                 });
 
-                setTimeout(reveal, 800);
+                for (const tile of tiles.splice(urls.length)) tile.element.remove();
+                if (initial) setTimeout(reveal, 800);
             }
 
             function showEmptyState() {
                 $("#loader").hide();
-                $(".container").hide();
+                $(gallery.parentElement).stop(true, true).hide();
                 $("#empty-state").removeClass("hidden");
+                tiles = [];
+                columns.forEach(column => column.element.replaceChildren());
             }
 
             // 动画循环
             function animate() {
                 columns.forEach((column, index) => {
                     const imageScroll = column.element;
-                    const columnHeight = imageScroll.parentElement.offsetHeight;
-                    const contentHeight = imageScroll.scrollHeight;
-
                     // 计算最大和最小位置
 
                     if (index % 2 === 0) {
@@ -463,28 +492,30 @@
             createColumns();
             animate();
 
-            const pending = window.__galleryUrls || fetch('/setu-urls?count=' + TOTAL, { headers: { Accept: 'application/json' } });
-            pending
-                .then(function (response) {
+            async function refresh(pending) {
+                try {
+                    const headers = { Accept: 'application/json' };
+                    if (wallVersion) headers['If-None-Match'] = wallVersion;
+                    const response = await (pending || fetch('/setu-urls?count=' + TOTAL, { cache: 'no-store', headers }));
+                    if (response.status === 304) return;
                     if (response.status === 404) {
-                        showEmptyState();
-                        return null;
-                    }
-                    if (!response.ok) throw new Error('gallery');
-                    return response.json();
-                })
-                .then(function (urls) {
-                    if (!urls) return;
-                    if (!urls.length) {
+                        wallVersion = response.headers.get('ETag');
                         showEmptyState();
                         return;
                     }
-                    mountImages(urls.slice(0, TOTAL));
-                })
-                .catch(function () {
-                    const label = document.querySelector('#loader p');
-                    if (label) label.textContent = BootFSI18n.t('画廊加载失败');
-                });
+                    if (!response.ok) throw new Error('gallery');
+                    const urls = await response.json();
+                    if (urls.length) mountImages(urls.slice(0, TOTAL));
+                    else showEmptyState();
+                    wallVersion = response.headers.get('ETag');
+                } catch {
+                    if (!tiles.length) document.querySelector('#loader p').textContent = BootFSI18n.t('画廊加载失败');
+                } finally {
+                    setTimeout(refresh, REFRESH_INTERVAL_MS);
+                }
+            }
+
+            refresh(window.__galleryUrls);
         })();
     </script>
 </footer>

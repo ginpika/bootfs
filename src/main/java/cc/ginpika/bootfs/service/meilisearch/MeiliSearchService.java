@@ -63,11 +63,19 @@ public class MeiliSearchService {
     }
     public JSONObject findDocument(String index, String uuid) { return search.get(index, uuid); }
     public void setResourcePublic(String uuid, boolean enabled, String publicUrl) {
+        long publishedAt = System.currentTimeMillis();
         search.mutate(FULL_TEXT_INDEX, uuid, source -> {
             if (enabled) {
+                String previous = source.getString("isPublicAccess");
+                if (!"1".equals(previous) && !"true".equalsIgnoreCase(previous)) {
+                    source.put("galleryPublishedAt", publishedAt);
+                }
                 source.put("isPublicAccess", "1");
                 if (publicUrl != null) source.put("publicUrl", publicUrl);
-            } else source.remove("isPublicAccess");
+            } else {
+                source.remove("isPublicAccess");
+                source.remove("galleryPublishedAt");
+            }
         });
     }
     private List<Tag> tagsFromDocument(JSONObject source) {

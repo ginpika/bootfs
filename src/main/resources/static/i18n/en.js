@@ -43,6 +43,7 @@ window.BootFSEnglish = Object.freeze({
     "节目单管理": "Manage schedule",
     "直播": "Broadcast",
     "弹幕": "Danmaku",
+    "弹幕列表": "Danmaku feed",
     "直播播放器": "Live player",
     "暂无直播节目": "No programs on air",
     "重试": "Retry",

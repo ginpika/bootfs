@@ -65,6 +65,42 @@ class FederationIntegrationTest {
     void flush() throws Exception { for(int i=0;i<3;i++) for(Node n:nodes) if(n.app!=null) n.store().advance(); }
     @AfterEach void close() { for(Node n:nodes) n.close(); }
 
+    @Test @Timeout(90) void galleryRefreshesFromAnOrdinaryPeerWithTheCoordinatorOffline() throws Exception {
+        Node coordinator = new Node("gallery-a", false);
+        Node publisher = new Node("gallery-b", false);
+        Node viewer = new Node("gallery-c", false);
+        join(publisher, coordinator);
+        join(viewer, coordinator);
+        coordinator.close();
+
+        String first = viewer.upload("first.webp", "first");
+        assertEquals(200, request(viewer, "POST", "/publicAccess/" + first, null, null).statusCode());
+        var initial = galleryWall(viewer, null);
+        assertEquals(200, initial.statusCode());
+        String initialTag = initial.headers().firstValue("ETag").orElseThrow();
+        assertEquals(List.of("/gallery/image/" + viewer.id + "/" + first), JSON.parseArray(initial.body()).toJavaList(String.class));
+
+        String next = publisher.upload("next.webp", "next");
+        assertEquals(304, galleryWall(viewer, initialTag).statusCode(), "Uploading alone does not change the public wall");
+        assertEquals(200, request(publisher, "POST", "/publicAccess/" + next, null, null).statusCode());
+        var refreshed = galleryWall(viewer, initialTag);
+        assertEquals(200, refreshed.statusCode(), refreshed.body());
+        String newTag = refreshed.headers().firstValue("ETag").orElseThrow();
+        assertNotEquals(initialTag, newTag);
+        assertEquals(List.of("/gallery/image/" + publisher.id + "/" + next), JSON.parseArray(refreshed.body()).toJavaList(String.class));
+        assertEquals(304, galleryWall(viewer, newTag).statusCode());
+
+        assertEquals(200, request(publisher, "POST", "/publicAccess/" + next + "?enabled=false", null, null).statusCode());
+        assertEquals(initial.body(), galleryWall(viewer, newTag).body());
+    }
+
+    private HttpResponse<String> galleryWall(Node node, String tag) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create(node.url + "/setu-urls?count=1"))
+                .timeout(java.time.Duration.ofSeconds(8));
+        if (tag != null) request.header("If-None-Match", tag);
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
     @Test @Timeout(90) void galleryAndTvShareMediaAndSsoChatAcrossNodes() throws Exception {
         var sso = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         sso.createContext("/api/sso/session", exchange -> {

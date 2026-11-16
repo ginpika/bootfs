@@ -23,33 +23,8 @@
     <script defer src="/tv.js"></script>
 </head>
 <body class="tv-page">
-    <header class="tv-topbar">
-        <div class="tv-topbar-inner">
-            <div class="tv-brand">
-                <a href="/" class="theme-btn-secondary theme-btn-sm">
-                    <span data-i18n>首页</span>
-                </a>
-                <h1>BootFS TV</h1>
-            </div>
-            <a href="/tv/manage" class="theme-btn-secondary theme-btn-sm">
-                <span data-i18n>节目单管理</span>
-            </a>
-        </div>
-    </header>
     <main class="tv-layout">
-        <section class="tv-panel tv-broadcast" aria-labelledby="broadcastTitle">
-            <div class="tv-panel-heading">
-                <div class="tv-heading-group">
-                    <h2 id="broadcastTitle" data-i18n>直播</h2>
-                    <span id="streamBadge" class="tv-badge" th:classappend="${stats.live} ? 'is-live' : ''">
-                        <span class="tv-status-dot" aria-hidden="true"></span>
-                        <span id="streamState" data-i18n th:text="${stats.live} ? '直播中' : '未开播'">未开播</span>
-                    </span>
-                </div>
-                <button id="danmakuToggle" class="theme-btn-secondary theme-btn-sm" type="button" aria-pressed="true">
-                    <span data-i18n>弹幕</span>
-                </button>
-            </div>
+        <section class="tv-panel tv-broadcast" data-i18n-attrs="aria-label" aria-label="直播">
             <div class="tv-stage" id="tvStage">
                 <video id="tvPlayer" class="video-js vjs-big-play-centered" controls playsinline preload="none" muted
                        data-i18n-attrs="aria-label" aria-label="直播播放器"></video>
@@ -61,25 +36,15 @@
                     </button>
                 </div>
                 <div id="danmakuLayer" class="tv-danmaku-layer" aria-hidden="true"></div>
-            </div>
-            <div class="tv-program">
-                <div class="tv-program-title">
-                    <span class="tv-label" data-i18n>当前节目</span>
-                    <strong id="programTitle" th:text="${stats['currentProgram'] != null ? stats['currentProgram']['fileName'] : '—'}">—</strong>
-                    <span id="programNode" class="tv-label"></span>
-                </div>
-                <dl class="tv-program-stats">
-                    <div><dt data-i18n>节目数</dt><dd id="programCount" th:text="${stats.playlistSize}">0</dd></div>
-                    <div><dt data-i18n>总时长</dt><dd id="programDuration" th:attr="data-duration-seconds=${stats.totalDuration}">0</dd></div>
-                </dl>
+                <button id="danmakuToggle" class="theme-btn-secondary theme-btn-sm" type="button" aria-pressed="true">
+                    <span data-i18n>弹幕</span>
+                </button>
             </div>
         </section>
 
         <aside class="tv-panel tv-chat" aria-labelledby="chatTitle">
-            <div class="tv-panel-heading">
-                <div class="tv-heading-group">
-                    <h2 id="chatTitle" data-i18n>聊天室</h2>
-                </div>
+            <div class="tv-chat-heading">
+                <h2 id="chatTitle" data-i18n>弹幕列表</h2>
                 <span id="chatConnection" class="tv-label" role="status"></span>
             </div>
             <div id="chatLog" class="tv-chat-log" role="log" aria-labelledby="chatTitle" tabindex="0">

@@ -40,6 +40,7 @@
         retry.hidden = !retryable;
         placeholder.hidden = false;
         if (layer.parentNode !== stage) stage.append(layer);
+        if (toggle.parentNode !== stage) stage.append(toggle);
     }
 
     function playbackError() {
@@ -61,6 +62,9 @@
         placeholder.hidden = true;
         if (player) {
             player.el().append(layer);
+            const controls = player.getChild('controlBar');
+            const fullscreen = controls.getChild('fullscreenToggle');
+            controls.el().insertBefore(toggle, fullscreen?.el() ?? null);
             player.src({ src: url, type: 'application/vnd.apple.mpegurl' });
             player.play()?.catch(() => {});
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -75,12 +79,6 @@
         lastStatus = status;
         const live = status.live;
         stage.classList.toggle('is-live', live);
-        byId('streamBadge').classList.toggle('is-live', live);
-        byId('streamState').textContent = t(live ? '直播中' : '未开播');
-        byId('programTitle').textContent = status.currentProgram?.fileName || '—';
-        byId('programNode').textContent = status.currentProgram ? t('节点 {0}', status.currentProgram.nodeId) : '';
-        byId('programCount').textContent = status.playlistSize;
-        byId('programDuration').textContent = BootFSI18n.duration(status.totalDuration);
         if (!live) {
             if (streamVersion !== undefined) {
                 if (player) player.reset();
@@ -101,8 +99,6 @@
         try {
             renderStatus(await json('/tv/status'));
         } catch {
-            byId('streamState').textContent = t('连接中断');
-            byId('streamBadge').classList.remove('is-live');
             if (!lastStatus?.live) notice('暂时无法获取直播状态');
         } finally {
             setTimeout(pollStatus, 4000);

@@ -2078,10 +2078,12 @@ function publishToGallery() {
 }
 
 function publishSingleToGallery(uuid) {
-    fetch(`/publicAccess/${uuid}`, {
-        method: 'POST'
+    fetch(`/publicAccess/${encodeURIComponent(uuid)}`, {
+        method: 'POST',
+        headers: { 'X-BootFS-Request': '1' }
     })
-    .then(() => {
+    .then(response => {
+        if (!response.ok) throw new Error(response.statusText);
         showToast(BootFSI18n.t('发布成功'), 'success');
         loadFileList();
     })

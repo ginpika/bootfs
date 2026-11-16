@@ -1,243 +1,109 @@
 <!DOCTYPE html>
 <html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
 <head>
-    <script src="/security-utils.js"></script>
-    <script src="/i18n/en.js"></script>
-    <script src="/i18n.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TV</title>
+    <title>BootFS TV</title>
+    <link rel="icon" href="/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+        try {
+            document.documentElement.classList.add('theme-' + (localStorage.getItem('tfs-theme') || 'light'));
+        } catch {}
+    </script>
     <link rel="stylesheet" href="/themes.css">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    borderRadius: {
-                        none: '0px',
-                        sm: '4px',
-                        DEFAULT: '6px',
-                        md: '6px',
-                        lg: '6px',
-                        xl: '8px',
-                        '2xl': '8px',
-                        '3xl': '8px',
-                        full: '9999px',
-                    },
-                    fontFamily: {
-                        display: ['Space Grotesk', 'system-ui', 'sans-serif'],
-                        body: ['Outfit', 'system-ui', 'sans-serif'],
-                    }
-                }
-            }
-        }
-        
-        function initTheme() {
-            const savedTheme = localStorage.getItem('tfs-theme') || 'light';
-            const root = document.documentElement;
-            root.className = '';
-            root.classList.add(`theme-${savedTheme}`);
-        }
-        
-        initTheme();
-    </script>
-    <link href="//vjs.zencdn.net/8.23.4/video-js.min.css" rel="stylesheet">
-    <script src="//vjs.zencdn.net/8.23.4/video.min.js"></script>
-    <style>
-        body {
-            font-family: 'Outfit', system-ui, sans-serif;
-            background-color: var(--color-bg-primary);
-            color: var(--color-text-primary);
-            min-height: 100vh;
-        }
-        
-        .live-badge {
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-        
-        .status-dot.loading {
-            animation: blink 1s infinite;
-        }
-        
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
-        }
-    </style>
+    <link rel="stylesheet" href="https://vjs.zencdn.net/8.23.4/video-js.min.css">
+    <link rel="stylesheet" href="/tv.css">
+    <script defer src="/security-utils.js"></script>
+    <script defer src="/i18n/en.js"></script>
+    <script defer src="/i18n.js"></script>
+    <script defer src="https://vjs.zencdn.net/8.23.4/video.min.js"></script>
+    <script defer src="/tv.js"></script>
 </head>
-<body class="font-body">
-    <div class="fixed top-4 left-4 z-50">
-        <a href="/" class="theme-btn-secondary">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-            <span data-i18n>返回首页</span>
-        </a>
-    </div>
-
-    <div class="max-w-6xl mx-auto p-5">
-        <div class="flex justify-between items-center mb-5 p-5 theme-rounded-xl" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-            <div class="flex items-center gap-4">
-                <h1 class="text-2xl font-bold font-display" style="color: var(--color-text-primary);">TV</h1>
-                <span class="live-badge flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium text-white theme-rounded-lg" style="background-color: var(--color-danger);" id="liveBadge">
-                    <span class="w-2 h-2 bg-white rounded-full"></span>
-                    LIVE
-                </span>
+<body class="tv-page">
+    <header class="tv-topbar">
+        <div class="tv-topbar-inner">
+            <div class="tv-brand">
+                <a href="/" class="theme-btn-secondary theme-btn-sm">
+                    <span data-i18n>首页</span>
+                </a>
+                <h1>BootFS TV</h1>
             </div>
-            <div class="flex items-center gap-2 text-sm" style="color: var(--color-text-secondary);">
-                <span class="status-dot w-2.5 h-2.5 rounded-full" id="statusDot" style="background-color: var(--color-success);"></span>
-                <span data-i18n id="statusText">加载中...</span>
-            </div>
+            <a href="/tv/manage" class="theme-btn-secondary theme-btn-sm">
+                <span data-i18n>节目单管理</span>
+            </a>
         </div>
-
-        <div class="theme-rounded-xl overflow-hidden mb-5 relative" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-            <video id="tvPlayer" width="1280" height="720" class="video-js vjs-big-play-centered vjs-theme-fantasy w-full" controls preload="auto">
-                <source src="/tv/playlist.m3u8" type="application/x-mpegURL">
-                <span data-i18n>您的浏览器不支持视频播放</span>
-            </video>
-            <div id="notStartedPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center" style="background-color: #0a0a0a;">
-                <svg class="w-12 h-12 mb-3" style="color: #4a4a4a;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"></path>
-                </svg>
-                <span data-i18n style="color: #4a4a4a;">未开播</span>
+    </header>
+    <main class="tv-layout">
+        <section class="tv-panel tv-broadcast" aria-labelledby="broadcastTitle">
+            <div class="tv-panel-heading">
+                <div class="tv-heading-group">
+                    <h2 id="broadcastTitle" data-i18n>直播</h2>
+                    <span id="streamBadge" class="tv-badge" th:classappend="${stats.live} ? 'is-live' : ''">
+                        <span class="tv-status-dot" aria-hidden="true"></span>
+                        <span id="streamState" data-i18n th:text="${stats.live} ? '直播中' : '未开播'">未开播</span>
+                    </span>
+                </div>
+                <button id="danmakuToggle" class="theme-btn-secondary theme-btn-sm" type="button" aria-pressed="true">
+                    <span data-i18n>弹幕</span>
+                </button>
             </div>
-        </div>
-
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-5">
-            <div class="theme-rounded-xl p-5 text-center" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-                <div class="text-2xl font-bold" style="color: var(--color-accent-primary);" id="totalSegments" th:text="${stats.allTsListSize}">0</div>
-                <div data-i18n class="text-xs mt-1" style="color: var(--color-text-muted);">总切片数</div>
+            <div class="tv-stage" id="tvStage">
+                <video id="tvPlayer" class="video-js vjs-big-play-centered" controls playsinline preload="none" muted
+                       data-i18n-attrs="aria-label" aria-label="直播播放器"></video>
+                <div class="tv-stage-placeholder" id="streamPlaceholder">
+                    <span class="tv-stage-symbol" aria-hidden="true"></span>
+                    <p id="streamNotice" data-i18n>暂无直播节目</p>
+                    <button id="streamRetry" class="theme-btn-secondary theme-btn-sm" type="button" hidden>
+                        <span data-i18n>重试</span>
+                    </button>
+                </div>
+                <div id="danmakuLayer" class="tv-danmaku-layer" aria-hidden="true"></div>
             </div>
-            <div class="theme-rounded-xl p-5 text-center" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-                <div class="text-2xl font-bold" style="color: var(--color-accent-primary);" id="totalDuration" th:attr="data-duration-seconds=${stats.totalDuration}" th:text="${stats.totalDurationFormatted}">0秒</div>
-                <div data-i18n class="text-xs mt-1" style="color: var(--color-text-muted);">总时长</div>
+            <div class="tv-program">
+                <div class="tv-program-title">
+                    <span class="tv-label" data-i18n>当前节目</span>
+                    <strong id="programTitle" th:text="${stats['currentProgram'] != null ? stats['currentProgram']['fileName'] : '—'}">—</strong>
+                    <span id="programNode" class="tv-label"></span>
+                </div>
+                <dl class="tv-program-stats">
+                    <div><dt data-i18n>节目数</dt><dd id="programCount" th:text="${stats.playlistSize}">0</dd></div>
+                    <div><dt data-i18n>总时长</dt><dd id="programDuration" th:attr="data-duration-seconds=${stats.totalDuration}">0</dd></div>
+                </dl>
             </div>
-            <div class="theme-rounded-xl p-5 text-center" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-                <div class="text-2xl font-bold" style="color: var(--color-accent-primary);" id="playlistWindowSize" th:text="${stats.playlistWindowSize}">5</div>
-                <div data-i18n class="text-xs mt-1" style="color: var(--color-text-muted);">播放窗口</div>
+        </section>
+
+        <aside class="tv-panel tv-chat" aria-labelledby="chatTitle">
+            <div class="tv-panel-heading">
+                <div class="tv-heading-group">
+                    <h2 id="chatTitle" data-i18n>聊天室</h2>
+                </div>
+                <span id="chatConnection" class="tv-label" role="status"></span>
             </div>
-            <div class="theme-rounded-xl p-5 text-center" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-                <div class="text-2xl font-bold" style="color: var(--color-accent-primary);" id="elapsedSeconds" th:text="${stats.elapsedSeconds}">0s</div>
-                <div data-i18n class="text-xs mt-1" style="color: var(--color-text-muted);">已播时长</div>
+            <div id="chatLog" class="tv-chat-log" role="log" aria-labelledby="chatTitle" tabindex="0">
+                <div id="chatEmpty" class="tv-chat-empty">
+                    <p id="chatEmptyText" data-i18n>正在载入聊天…</p>
+                </div>
+                <ol id="chatMessages" class="tv-chat-messages"></ol>
             </div>
-            <div class="theme-rounded-xl p-5 text-center" style="background-color: var(--color-bg-secondary); border: 1px solid var(--color-border-primary);">
-                <div class="text-2xl font-bold" style="color: var(--color-accent-primary);" id="currentCyclePosition" th:text="${stats.currentCyclePosition}">0s</div>
-                <div data-i18n class="text-xs mt-1" style="color: var(--color-text-muted);">周期内位置</div>
+            <div class="tv-chat-footer">
+                <div id="chatGuest" class="tv-chat-guest">
+                    <span id="chatHint" class="tv-label" role="status" data-i18n>正在检查登录状态…</span>
+                    <a id="chatLogin" class="theme-btn-secondary theme-btn-sm" hidden data-i18n>SSO 登录</a>
+                </div>
+                <form id="chatForm" class="tv-chat-form" hidden>
+                    <label class="tv-sr-only" for="chatInput" data-i18n>发送聊天消息</label>
+                    <input class="theme-input" id="chatInput" type="text" maxlength="240" th:maxlength="${messageLimit}"
+                           autocomplete="off" required data-i18n-attrs="placeholder" placeholder="发条消息，也会显示为弹幕">
+                    <button id="chatSend" class="theme-btn-primary" type="submit" disabled>
+                        <span data-i18n>发送</span>
+                    </button>
+                </form>
+                <p id="chatError" class="tv-chat-error" role="status" hidden></p>
             </div>
-        </div>
-    </div>
-
-    <script>
-        let player;
-
-        document.addEventListener('DOMContentLoaded', function() {
-            player = videojs('tvPlayer', {
-                language: BootFSI18n.language,
-                fluid: false,
-                responsive: false,
-                liveui: true,
-                autoplay: true,
-                muted: true,
-                controls: true,
-                controlBar: {
-                    progressControl: false,
-                    seekBar: false
-                },
-                html5: {
-                    vhs: {
-                        overrideNative: true,
-                        smoothQualityChange: true,
-                        fastQualityChange: true
-                    },
-                    nativeAudioTracks: false,
-                    nativeVideoTracks: false
-                }
-            });
-
-            player.on('loadedmetadata', function() {
-                player.play().catch(function(err) {});
-            });
-
-            player.on('playing', function() {
-                player.muted(false);
-                player.volume(0.2);
-            });
-
-            updateStatusFromServer();
-            setInterval(updateStatusFromServer, 5000);
-        });
-
-        function showPlayer() {
-            document.getElementById('notStartedPlaceholder').style.display = 'none';
-        }
-
-        function hidePlayer() {
-            document.getElementById('notStartedPlaceholder').style.display = '';
-        }
-
-        function updateStatus(online) {
-            const dot = document.getElementById('statusDot');
-            const text = document.getElementById('statusText');
-            const badge = document.getElementById('liveBadge');
-
-            if (online) {
-                dot.classList.remove('loading');
-                dot.style.backgroundColor = 'var(--color-success)';
-                text.textContent = BootFSI18n.t('直播中');
-                if (badge) badge.style.display = '';
-                showPlayer();
-            } else {
-                dot.classList.add('loading');
-                dot.style.backgroundColor = 'var(--color-warning)';
-                text.textContent = BootFSI18n.t('等待直播...');
-                if (badge) badge.style.display = 'none';
-                hidePlayer();
-            }
-        }
-
-        function updateNotStarted() {
-            const dot = document.getElementById('statusDot');
-            const text = document.getElementById('statusText');
-            const badge = document.getElementById('liveBadge');
-
-            dot.classList.remove('loading');
-            dot.style.backgroundColor = 'var(--color-text-muted)';
-            text.textContent = BootFSI18n.t('未开播');
-            if (badge) badge.style.display = 'none';
-            hidePlayer();
-        }
-
-        function updateStatusFromServer() {
-            fetch('/tv/status')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('totalSegments').textContent = data.allTsListSize;
-                    document.getElementById('totalDuration').textContent = BootFSI18n.duration(data.totalDuration);
-                    document.getElementById('playlistWindowSize').textContent = data.playlistWindowSize;
-                    document.getElementById('elapsedSeconds').textContent = data.elapsedSeconds || '--';
-                    document.getElementById('currentCyclePosition').textContent = data.currentCyclePosition || '--';
-
-                    if (data.live) {
-                        updateStatus(true);
-                    } else if (data.initialized) {
-                        updateNotStarted();
-                    } else {
-                        updateStatus(false);
-                    }
-                })
-                .catch(err => {
-                    console.error('Failed to get status:', err);
-                    updateStatus(false);
-                });
-        }
-    </script>
+        </aside>
+    </main>
 </body>
 </html>

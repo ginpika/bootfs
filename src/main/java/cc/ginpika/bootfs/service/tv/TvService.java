@@ -1,376 +1,285 @@
 package cc.ginpika.bootfs.service.tv;
 
-import com.alibaba.fastjson2.JSONObject;
 import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.core.Context;
-import cc.ginpika.bootfs.domain.dto.FileObject;
-import lombok.Data;
+import cc.ginpika.bootfs.dto.SsoUser;
+import cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore;
+import cc.ginpika.bootfs.kernel.metadata.MetadataStore;
+import cc.ginpika.bootfs.service.FederationService;
+import cc.ginpika.bootfs.service.tv.TvCatalog.Program;
+import cc.ginpika.bootfs.service.tv.TvCatalog.Ref;
+import cc.ginpika.bootfs.service.tv.TvCatalog.Video;
+import cc.ginpika.bootfs.service.tv.TvPlaylist.Schedule;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.io.Resource;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import javax.annotation.PostConstruct;
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
+import javax.annotation.PreDestroy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.stream.Collectors;
+import java.util.concurrent.*;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class TvService {
+    private static final String SCHEDULE_PREFIX = "/tv/schedule/";
+    private static final String LEGACY_IMPORTED = "/tv/legacy-imported";
+    static final int MESSAGE_LIMIT = 240;
+    private static final int CHAT_HISTORY_SIZE = 100;
+    private static final long CHAT_TTL_MS = TimeUnit.HOURS.toMillis(24);
+
     private final Context context;
-    private final TfsConfig tfsConfig;
-    @org.springframework.beans.factory.annotation.Autowired private cc.ginpika.bootfs.service.hls.HlsFileService hlsFiles;
+    private final TfsConfig config;
+    private final MetadataStore metadata;
+    private final FederationService federation;
+    private final TvCatalog catalog;
 
-    private static final int PLAYLIST_WINDOW_SIZE = 5;
+    private final ScheduledExecutorService peerSync = Executors.newSingleThreadScheduledExecutor(job -> {
+        Thread thread = new Thread(job, "bootfs-tv-federation");
+        thread.setDaemon(true);
+        return thread;
+    });
 
-    private List<TsSegment> allTsList = new ArrayList<>();
-    private double totalDuration = 0;
-    private double maxSegmentDuration = 10;
+    private String room;
+    private Schedule schedule;
+    private TvPlaylist playlist;
+    private Set<String> members = Set.of();
 
-    private volatile long streamStartTimestamp = 0;
-    private volatile boolean initialized = false;
-    private long mediaSequence = 0;
-    private int lastCurrentIdx = -1;
-
-    private List<String> playlistUuids = new ArrayList<>();
-    private Path playlistConfigPath;
-
-    @Data
-    public static class HlsVideoInfo {
-        private String uuid;
-        private String fileName;
-        private int segmentCount;
-        private double totalDuration;
-        private boolean enabled;
-        private int order;
-    }
-
-    @Data
-    public static class TsSegment {
-        private String uuid;
-        private String fileName;
-        private double duration;
-        private int segmentIndex;
-    }
+    public record Message(String id, String author, String text, long sentAt) {}
+    private record LocalMessage(String userId, Message message) {}
+    private final Deque<LocalMessage> localChat = new ArrayDeque<>();
+    private final Map<String, List<Message>> peerChat = new HashMap<>();
 
     @PostConstruct
-    public void init() {
-        playlistConfigPath = Path.of(tfsConfig.getPathPrefix(), "tv-playlist.json");
-        loadPlaylistConfig();
-
-        log.info("TvService initializing...");
-
-        // Context finishes its durable inventory load before this bean is initialized.
-        refreshAllTsList();
-        log.info("TvService initialized successfully");
+    void start() {
+        updateRoom();
+        importLegacy();
+        peerSync.scheduleWithFixedDelay(this::syncSafely, 0, 2, TimeUnit.SECONDS);
     }
 
-    public synchronized void reinitialize() {
-        log.info("Reinitializing TvService...");
-        allTsList.clear();
-        totalDuration = 0;
-        maxSegmentDuration = 10;
-        lastCurrentIdx = -1;
-        mediaSequence = 0;
+    @PreDestroy
+    void stop() { peerSync.shutdownNow(); }
 
-        refreshAllTsList();
-        log.info("TvService reinitialized");
-    }
-
-    public synchronized void refreshAllTsList() {
+    private void importLegacy() {
+        Path legacy = Path.of(config.getPathPrefix(), "tv-playlist.json");
+        if (!Files.isRegularFile(legacy) || metadata.get(LEGACY_IMPORTED) != null) return;
         try {
-            List<FileObject> hlsFiles = getHlsFilesInOrder();
-
-            log.info("Found {} HLS videos in playlist", hlsFiles.size());
-
-            List<TsSegment> newAllTsList = new ArrayList<>();
-
-            for (FileObject file : hlsFiles) {
-                List<TsSegment> segments = parseHlsSegments(file);
-                if (segments != null && !segments.isEmpty()) {
-                    newAllTsList.addAll(segments);
-                    log.info("Parsed {} segments from {}", segments.size(), file.getFileName());
+            if (schedule == null) {
+                List<String> ids = JSON.parseObject(Files.readString(legacy)).getList("uuids", String.class);
+                if (ids != null) {
+                    Map<String, Program> ready = new HashMap<>();
+                    catalog.localPrograms(ids).forEach(program -> ready.put(program.ref().uuid(), program));
+                    List<Program> ordered = ids.stream().map(ready::get).filter(Objects::nonNull).toList();
+                    install(new Schedule(1, context.uuid, System.currentTimeMillis(), ordered));
                 }
             }
-
-            this.allTsList = newAllTsList;
-
-            this.totalDuration = newAllTsList.stream()
-                    .mapToDouble(TsSegment::getDuration)
-                    .sum();
-            this.maxSegmentDuration = newAllTsList.stream()
-                    .mapToDouble(TsSegment::getDuration)
-                    .max()
-                    .orElse(10);
-
-            if (!initialized) {
-                this.streamStartTimestamp = System.currentTimeMillis();
-                initialized = true;
-            }
-
-            log.info("AllTsList refreshed: {} segments, total duration: {}s",
-                    newAllTsList.size(), String.format("%.1f", totalDuration));
-        } catch (Exception e) {
-            log.error("Failed to refresh allTsList", e);
+            metadata.put(LEGACY_IMPORTED, "true");
+        } catch (Exception failure) {
+            log.warn("Could not import the legacy TV playlist", failure);
         }
     }
 
-    private List<FileObject> getHlsFilesInOrder() {
-        List<FileObject> allFiles = new ArrayList<>(context.STORAGE.values());
-
-        Map<String, FileObject> hlsFileMap = allFiles.stream()
-                .filter(f -> "1".equalsIgnoreCase(f.getHlsAvailable()))
-                .collect(Collectors.toMap(FileObject::getUuid, f -> f, (a, b) -> a));
-
-        if (playlistUuids.isEmpty()) {
-            return Collections.emptyList();
+    // Every operation is scoped to the current group. Pairing or leaving cannot reuse another room's chat.
+    private void updateRoom() {
+        String current = metadata instanceof DynamicMetadataStore dynamic ? dynamic.groupId() : "local/" + context.uuid;
+        Set<String> currentMembers = new HashSet<>(federation.peers().keySet());
+        currentMembers.add(context.uuid);
+        boolean changed = !current.equals(room);
+        if (changed) {
+            String raw = metadata.get(SCHEDULE_PREFIX + current);
+            schedule = raw == null ? null : JSON.parseObject(raw, Schedule.class);
+            room = current;
+            localChat.clear();
+            peerChat.clear();
         }
-
-        List<FileObject> orderedFiles = new ArrayList<>();
-        for (String uuid : playlistUuids) {
-            FileObject file = hlsFileMap.get(uuid);
-            if (file != null) {
-                orderedFiles.add(file);
-            }
-        }
-
-        return orderedFiles;
-    }
-
-    private List<TsSegment> parseHlsSegments(FileObject file) {
-        try {
-            Path m3u8Path = Path.of(tfsConfig.getPathPrefix(), "hls", file.getUuid(), "playlist.m3u8");
-            if (!Files.exists(m3u8Path)) {
-                log.warn("M3U8 file not found for uuid: {}", file.getUuid());
-                return null;
-            }
-
-            List<TsSegment> segments = new ArrayList<>();
-            int segmentIndex = 0;
-
-            try (BufferedReader reader = new BufferedReader(new FileReader(m3u8Path.toFile()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    line = line.trim();
-                    if (line.startsWith("#EXTINF:")) {
-                        String durationStr = line.substring(8).replace(",", "").trim();
-                        try {
-                            double duration = Double.parseDouble(durationStr);
-
-                            String tsFile = reader.readLine();
-                            if (tsFile != null && tsFile.endsWith(".ts")) {
-                                TsSegment segment = new TsSegment();
-                                segment.setUuid(file.getUuid());
-                                segment.setFileName(tsFile.trim());
-                                segment.setDuration(duration);
-                                segment.setSegmentIndex(segmentIndex++);
-                                segments.add(segment);
-                            }
-                        } catch (NumberFormatException e) {
-                            log.warn("Failed to parse duration: {}", durationStr);
-                        }
-                    }
-                }
-            }
-
-            return segments;
-        } catch (Exception e) {
-            log.error("Failed to parse HLS video: {}", file.getUuid(), e);
-            return null;
+        if (changed || !currentMembers.equals(members)) {
+            members = currentMembers;
+            peerChat.keySet().retainAll(members);
+            playlist = new TvPlaylist(schedule, members);
         }
     }
 
-    public synchronized String generatePlaylistM3u8() {
-        if (allTsList.isEmpty()) {
-            return "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXT-X-ENDLIST\n";
-        }
-
-        // 服务端时钟减一点缓冲，避免因系统时钟微小偏差让播放器被推着跳帧
-        double elapsed = (System.currentTimeMillis() - streamStartTimestamp) / 1000.0 - 3.0;
-        if (elapsed < 0) elapsed = 0;
-        double positionInCycle = elapsed % totalDuration;
-
-        // 根据时间流逝计算当前应播到的切片位置
-        int currentIdx = 0;
-        double accumulated = 0;
-        for (int i = 0; i < allTsList.size(); i++) {
-            accumulated += allTsList.get(i).getDuration();
-            if (accumulated > positionInCycle) {
-                currentIdx = i;
-                break;
-            }
-        }
-
-        // 基于 currentIdx 的实际变化推进序列号，保证单调递增且不跳变
-        if (lastCurrentIdx >= 0 && currentIdx != lastCurrentIdx) {
-            int advance = (currentIdx - lastCurrentIdx + allTsList.size()) % allTsList.size();
-            if (advance == 0) advance = allTsList.size();
-            mediaSequence += advance;
-        }
-        lastCurrentIdx = currentIdx;
-
-        // 生成当前窗口的 playlist
-        StringBuilder sb = new StringBuilder();
-        sb.append("#EXTM3U\n");
-        sb.append("#EXT-X-VERSION:3\n");
-        sb.append("#EXT-X-TARGETDURATION:").append((int) Math.ceil(maxSegmentDuration)).append("\n");
-        sb.append("#EXT-X-MEDIA-SEQUENCE:").append(mediaSequence).append("\n");
-
-        String previousUuid = null;
-        int previousSegmentIndex = -1;
-        for (int i = 0; i < PLAYLIST_WINDOW_SIZE; i++) {
-            int idx = (currentIdx + i) % allTsList.size();
-            TsSegment segment = allTsList.get(idx);
-
-            boolean isDifferentSource = previousUuid != null && !previousUuid.equals(segment.getUuid());
-            boolean isLoopPlayback = previousSegmentIndex >= 0 && segment.getSegmentIndex() <= previousSegmentIndex;
-
-            if (isDifferentSource || isLoopPlayback) {
-                sb.append("#EXT-X-DISCONTINUITY\n");
-            }
-
-            sb.append("#EXTINF:").append(String.format("%.3f", segment.getDuration())).append(",\n");
-            sb.append("/tv/ts/").append(segment.getUuid()).append("/").append(segment.getFileName()).append("\n");
-
-            previousUuid = segment.getUuid();
-            previousSegmentIndex = segment.getSegmentIndex();
-        }
-
-        return sb.toString();
+    private void install(Schedule next) {
+        metadata.put(SCHEDULE_PREFIX + room, JSON.toJSONString(next));
+        schedule = next;
+        playlist = new TvPlaylist(schedule, members);
     }
 
-    @SuppressWarnings("null")
-    public Resource getTsSegment(String uuid, String fileName) {
-        if (fileName == null || !fileName.matches("[A-Za-z0-9_-][A-Za-z0-9_.-]{0,200}\\.ts")) return null;
-        return hlsFiles.mappingToLocal(uuid, fileName);
+    public List<Video> getAllHlsVideos() {
+        List<Video> videos = new ArrayList<>(catalog.videos());
+        Set<String> present = new HashSet<>();
+        videos.forEach(video -> present.add(video.key()));
+        for (Program program : programs()) {
+            if (present.add(program.ref().key())) videos.add(program.video(false));
+        }
+        videos.sort(Comparator.comparing(Video::fileName, String.CASE_INSENSITIVE_ORDER).thenComparing(Video::key));
+        return videos;
     }
 
-    public Map<String, Object> getStatus() {
-        Map<String, Object> status = new HashMap<>();
-        status.put("initialized", initialized);
-        status.put("live", initialized && !allTsList.isEmpty());
-        status.put("allTsListSize", allTsList.size());
-        status.put("totalDuration", totalDuration);
-        status.put("totalDurationFormatted", formatDuration(totalDuration));
-        status.put("maxSegmentDuration", maxSegmentDuration);
-        status.put("playlistWindowSize", PLAYLIST_WINDOW_SIZE);
-        status.put("playlistSize", playlistUuids.size());
-        status.put("streamStartTimestamp", streamStartTimestamp);
+    private synchronized List<Program> programs() {
+        updateRoom();
+        return schedule == null ? List.of() : schedule.programs();
+    }
 
-        if (initialized && !allTsList.isEmpty()) {
-            double elapsed = (System.currentTimeMillis() - streamStartTimestamp) / 1000.0;
-            status.put("elapsedSeconds", String.format("%.1f", elapsed));
-            status.put("currentCyclePosition", String.format("%.1f", elapsed % totalDuration));
-        } else {
-            status.put("elapsedSeconds", "--");
-            status.put("currentCyclePosition", "--");
+    public List<String> getPlaylistUuids() { return programs().stream().map(p -> p.ref().key()).toList(); }
+
+    public void savePlaylist(List<String> keys) {
+        List<Ref> refs = keys.stream().map(catalog::ref).toList();
+        String originalRoom;
+        Map<Ref, Program> previous = new HashMap<>();
+        synchronized (this) {
+            programs().forEach(program -> previous.put(program.ref(), program));
+            originalRoom = room;
         }
+        List<Program> next = catalog.load(refs, previous);
+        synchronized (this) {
+            updateRoom();
+            if (!originalRoom.equals(room) || refs.stream().anyMatch(ref -> !members.contains(ref.nodeId()))) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "TV membership changed");
+            }
+            long revision = schedule == null ? 1 : schedule.revision() + 1;
+            install(new Schedule(revision, context.uuid, System.currentTimeMillis(), next));
+        }
+    }
 
+    public void reinitialize() { savePlaylist(getPlaylistUuids()); }
+
+    private synchronized TvPlaylist currentPlaylist() {
+        updateRoom();
+        return playlist;
+    }
+
+    public String generatePlaylistM3u8() { return currentPlaylist().manifest(System.currentTimeMillis()); }
+
+    Ref selectedSegment(String node, String uuid, String filename) {
+        if (!TvCatalog.validId(uuid) || !TvCatalog.validSegment(filename)) return null;
+        TvPlaylist current = currentPlaylist();
+        if (node == null) return current.find(uuid, filename);
+        if (!TvCatalog.validId(node)) return null;
+        Ref ref = new Ref(node, uuid);
+        return current.includes(ref, filename) ? ref : null;
+    }
+
+    public synchronized Map<String, Object> getStatus() {
+        TvPlaylist current = currentPlaylist();
+        Map<String, Object> status = new LinkedHashMap<>();
+        status.put("initialized", true);
+        status.put("live", current.live());
+        status.put("allTsListSize", current.size());
+        status.put("totalDuration", current.duration());
+        status.put("totalDurationFormatted", formatDuration(current.duration()));
+        status.put("maxSegmentDuration", current.targetDuration());
+        status.put("playlistWindowSize", TvPlaylist.WINDOW_SIZE);
+        status.put("playlistSize", schedule == null ? 0 : schedule.programs().size());
+        status.put("streamStartTimestamp", current.startedAt());
+        status.put("streamVersion", current.version());
+        status.put("elapsedSeconds", "--");
+        status.put("currentCyclePosition", "--");
+        if (current.live()) {
+            var position = current.position(System.currentTimeMillis());
+            status.put("elapsedSeconds", String.format(Locale.ROOT, "%.1f", position.elapsed()));
+            status.put("currentCyclePosition", String.format(Locale.ROOT, "%.1f", position.offset()));
+            var program = current.currentProgram(position);
+            status.put("currentProgram", Map.of("fileName", program.fileName(), "nodeId", program.ref().nodeId()));
+        }
         return status;
     }
 
-    @SuppressWarnings("unused")
-    private double calculateTotalDuration() {
-        return allTsList.stream()
-                .mapToDouble(TsSegment::getDuration)
-                .sum();
+    private static String formatDuration(double seconds) {
+        long total = (long) seconds;
+        if (total >= 3600) return "%d小时%d分钟%d秒".formatted(total / 3600, total / 60 % 60, total % 60);
+        if (total >= 60) return "%d分钟%d秒".formatted(total / 60, total % 60);
+        return total + "秒";
     }
 
-    private String formatDuration(double seconds) {
-        int hours = (int) (seconds / 3600);
-        int minutes = (int) ((seconds % 3600) / 60);
-        int secs = (int) (seconds % 60);
+    synchronized List<Message> chat() {
+        updateRoom();
+        List<Message> messages = new ArrayList<>(localMessages());
+        peerChat.values().forEach(messages::addAll);
+        long cutoff = System.currentTimeMillis() - CHAT_TTL_MS;
+        messages.removeIf(message -> message.sentAt() < cutoff);
+        messages.sort(Comparator.comparingLong(Message::sentAt).thenComparing(Message::id));
+        return messages.subList(Math.max(0, messages.size() - CHAT_HISTORY_SIZE), messages.size());
+    }
 
-        if (hours > 0) {
-            return String.format("%d小时%d分钟%d秒", hours, minutes, secs);
-        } else if (minutes > 0) {
-            return String.format("%d分钟%d秒", minutes, secs);
-        } else {
-            return String.format("%d秒", secs);
+    synchronized Message post(SsoUser user, String input) {
+        updateRoom();
+        String text = Objects.toString(input, "").strip();
+        if (text.isEmpty() || text.length() > MESSAGE_LIMIT || text.codePoints().anyMatch(Character::isISOControl)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid TV message");
         }
+        String author = firstText(user.getNickname(), user.getUsername(), "SSO").replaceAll("\\p{Cntrl}", "").strip();
+        if (author.isEmpty()) author = "SSO";
+        if (author.codePointCount(0, author.length()) > 80) author = author.substring(0, author.offsetByCodePoints(0, 80));
+        String userId = firstText(user.getId(), user.getUsername(), author);
+        long now = System.currentTimeMillis();
+        if (localChat.stream().anyMatch(entry -> entry.userId().equals(userId) && now - entry.message().sentAt() < 750)) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "TV messages are being sent too quickly");
+        }
+        Message message = new Message(UUID.randomUUID().toString(), author, text, now);
+        localChat.addLast(new LocalMessage(userId, message));
+        if (localChat.size() > CHAT_HISTORY_SIZE) localChat.removeFirst();
+        return message;
     }
 
-    public boolean isInitialized() {
-        return initialized;
+    private static String firstText(String... values) {
+        for (String value : values) if (value != null && !value.isBlank()) return value;
+        return "";
     }
 
-    // ========== 管理功能 ==========
-
-    public List<HlsVideoInfo> getAllHlsVideos() {
-        List<FileObject> allFiles = new ArrayList<>(context.STORAGE.values());
-
-        return allFiles.stream()
-                .filter(f -> "1".equalsIgnoreCase(f.getHlsAvailable()))
-                .map(f -> {
-                    HlsVideoInfo info = new HlsVideoInfo();
-                    info.setUuid(f.getUuid());
-                    info.setFileName(f.getFileName());
-                    info.setEnabled(playlistUuids.contains(f.getUuid()));
-                    info.setOrder(playlistUuids.indexOf(f.getUuid()));
-
-                    List<TsSegment> segments = parseHlsSegments(f);
-                    if (segments != null) {
-                        info.setSegmentCount(segments.size());
-                        info.setTotalDuration(segments.stream().mapToDouble(TsSegment::getDuration).sum());
-                    } else {
-                        info.setSegmentCount(0);
-                        info.setTotalDuration(0);
-                    }
-
-                    return info;
-                })
-                .sorted((a, b) -> {
-                    if (a.getOrder() < 0 && b.getOrder() < 0) return a.getFileName().compareTo(b.getFileName());
-                    if (a.getOrder() < 0) return 1;
-                    if (b.getOrder() < 0) return -1;
-                    return Integer.compare(a.getOrder(), b.getOrder());
-                })
-                .collect(Collectors.toList());
+    private List<Message> localMessages() {
+        long cutoff = System.currentTimeMillis() - CHAT_TTL_MS;
+        while (!localChat.isEmpty() && localChat.getFirst().message().sentAt() < cutoff) localChat.removeFirst();
+        return localChat.stream().map(LocalMessage::message).toList();
     }
 
-    public synchronized void savePlaylist(List<String> uuids) {
-        this.playlistUuids = new ArrayList<>(uuids);
-        savePlaylistConfig();
-        reinitialize();
+    synchronized Map<String, Object> peerState(JSONObject known) {
+        updateRoom();
+        if (!room.equals(known.getString("room"))) throw new ResponseStatusException(HttpStatus.CONFLICT);
+        Map<String, Object> state = new HashMap<>();
+        state.put("room", room);
+        state.put("messages", localMessages());
+        if (schedule != null && schedule.compare(known.getLongValue("revision"), Objects.toString(known.getString("author"), "")) > 0) {
+            state.put("schedule", schedule);
+        }
+        return state;
     }
 
-    private void loadPlaylistConfig() {
-        try {
-            if (Files.exists(playlistConfigPath)) {
-                String content = Files.readString(playlistConfigPath);
-                JSONObject json = JSONObject.parseObject(content);
-                this.playlistUuids = json.getList("uuids", String.class);
-                log.info("Loaded playlist config: {} videos", playlistUuids.size());
-            } else {
-                this.playlistUuids = new ArrayList<>();
-                log.info("No playlist config found, using default");
+    private void syncSafely() {
+        try { syncPeers(); }
+        catch (RuntimeException failure) { log.warn("Could not update TV room from peers", failure); }
+    }
+
+    private void syncPeers() {
+        JSONObject known;
+        synchronized (this) {
+            updateRoom();
+            if (members.size() == 1) return;
+            known = new JSONObject(Map.of("room", room, "revision", schedule == null ? 0 : schedule.revision(),
+                    "author", schedule == null ? "" : schedule.author()));
+        }
+        var replies = federation.queryPeerData("tv/state", known);
+        synchronized (this) {
+            updateRoom();
+            if (!room.equals(known.getString("room"))) return;
+            Schedule latest = schedule;
+            for (var entry : replies.entrySet()) {
+                String node = entry.getKey();
+                JSONObject reply = entry.getValue();
+                if (!members.contains(node) || !room.equals(reply.getString("room"))) continue;
+                var messages = reply.getJSONArray("messages");
+                if (messages != null) peerChat.put(node, messages.toJavaList(Message.class));
+                Schedule remote = reply.getObject("schedule", Schedule.class);
+                if (remote != null && remote.newerThan(latest)) latest = remote;
             }
-        } catch (Exception e) {
-            log.error("Failed to load playlist config", e);
-            this.playlistUuids = new ArrayList<>();
+            if (latest != schedule) install(latest);
         }
-    }
-
-    private void savePlaylistConfig() {
-        try {
-            JSONObject json = new JSONObject();
-            json.put("uuids", playlistUuids);
-
-            Files.writeString(playlistConfigPath, json.toJSONString());
-            log.info("Saved playlist config: {} videos", playlistUuids.size());
-        } catch (IOException e) {
-            log.error("Failed to save playlist config", e);
-        }
-    }
-
-    public List<String> getPlaylistUuids() {
-        return new ArrayList<>(playlistUuids);
     }
 }

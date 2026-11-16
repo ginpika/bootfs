@@ -11,9 +11,7 @@ import cc.ginpika.bootfs.domain.dto.Tag;
 import cc.ginpika.bootfs.core.Context;
 import cc.ginpika.bootfs.service.ClusterProxyService;
 import cc.ginpika.bootfs.service.FolderService;
-import cc.ginpika.bootfs.service.ReverseProxyService;
 import cc.ginpika.bootfs.service.etcd.EtcdService;
-import cc.ginpika.bootfs.service.meilisearch.ImageHostDocument;
 import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
 import cc.ginpika.bootfs.service.ai.AiMetadataService;
 import cc.ginpika.bootfs.domain.result.SearchResult;
@@ -25,7 +23,6 @@ import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -54,7 +51,6 @@ public class WebUIApiController {
     private final EtcdService etcdService;
     private final MeiliSearchService meiliSearchService;
     private final AiMetadataService aiMetadataService;
-    private final ReverseProxyService reverseProxyService;
     private final ClusterProxyService clusterProxyService;
     @Autowired private cc.ginpika.bootfs.service.FederationService federation;
 
@@ -287,36 +283,6 @@ public class WebUIApiController {
         meiliSearchService.setResourcePublic(uuid, enabled, context.buildProxyUrl(uuid));
         synchronizeLocalResourceMetadata(uuid);
         return resourceMutationResponse();
-    }
-
-    @GetMapping("/setu")
-    public void randomPicturesApi(@RequestParam(value = "time", required = false) String clientTime,
-                                  HttpServletRequest request, HttpServletResponse response) {
-        String proxyUrl = meiliSearchService.querySetu();
-        if (proxyUrl == null) {
-            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-            return;
-        }
-        String uuid = proxyUrl.substring(proxyUrl.lastIndexOf("/") + 1);
-        reverseProxyService.reverseProxyFile(uuid, response, request);
-    }
-
-    @GetMapping("/setu-url")
-    public ResponseEntity<String> randomPicturesUrl() {
-        String url = meiliSearchService.querySetu();
-        if (url == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok().body(url);
-    }
-
-    /** One round trip for the public wall. Each {@code /setu-url} call otherwise rescans the gallery. */
-    @GetMapping("/setu-urls")
-    public ResponseEntity<List<String>> randomPictureUrls(@RequestParam(value = "count", defaultValue = "240") int count) {
-        if (count < 1 || count > 480) return ResponseEntity.badRequest().build();
-        List<String> urls = meiliSearchService.querySetu(count);
-        if (urls.isEmpty()) return ResponseEntity.notFound().build();
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(urls);
     }
 
     // ======================== 标签管理 API ========================

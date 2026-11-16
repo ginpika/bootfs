@@ -19,6 +19,10 @@ import java.util.Set;
 @Slf4j
 @Component
 public class SsoInterceptor implements HandlerInterceptor {
+    private static final Set<String> TV_VIEWER_PATHS = Set.of(
+            "/tv", "/tv/", "/tv/status", "/tv/playlist.m3u8", "/tv/chat",
+            "/tv/ts/{node}/{uuid}/{fileName}", "/tv/ts/{uuid}/{fileName}");
+
     @Autowired
     private cc.ginpika.bootfs.kernel.cluster.ClusterCredentials credentials;
     @Autowired
@@ -85,9 +89,21 @@ public class SsoInterceptor implements HandlerInterceptor {
             response.setStatus(401); response.setContentType("application/json");
             response.getWriter().write("{\"error\":\"Pairing authorization required\"}"); return false;
         }
-        boolean publicRead = Set.of("/f/{uuid}", "/p/{uuid}", "/thumb/{uuid}", "/setu", "/setu-url", "/setu-urls",
-                "/video-player", "/album/**", "/gallery", "/tv", "/tv/", "/tv/status", "/tv/playlist.m3u8",
-                "/tv/ts/{uuid}/{fileName}", "/hls/{folder}/{file}").contains(path);
+        if ("/tv/chat/session".equals(path) || ("/tv/chat".equals(path) && !read)) {
+            privateResponse(request, response);
+            String token = ssoService.isEnabled() ? getTokenFromCookie(request) : null;
+            if (!read && (token == null || token.isEmpty())) return deny(response, 401, "SSO login required");
+            if (!BrowserRequestPolicy.allows(request, !read, appConfig.getWebEntrypoint())) {
+                return deny(response, 403, "Same-origin request required");
+            }
+            SsoUser user = checkUser(token);
+            if (user == null && !read) return deny(response, 401, "SSO login required");
+            if (user != null) request.setAttribute("ssoUser", user);
+            return true;
+        }
+        boolean tvViewer = read && TV_VIEWER_PATHS.contains(path);
+        boolean publicRead = tvViewer || Set.of("/f/{uuid}", "/p/{uuid}", "/thumb/{uuid}", "/setu", "/setu-url", "/setu-urls",
+                "/video-player", "/album/**", "/gallery", "/gallery/image/{node}/{uuid}", "/hls/{folder}/{file}").contains(path);
         if (read && config.isPublicSharingEnabled() && publicRead) return true;
         privateResponse(request, response);
         boolean navigation = !path.equals("/api/logout") && BrowserRequestPolicy.isDocumentNavigation(request);
@@ -100,32 +116,32 @@ public class SsoInterceptor implements HandlerInterceptor {
 
         String token = getTokenFromCookie(request);
 
-        if (token == null || token.isEmpty()) {
-            redirectToLogin(request, response);
-            return false;
-        }
-
-        try {
-            SsoSession session = ssoService.checkSession(token).block(Duration.ofSeconds(5));
-
-            if (session != null && session.isAuthenticated()) {
-                SsoUser user = session.getUser();
-                if (user == null || !config.permitsRole(user.getRole())) {
-                    return deny(response, 403, "Application administrator role required");
-                }
-                if (!navigation && !BrowserRequestPolicy.allows(request, !read || path.equals("/api/logout"), appConfig.getWebEntrypoint())) {
-                    return deny(response, 403, "Same-origin request required");
-                }
-                request.setAttribute("ssoUser", user);
-                request.setAttribute("ssoToken", token);
-                return true;
+        SsoUser user = checkUser(token);
+        if (user != null) {
+            if (!tvViewer && !config.permitsRole(user.getRole())) {
+                return deny(response, 403, "Application administrator role required");
             }
-        } catch (Exception e) {
-            log.warn("SSO session verification failed");
+            if (!navigation && !BrowserRequestPolicy.allows(request, !read || path.equals("/api/logout"), appConfig.getWebEntrypoint())) {
+                return deny(response, 403, "Same-origin request required");
+            }
+            request.setAttribute("ssoUser", user);
+            request.setAttribute("ssoToken", token);
+            return true;
         }
 
         redirectToLogin(request, response);
         return false;
+    }
+
+    private SsoUser checkUser(String token) {
+        if (token == null || token.isEmpty()) return null;
+        try {
+            SsoSession session = ssoService.checkSession(token).block(Duration.ofSeconds(5));
+            return session != null && session.isAuthenticated() ? session.getUser() : null;
+        } catch (Exception failure) {
+            log.warn("SSO session verification failed");
+            return null;
+        }
     }
 
     private void privateResponse(HttpServletRequest request, HttpServletResponse response) {

@@ -65,6 +65,125 @@ class FederationIntegrationTest {
     void flush() throws Exception { for(int i=0;i<3;i++) for(Node n:nodes) if(n.app!=null) n.store().advance(); }
     @AfterEach void close() { for(Node n:nodes) n.close(); }
 
+    @Test @Timeout(90) void galleryAndTvShareMediaAndSsoChatAcrossNodes() throws Exception {
+        var sso = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        sso.createContext("/api/sso/session", exchange -> {
+            boolean signedIn = Objects.toString(exchange.getRequestHeaders().getFirst("Cookie"), "").contains("sso_token=viewer-token");
+            String body = signedIn
+                    ? "{\"authenticated\":true,\"user\":{\"id\":\"viewer-1\",\"nickname\":\"Viewer\",\"role\":\"member\"}}"
+                    : "{\"authenticated\":false}";
+            byte[] bytes = body.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (var output = exchange.getResponseBody()) { output.write(bytes); }
+        });
+        sso.start();
+        try {
+            Node a = new Node("media-a", false);
+            Node b = new Node("media-b", false, "--sso.server-url=http://127.0.0.1:" + sso.getAddress().getPort(),
+                    "--sso.allowed-roles=admin");
+            join(b, a);
+
+            String left = a.upload("left.jpg", "left"), right = b.upload("right.webp", "right");
+            String privateImage = b.upload("private.png", "private");
+            assertEquals(200, request(a, "POST", "/publicAccess/" + left, null, null).statusCode());
+            assertEquals(200, request(a, "POST", "/publicAccess/" + right, null, null).statusCode());
+            String leftUrl = "/gallery/image/" + a.id + "/" + left;
+            String rightUrl = "/gallery/image/" + b.id + "/" + right;
+            String privateUrl = "/gallery/image/" + b.id + "/" + privateImage;
+            assertEquals(400, request(a, "GET", "/setu-urls?count=0", null, null).statusCode());
+            assertEquals(400, request(a, "GET", "/setu-urls?count=481", null, null).statusCode());
+            assertEquals(Set.of(leftUrl, rightUrl), new HashSet<>(JSON.parseArray(
+                    request(a, "GET", "/setu-urls?count=8", null, null).body()).toJavaList(String.class)));
+            assertEquals(Set.of(leftUrl, rightUrl), new HashSet<>(JSON.parseArray(
+                    request(b, "GET", "/setu-urls?count=8", null, null).body()).toJavaList(String.class)));
+            assertEquals("right", request(a, "GET", rightUrl + "?thumbnail=true", null, null).body());
+            assertEquals(200, request(a, "HEAD", rightUrl, null, null).statusCode());
+            assertEquals(404, request(a, "GET", privateUrl, null, null).statusCode());
+
+            String videoA = tvFixture(a, "first.mp4"), videoB = tvFixture(b, "second.mp4");
+            String other = tvFixture(b, "unscheduled.mp4");
+            String keyA = a.id + ":" + videoA, keyB = b.id + ":" + videoB;
+            Set<String> keys = new HashSet<>();
+            for (Object video : JSON.parseArray(request(a, "GET", "/tv/api/videos", null, null).body())) {
+                keys.add(((JSONObject) video).getString("key"));
+            }
+            assertEquals(Set.of(keyA, keyB, b.id + ":" + other), keys);
+            var saved = request(a, "POST", "/tv/api/playlist", JSON.toJSONString(List.of(keyB, keyA)), null);
+            assertEquals(200, saved.statusCode(), saved.body());
+            awaitMedia(() -> JSON.parseObject(request(b, "GET", "/tv/status", null, null).body()).getBooleanValue("live"));
+            assertEquals(List.of(keyB, keyA), JSON.parseArray(
+                    request(b, "GET", "/tv/api/playlist", null, null).body()).toJavaList(String.class));
+            String tsB = "/tv/ts/" + b.id + "/" + videoB + "/segment_00000.ts";
+            String tsA = "/tv/ts/" + a.id + "/" + videoA + "/segment_00000.ts";
+            assertTrue(request(a, "GET", "/tv/playlist.m3u8", null, null).body().contains(tsB));
+            assertEquals("second.mp4", request(a, "GET", tsB, null, null).body());
+            assertEquals("first.mp4", request(b, "GET", tsA, null, null).body());
+            assertEquals(404, request(a, "GET", "/tv/ts/" + b.id + "/" + other + "/segment_00000.ts", null, null).statusCode());
+            assertEquals(401, request(a, "GET", "/api/cluster/data/tv/ts/" + videoA + "/segment_00000.ts", null, null).statusCode());
+            assertEquals(200, request(a, "GET", "/tv", null, null).statusCode());
+            assertEquals(200, request(a, "GET", "/tv/manage", null, null).statusCode());
+
+            var settings = b.bean(cc.ginpika.bootfs.settings.NodeSettings.class);
+            var privateSettings = new LinkedHashMap<>(settings.current().map());
+            privateSettings.put("publicSharingEnabled", false);
+            settings.update(((Number) settings.view().get("revision")).longValue(),
+                    new cc.ginpika.bootfs.settings.SettingsValues(privateSettings), false, false, b.store());
+            b.setSso(true);
+            assertEquals(200, request(a, "GET", rightUrl, null, null).statusCode());
+            assertEquals(200, request(a, "GET", tsB, null, null).statusCode());
+            assertEquals(401, viewerRequest(b, "POST", "/tv/chat", "{\"text\":\"anonymous\"}", false, b.url).statusCode());
+            assertEquals(403, viewerRequest(b, "POST", "/tv/chat", "{\"text\":\"cross-origin\"}", true, a.url).statusCode());
+            assertEquals(403, viewerRequest(b, "GET", "/tv/manage", null, true, null).statusCode());
+            assertEquals(200, viewerRequest(b, "GET", "/tv", null, true, null).statusCode());
+            assertTrue(JSON.parseObject(viewerRequest(b, "GET", "/tv/chat/session", null, true, null).body()).getBooleanValue("authenticated"));
+            var message = viewerRequest(b, "POST", "/tv/chat", "{\"text\":\"你好 <b>TV</b>\",\"author\":\"forged\"}", true, b.url);
+            assertEquals(201, message.statusCode(), message.body());
+            JSONObject posted = JSON.parseObject(message.body());
+            assertEquals("Viewer", posted.getString("author"));
+            awaitMedia(() -> request(a, "GET", "/tv/chat", null, null).body().contains(posted.getString("id")));
+            assertEquals("你好 <b>TV</b>", JSON.parseArray(request(a, "GET", "/tv/chat", null, null).body())
+                    .getJSONObject(0).getString("text"));
+
+            b.setSso(false);
+            assertEquals(200, request(b, "POST", "/publicAccess/" + right + "?enabled=false", null, null).statusCode());
+            assertEquals(404, request(a, "GET", rightUrl, null, null).statusCode());
+            assertEquals(200, request(b, "POST", "/tv/api/playlist", "[]", null).statusCode());
+            awaitMedia(() -> !JSON.parseObject(request(a, "GET", "/tv/status", null, null).body()).getBooleanValue("live"));
+            assertEquals(404, request(a, "GET", tsB, null, null).statusCode());
+        } finally {
+            sso.stop(0);
+        }
+    }
+
+    private String tvFixture(Node node, String filename) throws Exception {
+        String id = node.upload(filename, filename);
+        Path folder = Files.createDirectories(root.resolve(node.id).resolve("data/hls").resolve(id));
+        Files.writeString(folder.resolve("playlist.m3u8"), "#EXTM3U\n#EXTINF:8.50,\nsegment_00000.ts\n#EXT-X-ENDLIST\n");
+        Files.writeString(folder.resolve("segment_00000.ts"), filename);
+        return id;
+    }
+
+    private HttpResponse<String> viewerRequest(Node node, String method, String path, String data,
+                                               boolean authenticated, String origin) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create(node.url + path)).timeout(java.time.Duration.ofSeconds(8));
+        if (authenticated) request.header("Cookie", "sso_token=viewer-token");
+        if (origin != null) request.header("Origin", origin);
+        if (data != null) request.header("Content-Type", "application/json");
+        request.method(method, data == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(data));
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    @FunctionalInterface private interface MediaCondition { boolean ready() throws Exception; }
+    private void awaitMedia(MediaCondition condition) throws Exception {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+        do {
+            if (condition.ready()) return;
+            Thread.sleep(100);
+        } while (System.nanoTime() < deadline);
+        fail("The media change did not appear on the other node");
+    }
+
     @Test @Timeout(90) void dashboardFromEitherNodeContainsIndependentPeerStatsAndHandlesAnOfflinePeer() throws Exception {
         Node a = new Node("dashboard-a", false), b = new Node("dashboard-b", false);
         join(b, a);

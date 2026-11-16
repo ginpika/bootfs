@@ -7,7 +7,10 @@ import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
 import cc.ginpika.bootfs.domain.result.SearchResult;
 import com.alibaba.fastjson2.*;
 import org.springframework.stereotype.Service;
+import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.URI;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -17,14 +20,59 @@ public class FederationService {
     private final MetadataStore metadata;
     private final MeiliSearchService search;
     private final Context context;
-    private final ExecutorService queries = new ThreadPoolExecutor(0,8,30,TimeUnit.SECONDS,new SynchronousQueue<>(),r -> { Thread t=new Thread(r,"bootfs-federation-query"); t.setDaemon(true); return t; },new ThreadPoolExecutor.AbortPolicy());
-    public FederationService(MetadataStore metadata,MeiliSearchService search,Context context) { this.metadata=metadata; this.search=search; this.context=context; }
+    private final ThreadPoolExecutor queries = new ThreadPoolExecutor(8,8,30,TimeUnit.SECONDS,new ArrayBlockingQueue<>(256),r -> { Thread t=new Thread(r,"bootfs-federation-query"); t.setDaemon(true); return t; },new ThreadPoolExecutor.AbortPolicy());
+    public FederationService(MetadataStore metadata,MeiliSearchService search,Context context) {
+        this.metadata=metadata; this.search=search; this.context=context;
+        queries.allowCoreThreadTimeOut(true);
+    }
     public Map<String,String> peers() { return metadata instanceof DynamicMetadataStore d ? d.peerEndpoints() : Map.of(); }
     public String tokenFor(String url) throws IOException {
         if (!(metadata instanceof DynamicMetadataStore d)) throw new IOException("Peer transport is unavailable in legacy mode"); return d.tokenFor(url);
     }
     public ClusterCredentials identity() { return ((DynamicMetadataStore)metadata).transportIdentity(); }
     public JSONObject call(String url,String path,JSONObject body) throws IOException { return ClusterHttp.call(url,path,body,tokenFor(url),2000,identity()); }
+    public Map<String,JSONObject> queryPeerData(String path, JSONObject body) {
+        return fanout((node,url) -> call(url,"data/"+path,body));
+    }
+    public Map<String,JSONObject> querySelectedPeerData(String path, Map<String,JSONObject> requests) {
+        Map<String,String> endpoints = new TreeMap<>(peers());
+        endpoints.keySet().retainAll(requests.keySet());
+        return fanout(endpoints, (node,url) -> call(url,"data/"+path,requests.get(node)));
+    }
+
+    /** Stream a scoped media endpoint on a paired node through the viewer's origin. */
+    public void streamPeerAsset(String node, String path, boolean head, HttpServletResponse response) throws IOException {
+        String endpoint = peers().get(node);
+        if (endpoint == null) { response.setStatus(404); return; }
+        URI uri = URI.create(endpoint + "/api/cluster/data/" + path);
+        HttpURLConnection upstream = (HttpURLConnection) uri.toURL().openConnection();
+        String method = head ? "HEAD" : "GET";
+        try {
+            String token = tokenFor(endpoint);
+            upstream.setRequestMethod(method);
+            upstream.setInstanceFollowRedirects(false);
+            upstream.setConnectTimeout(2000);
+            upstream.setReadTimeout(5000);
+            upstream.setRequestProperty("X-BootFS-Cluster-Token", token);
+            ClusterHttp.signedHeaders(identity(), method, uri, token, ClusterHttp.digest(new byte[0]))
+                    .forEach(upstream::setRequestProperty);
+            int status = upstream.getResponseCode();
+            if (status != 200) {
+                response.setStatus(status == 404 ? 404 : 502);
+                return;
+            }
+            response.setContentType(upstream.getContentType());
+            long length = upstream.getContentLengthLong();
+            if (length >= 0) response.setContentLengthLong(length);
+            if (!head) try (var input = upstream.getInputStream()) { input.transferTo(response.getOutputStream()); }
+        } catch (IOException failure) {
+            if (response.isCommitted()) throw failure;
+            response.resetBuffer();
+            response.setStatus(502);
+        } finally {
+            upstream.disconnect();
+        }
+    }
     public JSONObject localResource(String id) {
         if (context.query(id)==null || metadata.get("/tombstones/"+id)!=null) return new JSONObject(Map.of("found",false));
         JSONObject result=new JSONObject(Map.of("found",true,"nodeId",context.uuid));
@@ -62,7 +110,9 @@ public class FederationService {
         jobs.forEach((node,future) -> {
             try { results.put(node,future.get(Math.max(1,deadline-System.nanoTime()),TimeUnit.NANOSECONDS)); }
             catch(Exception unavailable) { future.cancel(true); }
-        }); return results;
+        });
+        queries.purge();
+        return results;
     }
 
     public record FolderListings(Map<String, JSONObject> pages, Set<String> unavailableNodes) {}

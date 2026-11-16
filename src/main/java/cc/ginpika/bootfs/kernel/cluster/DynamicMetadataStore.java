@@ -93,6 +93,7 @@ public final class DynamicMetadataStore implements MetadataStore {
         } finally { Files.deleteIfExists(stage); }
     }
     public String nodeId() { return nodeId; }
+    public synchronized String groupId() { return manifest.getString("groupId"); }
     public String endpoint() { return endpoint; }
     public ClusterCredentials transportIdentity() { return identity; }
     private JSONObject call(String url,String path,JSONObject body,String token,int timeout) throws IOException { return ClusterHttp.call(url,path,body,token,timeout,identity); }

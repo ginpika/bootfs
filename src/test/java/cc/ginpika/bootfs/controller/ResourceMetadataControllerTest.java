@@ -32,7 +32,7 @@ class ResourceMetadataControllerTest {
             catalog.addToFullText("{\"uuid\":\"remote\",\"title\":\"before\",\"author\":\"kept\",\"contextUuid\":\"offline-owner\"}");
             WebUIApiController controller = new WebUIApiController(context, mock(FileService.class), localInventory,
                     mock(TfsConfig.class), mock(EtcdService.class), catalog, mock(AiMetadataService.class),
-                    mock(ReverseProxyService.class), proxy);
+                    proxy);
             assertEquals(200, controller.rename("remote", Map.of("fileName", "after.jpg"), null).getStatusCodeValue());
             assertEquals(200, controller.addTags("remote", List.of(Tag.manual("first"))).getStatusCodeValue());
             assertEquals(200, controller.addTags("remote", List.of(Tag.manual("second"))).getStatusCodeValue());
@@ -43,12 +43,10 @@ class ResourceMetadataControllerTest {
             when(context.buildProxyUrl("remote")).thenReturn("/p/remote");
             assertEquals(200, controller.setPublicAccess("remote", true).getStatusCodeValue());
             assertEquals("/p/remote", catalog.querySetu());
-            assertEquals(List.of("/p/remote", "/p/remote"), controller.randomPictureUrls(2).getBody());
-            assertEquals(400, controller.randomPictureUrls(0).getStatusCodeValue());
-            assertEquals(400, controller.randomPictureUrls(481).getStatusCodeValue());
+            assertEquals(List.of("/p/remote", "/p/remote"), catalog.querySetu(2));
             assertEquals(200, controller.setPublicAccess("remote", false).getStatusCodeValue());
             assertNull(catalog.querySetu());
-            assertEquals(404, controller.randomPictureUrls(2).getStatusCodeValue());
+            assertTrue(catalog.querySetu(2).isEmpty());
             verify(localInventory,atLeastOnce()).update(eq("remote"),same(local));
             verifyNoInteractions(proxy);
             assertEquals(404, controller.getTags("missing").getStatusCodeValue());

@@ -1,5 +1,6 @@
 package cc.ginpika.bootfs.integration;
 
+import cc.ginpika.bootfs.file.binding.ObjectStorageProperties;
 import cc.ginpika.bootfs.settings.*;
 import cc.ginpika.bootfs.kernel.cluster.ClusterCredentials;
 import cc.ginpika.bootfs.kernel.metadata.MetadataStore;
@@ -27,7 +28,7 @@ class SettingsIntegrationTest {
     static final Path ROOT=MononodeIntegrationTest.tempRoot();
     @DynamicPropertySource static void properties(DynamicPropertyRegistry r) { r.add("tfs.root-path",ROOT::toString); }
     @Autowired MockMvc mvc; @Autowired NodeSettings settings; @Autowired ClusterCredentials credentials;
-    @Autowired S3Config s3; @Autowired SsoConfig sso; @Autowired TfsConfig files; @Autowired MetadataStore metadata;
+    @Autowired ObjectStorageProperties s3; @Autowired SsoConfig sso; @Autowired TfsConfig files; @Autowired MetadataStore metadata;
     long revision() { return ((Number)settings.view().get("revision")).longValue(); }
     MockHttpServletRequestBuilder save(Map<String,Object> patch) {
         return put("/api/settings").contentType("application/json").header("X-BootFS-Request","1")

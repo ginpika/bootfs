@@ -1,7 +1,8 @@
 package cc.ginpika.bootfs.service.gallery;
 
 import cc.ginpika.bootfs.config.TfsConfig;
-import cc.ginpika.bootfs.core.Context;
+import cc.ginpika.bootfs.file.binding.ResourceWriteConflictException;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
 import cc.ginpika.bootfs.service.FederationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
@@ -10,7 +11,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
-
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -21,7 +21,7 @@ import java.util.List;
 public class GalleryController {
     private final GalleryService gallery;
     private final FederationService federation;
-    private final Context context;
+    private final LocalFileInventory context;
     private final TfsConfig config;
 
     @GetMapping("/setu")
@@ -60,7 +60,7 @@ public class GalleryController {
                                    HttpServletRequest request, HttpServletResponse response) throws IOException {
         response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
         if (!GalleryService.validId(node) || !GalleryService.validId(uuid)) return ResponseEntity.notFound().build();
-        if (context.uuid.equals(node)) return gallery.localImage(uuid, thumbnail, request);
+        if (context.uuid.equals(node)) return gallery.localImage(uuid, thumbnail);
         response.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
         federation.streamPeerAsset(node, "gallery/" + uuid + "?thumbnail=" + thumbnail,
                 "HEAD".equals(request.getMethod()), response);
@@ -73,9 +73,14 @@ public class GalleryController {
     }
 
     @GetMapping("/api/cluster/data/gallery/{uuid}")
-    public ResponseEntity<?> peerImage(@PathVariable String uuid, @RequestParam(defaultValue = "false") boolean thumbnail,
-                                       HttpServletRequest request) throws IOException {
-        return gallery.localImage(uuid, thumbnail, request);
+    public ResponseEntity<?> peerImage(@PathVariable String uuid,
+                                       @RequestParam(defaultValue = "false") boolean thumbnail) throws IOException {
+        return gallery.localImage(uuid, thumbnail);
+    }
+
+    @ExceptionHandler(ResourceWriteConflictException.class)
+    void conflict(ResourceWriteConflictException failure, HttpServletResponse response) throws IOException {
+        response.sendError(HttpStatus.CONFLICT.value(), failure.getMessage());
     }
 
     private static int checkedCount(int count) {

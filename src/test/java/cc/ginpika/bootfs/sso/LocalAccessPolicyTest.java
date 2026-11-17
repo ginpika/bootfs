@@ -1,6 +1,5 @@
 package cc.ginpika.bootfs.sso;
 
-import cc.ginpika.bootfs.dto.SsoUser;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -8,7 +7,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.server.ResponseStatusException;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 class LocalAccessPolicyTest {

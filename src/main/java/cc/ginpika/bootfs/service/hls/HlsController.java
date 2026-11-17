@@ -6,7 +6,6 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.Objects;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -17,7 +16,7 @@ import java.util.concurrent.locks.ReentrantLock;
 public class HlsController {
     private final MediaConvertService mediaConvertService;
     private final HlsFileService hlsFileService;
-    @org.springframework.beans.factory.annotation.Autowired private cc.ginpika.bootfs.core.Context context;
+    @org.springframework.beans.factory.annotation.Autowired private cc.ginpika.bootfs.file.inventory.LocalFileInventory context;
     @org.springframework.beans.factory.annotation.Autowired private cc.ginpika.bootfs.service.ClusterProxyService proxy;
 
     public static ReentrantLock CPU_LOCK = new ReentrantLock();

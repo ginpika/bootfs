@@ -1,8 +1,5 @@
 package cc.ginpika.bootfs.sso;
 
-import cc.ginpika.bootfs.dto.SsoSession;
-import cc.ginpika.bootfs.dto.SsoUser;
-import cc.ginpika.bootfs.service.SsoService;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -29,7 +26,7 @@ public class SsoInterceptor implements HandlerInterceptor {
     private cc.ginpika.bootfs.kernel.metadata.MetadataStore metadata;
 
     @Autowired
-    private SsoService ssoService;
+    private SsoClient ssoService;
 
     @Autowired
     private LocalAccessPolicy localAccess;
@@ -37,7 +34,7 @@ public class SsoInterceptor implements HandlerInterceptor {
     @Autowired private SsoConfig config;
     @Autowired private cc.ginpika.bootfs.config.TfsConfig appConfig;
 
-    public SsoInterceptor(SsoService ssoService) {
+    public SsoInterceptor(SsoClient ssoService) {
         this.ssoService = ssoService;
     }
 

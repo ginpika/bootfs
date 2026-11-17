@@ -1,6 +1,5 @@
 package cc.ginpika.bootfs.sso;
 
-import cc.ginpika.bootfs.dto.SsoUser;
 import java.net.URI;
 import java.util.Collection;
 import java.util.Collections;

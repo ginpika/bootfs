@@ -1,11 +1,14 @@
 package cc.ginpika.bootfs.integration;
 
+import cc.ginpika.bootfs.file.TextFileService;
+import cc.ginpika.bootfs.file.FileTransferService;
+import cc.ginpika.bootfs.file.FileService;
 import cc.ginpika.bootfs.BootFS;
-import cc.ginpika.bootfs.core.Context;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
 import cc.ginpika.bootfs.kernel.cluster.*;
 import cc.ginpika.bootfs.kernel.metadata.MetadataStore;
 import cc.ginpika.bootfs.service.*;
-import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
+import cc.ginpika.bootfs.search.ResourceSearchService;
 import com.alibaba.fastjson2.*;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
@@ -313,7 +316,7 @@ class FederationIntegrationTest {
         String uploaded = owner.bean(FileService.class).uploadComic(new org.springframework.mock.web.MockMultipartFile(
                 "file", "album.zip", "application/zip", archive.toByteArray()));
         String id = uploaded.substring(uploaded.lastIndexOf('/') + 1);
-        JSONObject canonical = owner.bean(MeiliSearchService.class).findDocument("full-text", id);
+        JSONObject canonical = owner.bean(ResourceSearchService.class).findDocument("full-text", id);
         JSONArray storedPages = canonical.getJSONArray("resources");
         assertEquals(2, storedPages.size());
         owner.setSso(true);
@@ -351,8 +354,8 @@ class FederationIntegrationTest {
         }
         assertEquals(album.getJSONArray("resources").getString(0), album.getString("poster"));
         assertEquals(album.getString("poster"), album.getString("thumbUrl"));
-        assertEquals(canonical, owner.bean(MeiliSearchService.class).findDocument("full-text", id));
-        assertNull(frontend.bean(Context.class).query(id));
+        assertEquals(canonical, owner.bean(ResourceSearchService.class).findDocument("full-text", id));
+        assertNull(frontend.bean(LocalFileInventory.class).query(id));
         assertNull(frontend.store().get("/documents/full-text/" + id));
     }
 
@@ -362,7 +365,7 @@ class FederationIntegrationTest {
         var gbk = java.nio.charset.Charset.forName("GBK");
         String yaml = "proxies:\r\n  - {name: 中文节点, type: vless, server: example.com, port: 443, uuid: 11111111-1111-4111-8111-111111111111}\r\n";
         String id = owner.bean(FileService.class).publish(new java.io.ByteArrayInputStream(yaml.getBytes(gbk)), "gbk-clash.yaml", false).file().getUuid();
-        owner.bean(MeiliSearchService.class).updateDocumentTags("full-text", id,
+        owner.bean(ResourceSearchService.class).updateDocumentTags("full-text", id,
                 List.of(cc.ginpika.bootfs.domain.dto.Tag.manual("clash")));
         owner.setSso(true);
         var read = request(frontend, "GET", "/api/file/" + id + "/text", null, null);
@@ -379,11 +382,11 @@ class FederationIntegrationTest {
         JSONObject document = JSON.parseObject(saved.body());
         String replacement = document.getString("uuid");
         assertEquals("GBK", document.getString("encoding"));
-        assertArrayEquals(updated.getBytes(gbk), Files.readAllBytes(Path.of(owner.bean(Context.class).query(replacement).getPath())));
+        assertArrayEquals(updated.getBytes(gbk), Files.readAllBytes(Path.of(owner.bean(LocalFileInventory.class).query(replacement).getPath())));
         var retry = request(frontend, "PUT", "/api/file/" + id + "/text", body, null);
         assertEquals(200, retry.statusCode(), retry.body());
         assertEquals(replacement, JSON.parseObject(retry.body()).getString("uuid"));
-        owner.bean(Context.class).reload();
+        owner.bean(LocalFileInventory.class).reload();
         assertEquals("GBK", owner.bean(TextFileService.class).read(replacement).encoding());
         var details = request(frontend, "GET", "/api/file/" + replacement + "/clash", null, null);
         assertEquals(200, details.statusCode(), details.body());
@@ -408,7 +411,7 @@ class FederationIntegrationTest {
                     + "  - {name: Local SS, type: ss, server: 127.0.0.1, port: " + tcp.getLocalPort()
                     + ", cipher: aes-128-gcm, password: private-test-password}\n";
             String id = owner.upload("clash.yaml", yaml);
-            owner.bean(MeiliSearchService.class).updateDocumentTags("full-text", id,
+            owner.bean(ResourceSearchService.class).updateDocumentTags("full-text", id,
                     List.of(cc.ginpika.bootfs.domain.dto.Tag.manual("clash")));
             owner.setSso(true);
             assertEquals(302, request(owner, "GET", "/api/file/" + id + "/clash", null, null).statusCode());
@@ -455,7 +458,7 @@ class FederationIntegrationTest {
         var saved = request(frontend, "PUT", "/api/file/" + id + "/text", body, null);
         assertEquals(200, saved.statusCode(), saved.body());
         String replacement = JSON.parseObject(saved.body()).getString("uuid");
-        assertEquals(id, replacement); assertNotNull(owner.bean(Context.class).query(id));
+        assertEquals(id, replacement); assertNotNull(owner.bean(LocalFileInventory.class).query(id));
         var retry = request(frontend, "PUT", "/api/file/" + id + "/text", body, null);
         assertEquals(200, retry.statusCode(), retry.body());
         assertEquals(replacement, JSON.parseObject(retry.body()).getString("uuid"));
@@ -513,7 +516,7 @@ class FederationIntegrationTest {
         // Legacy imports may contain cluster-wide sources without this node's durable catalog entry.
         frontend.store().put(documentKey, document);
         frontend.store().put(bindingKey, binding);
-        assertNull(frontend.bean(Context.class).query(id));
+        assertNull(frontend.bean(LocalFileInventory.class).query(id));
         join(frontend, owner);
 
         JSONObject search = JSON.parseObject(request(frontend, "GET", "/queryPageOffset?pageSize=20", null, null).body());
@@ -534,9 +537,9 @@ class FederationIntegrationTest {
         join(a, b);
         assertEquals(200, request(a, "POST", "/api/folders", "{\"name\":\"archive\"}", null).statusCode());
         assertEquals(200, request(b, "POST", "/api/folders", "{\"name\":\"empty\"}", null).statusCode());
-        String local = a.bean(FileService.class).publishS3(new java.io.ByteArrayInputStream(new byte[]{1}),
+        String local = a.bean(FileService.class).publishBoundObject(new java.io.ByteArrayInputStream(new byte[]{1}),
                 "reports/original.txt", "bootfs", "text/plain", null, null).file().getUuid();
-        String remote = b.bean(FileService.class).publishS3(new java.io.ByteArrayInputStream(new byte[]{2}),
+        String remote = b.bean(FileService.class).publishBoundObject(new java.io.ByteArrayInputStream(new byte[]{2}),
                 "reports/original.txt", "bootfs", "text/plain", null, null).file().getUuid();
         assertEquals(200, request(b, "PUT", "/api/file/" + remote + "/rename", "{\"fileName\":\"display.txt\"}", null).statusCode());
 
@@ -569,7 +572,7 @@ class FederationIntegrationTest {
         assertEquals(local, JSON.parseObject(a.store().get("/s3/bootfs/reports/original.txt")).getString("uuid"));
         assertNull(a.store().get("/s3/bootfs/archive/original.txt"));
         assertNull(a.store().get("/documents/full-text/" + remote));
-        assertArrayEquals(new byte[]{2}, Files.readAllBytes(Path.of(b.bean(Context.class).query(remote).getPath())));
+        assertArrayEquals(new byte[]{2}, Files.readAllBytes(Path.of(b.bean(LocalFileInventory.class).query(remote).getPath())));
         JSONObject archived = JSON.parseObject(request(a, "GET", "/api/folders?folder=archive%2F", null, null).body())
                 .getJSONArray("rows").getJSONObject(0);
         assertEquals(remote, archived.getString("uuid"));
@@ -599,7 +602,7 @@ class FederationIntegrationTest {
         assertNull(a.store().get("/documents/full-text/"+own));
         HttpResponse<String> renamed=request(a,"PUT","/api/file/"+own+"/rename","{\"fileName\":\"renamed.txt\"}",null);
         assertEquals(200,renamed.statusCode(),renamed.body());
-        assertEquals("renamed.txt",x.bean(Context.class).query(own).getFileName());
+        assertEquals("renamed.txt",x.bean(LocalFileInventory.class).query(own).getFileName());
         assertNull(a.store().get("/documents/full-text/"+own));
         assertEquals(200,request(a,"POST","/api/file/"+own+"/tags","[{\"namespace\":\"manual\",\"name\":\"travel\"}]",null).statusCode());
         String oldToken=a.store().tokenFor(x.url);
@@ -609,7 +612,7 @@ class FederationIntegrationTest {
         assertEquals("portable original",request(x,"GET","/f/"+own,null,null).body());
         assertEquals(1,JSON.parseObject(request(x,"GET","/queryPageOffset",null,null).body()).getIntValue("total"));
         join(x,b);
-        assertEquals("renamed.txt",x.bean(Context.class).query(own).getFileName());
+        assertEquals("renamed.txt",x.bean(LocalFileInventory.class).query(own).getFileName());
         assertNull(x.store().get("/documents/full-text/"+other));
         assertEquals(2,JSON.parseObject(request(x,"GET","/queryPageOffset",null,null).body()).getIntValue("total"));
         b.close();
@@ -624,25 +627,25 @@ class FederationIntegrationTest {
         join(backup,owner);
         String id=owner.upload("archive.txt","complete bytes");
         String replica=UUID.nameUUIDFromBytes((backup.id+":"+id).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
-        owner.bean(MeiliSearchService.class).addToFullText(new JSONObject(Map.of("uuid",id,"fileName","archive.txt","title","archive.txt","author","original author","description","portable description","contextUuid",owner.id)).toJSONString());
+        owner.bean(ResourceSearchService.class).addToFullText(new JSONObject(Map.of("uuid",id,"fileName","archive.txt","title","archive.txt","author","original author","description","portable description","contextUuid",owner.id)).toJSONString());
         owner.bean(FileTransferService.class).publicationCommitted(id);
         owner.bean(FileTransferService.class).resumePendingReplicas();
-        assertNotNull(backup.bean(Context.class).query(replica));
+        assertNotNull(backup.bean(LocalFileInventory.class).query(replica));
         assertEquals("complete bytes",request(backup,"GET","/f/"+replica,null,null).body());
-        assertEquals("original author",backup.bean(MeiliSearchService.class).findDocument("full-text",replica).getString("author"));
-        assertEquals("portable description",backup.bean(MeiliSearchService.class).findDocument("full-text",replica).getString("description"));
+        assertEquals("original author",backup.bean(ResourceSearchService.class).findDocument("full-text",replica).getString("author"));
+        assertEquals("portable description",backup.bean(ResourceSearchService.class).findDocument("full-text",replica).getString("description"));
         assertNull(backup.store().get("/documents/full-text/"+id));
-        owner.bean(MeiliSearchService.class).addToFullText(new JSONObject(Map.of("uuid",id,"author","updated author")).toJSONString());
+        owner.bean(ResourceSearchService.class).addToFullText(new JSONObject(Map.of("uuid",id,"author","updated author")).toJSONString());
         backup.bean(FileTransferService.class).resumePendingReplicas();
-        assertEquals("updated author",backup.bean(MeiliSearchService.class).findDocument("full-text",replica).getString("author"));
+        assertEquals("updated author",backup.bean(ResourceSearchService.class).findDocument("full-text",replica).getString("author"));
         assertEquals(200,request(backup,"PUT","/api/file/"+replica+"/rename","{\"fileName\":\"my independent copy.txt\"}",null).statusCode());
-        owner.bean(MeiliSearchService.class).addToFullText(new JSONObject(Map.of("uuid",id,"author","later source change")).toJSONString());
+        owner.bean(ResourceSearchService.class).addToFullText(new JSONObject(Map.of("uuid",id,"author","later source change")).toJSONString());
         backup.bean(FileTransferService.class).resumePendingReplicas();
-        assertEquals("updated author",backup.bean(MeiliSearchService.class).findDocument("full-text",replica).getString("author"));
-        assertEquals("my independent copy.txt",backup.bean(Context.class).query(replica).getFileName());
+        assertEquals("updated author",backup.bean(ResourceSearchService.class).findDocument("full-text",replica).getString("author"));
+        assertEquals("my independent copy.txt",backup.bean(LocalFileInventory.class).query(replica).getFileName());
         backup.store().leave(); owner.close();
         assertEquals("complete bytes",request(backup,"GET","/f/"+replica,null,null).body());
-        assertEquals("updated author",backup.bean(MeiliSearchService.class).findDocument("full-text",replica).getString("author"));
+        assertEquals("updated author",backup.bean(ResourceSearchService.class).findDocument("full-text",replica).getString("author"));
         backup.upload("independent.txt","new local write");
         assertTrue(backup.store().status().getBooleanValue("independent"));
     }

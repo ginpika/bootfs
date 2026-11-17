@@ -1,12 +1,14 @@
 package cc.ginpika.bootfs.integration;
 
-import cc.ginpika.bootfs.core.Context;
-import cc.ginpika.bootfs.s3.S3KeyIndex;
-import cc.ginpika.bootfs.s3.S3ObjectMeta;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
+import cc.ginpika.bootfs.file.binding.ObjectKeyRepository;
+import cc.ginpika.bootfs.file.binding.ObjectKeyBinding;
 import cc.ginpika.bootfs.s3.S3StorageService;
-import cc.ginpika.bootfs.service.FileService;
-import cc.ginpika.bootfs.service.FolderService;
-import cc.ginpika.bootfs.service.etcd.EtcdService;
+import cc.ginpika.bootfs.file.FileService;
+import cc.ginpika.bootfs.file.ResourceDeletionService;
+import cc.ginpika.bootfs.file.ResourceRecoveryService;
+import cc.ginpika.bootfs.file.folder.FolderService;
+import cc.ginpika.bootfs.metadata.MetadataRegistry;
 import com.alibaba.fastjson2.JSONObject;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,7 +22,6 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.util.ReflectionTestUtils;
-
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -30,7 +31,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -48,12 +48,14 @@ class FolderManagementIntegrationTest {
         registry.add("tfs.root-path", ROOT::toString);
     }
     @Autowired MockMvc mvc;
-    @Autowired Context context;
+    @Autowired LocalFileInventory context;
     @Autowired FileService files;
+    @Autowired ResourceDeletionService deletions;
+    @Autowired ResourceRecoveryService recovery;
     @Autowired FolderService folders;
     @Autowired S3StorageService storage;
-    @Autowired S3KeyIndex keys;
-    @Autowired EtcdService metadata;
+    @Autowired ObjectKeyRepository keys;
+    @Autowired MetadataRegistry metadata;
 
     private void createFolder(String parent, String name) throws Exception {
         mvc.perform(post("/api/folders").contentType("application/json")
@@ -61,7 +63,7 @@ class FolderManagementIntegrationTest {
                 .andExpect(status().is2xxSuccessful());
     }
 
-    private S3ObjectMeta object(String key, String content) throws Exception {
+    private ObjectKeyBinding object(String key, String content) throws Exception {
         var request = new MockHttpServletRequest();
         request.setContentType("text/plain");
         request.setContent(content.getBytes(StandardCharsets.UTF_8));
@@ -132,9 +134,9 @@ class FolderManagementIntegrationTest {
         assertEquals(3, rows.size());
         Map<String, JSONObject> byName = new HashMap<>();
         rows.forEach(row -> byName.put(row.getString("fileName"), row));
-        assertNotNull(keys.getIndex("bootfs", folder + "notes.txt"));
+        assertNotNull(keys.find("bootfs", folder + "notes.txt"));
         String albumId = byName.get("[Comic]图包.zip").getString("uuid");
-        assertEquals(albumId, keys.getIndex("bootfs", folder + "[Comic]图包.zip").getUuid());
+        assertEquals(albumId, keys.find("bootfs", folder + "[Comic]图包.zip").getUuid());
         assertEquals("1", byName.get("[Comic]图包.zip").getString("albumAvailable"));
         assertEquals("图包", byName.get("[Comic]图包.zip").getString("title"));
         assertEquals(videoId, byName.get("视频.mp4").getString("uuid"));
@@ -153,7 +155,7 @@ class FolderManagementIntegrationTest {
     @Test void explicitFoldersExposePersistentIdentityCreationTimeAndEditableTags() throws Exception {
         createFolder("", "有元数据");
         JSONObject original = folderRow("", "有元数据/");
-        assertEquals(keys.getIndex("bootfs", "有元数据/").getUuid(), original.getString("uuid"));
+        assertEquals(keys.find("bootfs", "有元数据/").getUuid(), original.getString("uuid"));
         assertTrue(original.getLongValue("createdAt") > 0);
         assertNotNull(original.getJSONArray("tags"));
         addTag("有元数据/", "重要");
@@ -168,13 +170,13 @@ class FolderManagementIntegrationTest {
     }
 
     @Test void implicitFolderRenameMovesAllNestedPathsWithoutChangingContentOrIdentity() throws Exception {
-        S3ObjectMeta child = object("隐式 + 目录/内层/file.txt", "unchanged content");
+        ObjectKeyBinding child = object("隐式 + 目录/内层/file.txt", "unchanged content");
         JSONObject original = folderRow("", "隐式 + 目录/");
         JSONObject nested = folderRow("隐式 + 目录/", "隐式 + 目录/内层/");
         addTag("隐式 + 目录/", "待归档");
         rename("隐式 + 目录/", "归档 + 中文");
-        assertNull(keys.getIndex("bootfs", "隐式 + 目录/内层/file.txt"));
-        assertEquals(child.getUuid(), keys.getIndex("bootfs", "归档 + 中文/内层/file.txt").getUuid());
+        assertNull(keys.find("bootfs", "隐式 + 目录/内层/file.txt"));
+        assertEquals(child.getUuid(), keys.find("bootfs", "归档 + 中文/内层/file.txt").getUuid());
         JSONObject renamed = folderRow("", "归档 + 中文/");
         assertEquals(original.getString("uuid"), renamed.getString("uuid"));
         assertEquals(original.getLong("createdAt"), renamed.getLong("createdAt"));
@@ -185,7 +187,7 @@ class FolderManagementIntegrationTest {
                 "/documents/full-text/" + child.getUuid())).getString("fileName"));
         assertEquals("unchanged content", Files.readString(Path.of(context.query(child.getUuid()).getPath())));
         context.reload();
-        files.bootstrapExistingBindings();
+        recovery.bootstrapExistingBindings();
         assertEquals("归档 + 中文/内层/file.txt", context.query(child.getUuid()).getFileName());
         assertTrue(metadata.scan("/s3/bootfs/隐式 + 目录/").isEmpty());
     }
@@ -193,10 +195,10 @@ class FolderManagementIntegrationTest {
     @Test void recursiveDeletionRemovesMarkersDescendantsBytesAndSearchButPreservesSimilarPrefixes() throws Exception {
         createFolder("", "delete-tree");
         createFolder("delete-tree/", "empty");
-        S3ObjectMeta rootMarker = keys.getIndex("bootfs", "delete-tree/");
-        S3ObjectMeta nestedMarker = keys.getIndex("bootfs", "delete-tree/empty/");
-        S3ObjectMeta child = object("delete-tree/nested/child.txt", "remove");
-        S3ObjectMeta sibling = object("delete-tree-other/keep.txt", "keep");
+        ObjectKeyBinding rootMarker = keys.find("bootfs", "delete-tree/");
+        ObjectKeyBinding nestedMarker = keys.find("bootfs", "delete-tree/empty/");
+        ObjectKeyBinding child = object("delete-tree/nested/child.txt", "remove");
+        ObjectKeyBinding sibling = object("delete-tree-other/keep.txt", "keep");
         folderRow("", "delete-tree/");
         folderRow("delete-tree/", "delete-tree/nested/");
         deleteFolder("delete-tree/");
@@ -208,7 +210,7 @@ class FolderManagementIntegrationTest {
         assertTrue(metadata.scan("/s3/bootfs/delete-tree/").isEmpty());
         assertNotNull(context.query(sibling.getUuid()));
         context.reload();
-        files.bootstrapExistingBindings();
+        recovery.bootstrapExistingBindings();
         assertTrue(metadata.scan("/s3/bootfs/delete-tree/").isEmpty());
         assertFalse(list("").getJSONArray("rows").stream().map(JSONObject::from)
                 .anyMatch(row -> "delete-tree/".equals(row.getString("folderPath"))));
@@ -216,8 +218,8 @@ class FolderManagementIntegrationTest {
     }
 
     @Test void renamingToAnExistingDirectoryIsRejectedAndRootOperationsCannotMutateAnything() throws Exception {
-        S3ObjectMeta source = object("rename-source/child.txt", "source");
-        S3ObjectMeta target = object("rename-target/child.txt", "target");
+        ObjectKeyBinding source = object("rename-source/child.txt", "source");
+        ObjectKeyBinding target = object("rename-target/child.txt", "target");
         mvc.perform(put("/api/folders/rename").contentType("application/json")
                 .content("{\"folder\":\"rename-source/\",\"name\":\"rename-target\"}"))
                 .andExpect(status().isConflict());
@@ -228,31 +230,31 @@ class FolderManagementIntegrationTest {
                     .content(JSONObject.toJSONString(Map.of("folder", path, "name", "new-root"))))
                     .andExpect(status().isBadRequest());
         }
-        assertEquals(source.getUuid(), keys.getIndex("bootfs", "rename-source/child.txt").getUuid());
-        assertEquals(target.getUuid(), keys.getIndex("bootfs", "rename-target/child.txt").getUuid());
+        assertEquals(source.getUuid(), keys.find("bootfs", "rename-source/child.txt").getUuid());
+        assertEquals(target.getUuid(), keys.find("bootfs", "rename-target/child.txt").getUuid());
     }
 
     @Test void interruptedRecursiveDeletionAlreadyBlocksEveryChildAndCleanupResumesWithoutRevivingPaths() throws Exception {
         createFolder("", "interrupted-delete");
-        S3ObjectMeta marker = keys.getIndex("bootfs", "interrupted-delete/");
-        S3ObjectMeta child = object("interrupted-delete/nested/child.txt", "private bytes");
-        FileService interrupted = spy(files);
+        ObjectKeyBinding marker = keys.find("bootfs", "interrupted-delete/");
+        ObjectKeyBinding child = object("interrupted-delete/nested/child.txt", "private bytes");
+        ResourceDeletionService interrupted = spy(deletions);
         doThrow(new IllegalStateException("Process stopped after the namespace commit"))
                 .when(interrupted).deleteResource(anyString());
-        ReflectionTestUtils.setField(folders, "files", interrupted);
+        ReflectionTestUtils.setField(folders, "deletions", interrupted);
         try {
             assertThrows(IllegalStateException.class, () -> folders.delete("interrupted-delete/"));
         } finally {
-            ReflectionTestUtils.setField(folders, "files", files);
+            ReflectionTestUtils.setField(folders, "deletions", deletions);
         }
         for (String id : List.of(marker.getUuid(), child.getUuid())) {
             assertNotNull(metadata.getOne("/tombstones/" + id));
-            assertNull(files.download(id, new MockHttpServletRequest()));
+            assertNull(files.openDownload(id));
         }
         assertTrue(metadata.scan("/s3/bootfs/interrupted-delete/").isEmpty());
-        files.resumeGlobalDeletions();
+        recovery.resumeGlobalDeletions();
         context.reload();
-        files.bootstrapExistingBindings();
+        recovery.bootstrapExistingBindings();
         assertNull(context.query(child.getUuid()));
         assertFalse(Files.exists(ROOT.resolve("data").resolve(child.getUuid())));
         assertTrue(metadata.scan("/s3/bootfs/interrupted-delete/").isEmpty());
@@ -260,16 +262,16 @@ class FolderManagementIntegrationTest {
 
     @Test void iconViewMovePlacesFilesAndFoldersIntoTheDestinationWithoutRewritingBytes() throws Exception {
         createFolder("", "归档");
-        S3ObjectMeta file = object("笔记.txt", "bytes");
-        S3ObjectMeta nested = object("资料/内层.txt", "nested");
+        ObjectKeyBinding file = object("笔记.txt", "bytes");
+        ObjectKeyBinding nested = object("资料/内层.txt", "nested");
         mvc.perform(post("/api/folders/move").contentType("application/json")
                 .content(JSONObject.toJSONString(Map.of("destination", "归档/",
                         "files", List.of("笔记.txt"), "folders", List.of("资料/")))))
                 .andExpect(status().is2xxSuccessful());
-        assertNull(keys.getIndex("bootfs", "笔记.txt"));
-        assertNull(keys.getIndex("bootfs", "资料/内层.txt"));
-        assertEquals(file.getUuid(), keys.getIndex("bootfs", "归档/笔记.txt").getUuid());
-        assertEquals(nested.getUuid(), keys.getIndex("bootfs", "归档/资料/内层.txt").getUuid());
+        assertNull(keys.find("bootfs", "笔记.txt"));
+        assertNull(keys.find("bootfs", "资料/内层.txt"));
+        assertEquals(file.getUuid(), keys.find("bootfs", "归档/笔记.txt").getUuid());
+        assertEquals(nested.getUuid(), keys.find("bootfs", "归档/资料/内层.txt").getUuid());
         assertEquals("归档/笔记.txt", context.query(file.getUuid()).getFileName());
         assertEquals("bytes", Files.readString(Path.of(context.query(file.getUuid()).getPath())));
         assertEquals("nested", Files.readString(Path.of(context.query(nested.getUuid()).getPath())));
@@ -280,7 +282,7 @@ class FolderManagementIntegrationTest {
 
     @Test void moveKeepsARenamedDisplayNameAndRejectsCollisionsOrMovesIntoItself() throws Exception {
         createFolder("", "归档");
-        S3ObjectMeta file = object("笔记.txt", "bytes");
+        ObjectKeyBinding file = object("笔记.txt", "bytes");
         object("归档/笔记.txt", "already");
         String documentKey = "/documents/full-text/" + file.getUuid();
         JSONObject document = JSONObject.parseObject(metadata.getOne(documentKey));
@@ -290,10 +292,10 @@ class FolderManagementIntegrationTest {
         mvc.perform(post("/api/folders/move").contentType("application/json")
                 .content(JSONObject.toJSONString(Map.of("destination", "归档/", "files", List.of("笔记.txt"), "folders", List.of()))))
                 .andExpect(status().isConflict());
-        assertEquals(file.getUuid(), keys.getIndex("bootfs", "笔记.txt").getUuid());
+        assertEquals(file.getUuid(), keys.find("bootfs", "笔记.txt").getUuid());
         assertEquals("夏日.jpg", JSONObject.parseObject(metadata.getOne(documentKey)).getString("fileName"));
 
-        S3ObjectMeta picture = object("照片.jpg", "picture");
+        ObjectKeyBinding picture = object("照片.jpg", "picture");
         String pictureKey = "/documents/full-text/" + picture.getUuid();
         JSONObject pictureDocument = JSONObject.parseObject(metadata.getOne(pictureKey));
         pictureDocument.put("fileName", "夏日.jpg");
@@ -302,7 +304,7 @@ class FolderManagementIntegrationTest {
         mvc.perform(post("/api/folders/move").contentType("application/json")
                 .content(JSONObject.toJSONString(Map.of("destination", "归档/", "files", List.of("照片.jpg"), "folders", List.of()))))
                 .andExpect(status().is2xxSuccessful());
-        assertEquals(picture.getUuid(), keys.getIndex("bootfs", "归档/照片.jpg").getUuid());
+        assertEquals(picture.getUuid(), keys.find("bootfs", "归档/照片.jpg").getUuid());
         assertEquals("夏日.jpg", JSONObject.parseObject(metadata.getOne(pictureKey)).getString("fileName"));
         assertEquals("夏日.jpg", list("归档/").getJSONArray("rows").stream().map(JSONObject::from)
                 .filter(row -> "归档/照片.jpg".equals(row.getString("objectKey"))).findFirst().orElseThrow().getString("fileName"));
@@ -311,6 +313,6 @@ class FolderManagementIntegrationTest {
         mvc.perform(post("/api/folders/move").contentType("application/json")
                 .content(JSONObject.toJSONString(Map.of("destination", "盒子/内层/", "files", List.of(), "folders", List.of("盒子/")))))
                 .andExpect(status().isConflict());
-        assertNotNull(keys.getIndex("bootfs", "盒子/内层/child.txt"));
+        assertNotNull(keys.find("bootfs", "盒子/内层/child.txt"));
     }
 }

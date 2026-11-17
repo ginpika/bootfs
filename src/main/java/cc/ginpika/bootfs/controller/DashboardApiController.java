@@ -1,12 +1,12 @@
 package cc.ginpika.bootfs.controller;
 
 import cc.ginpika.bootfs.config.TfsConfig;
-import cc.ginpika.bootfs.core.Context;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
 import cc.ginpika.bootfs.domain.dto.FileObject;
 import cc.ginpika.bootfs.metrics.AppStartupTracker;
 import cc.ginpika.bootfs.metrics.RequestStatsService;
 import cc.ginpika.bootfs.metrics.SystemStatsService;
-import cc.ginpika.bootfs.service.etcd.EtcdService;
+import cc.ginpika.bootfs.metadata.MetadataRegistry;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
@@ -15,7 +15,6 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
 import java.io.File;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -30,9 +29,9 @@ import java.util.concurrent.*;
 @RequestMapping("/api/dashboard")
 public class DashboardApiController {
 
-    private final Context context;
+    private final LocalFileInventory context;
     private final TfsConfig tfsConfig;
-    private final ObjectProvider<EtcdService> etcdServiceProvider;
+    private final ObjectProvider<MetadataRegistry> metadataRegistryProvider;
     private final RequestStatsService requestStatsService;
     private final AppStartupTracker appStartupTracker;
     private final SystemStatsService systemStatsService;
@@ -48,14 +47,14 @@ public class DashboardApiController {
         clusterFetchExecutor.shutdownNow();
     }
 
-    public DashboardApiController(Context context, TfsConfig tfsConfig,
-                                  ObjectProvider<EtcdService> etcdServiceProvider,
+    public DashboardApiController(LocalFileInventory context, TfsConfig tfsConfig,
+                                  ObjectProvider<MetadataRegistry> metadataRegistryProvider,
                                   RequestStatsService requestStatsService,
                                   AppStartupTracker appStartupTracker,
                                   SystemStatsService systemStatsService) {
         this.context = context;
         this.tfsConfig = tfsConfig;
-        this.etcdServiceProvider = etcdServiceProvider;
+        this.metadataRegistryProvider = metadataRegistryProvider;
         this.requestStatsService = requestStatsService;
         this.appStartupTracker = appStartupTracker;
         this.systemStatsService = systemStatsService;
@@ -97,7 +96,7 @@ public class DashboardApiController {
         Map<String, Object> data = new LinkedHashMap<>();
 
         // 获取集群所有节点 URL
-        List<NodeInfo> clusterNodes = getClusterNodes();
+        List<ClusterNodeEndpoint> clusterNodes = getClusterNodes();
         // 并行拉取其他节点的统计数据
         Map<String, Map<String, Object>> remoteStats = fetchAllRemoteNodeStats(clusterNodes);
 
@@ -180,7 +179,7 @@ public class DashboardApiController {
      * 当前节点用本地统计；远程节点从已拉取的 remoteStats 取数据，取不到则标记为离线。
      */
     private List<Map<String, Object>> buildNodesList(Map<String, Object> local,
-                                                     List<NodeInfo> clusterNodes,
+                                                     List<ClusterNodeEndpoint> clusterNodes,
                                                      Map<String, Map<String, Object>> remoteStats) {
         List<Map<String, Object>> nodes = new ArrayList<>();
 
@@ -192,7 +191,7 @@ public class DashboardApiController {
         nodes.add(current);
 
         // 复用同一次成员快照，避免拉取期间成员变化导致详情与目录不一致。
-        for (NodeInfo member : clusterNodes) {
+        for (ClusterNodeEndpoint member : clusterNodes) {
             Map<String, Object> remote = remoteStats.get(member.nodeId);
             Map<String, Object> node = remote == null ? new LinkedHashMap<>() : new LinkedHashMap<>(remote);
             node.put("nodeId", member.nodeId);
@@ -221,28 +220,20 @@ public class DashboardApiController {
 
     // ---- 集群节点信息 ----
 
-    private static class NodeInfo {
-        final String nodeId;
-        final String url;
+    private record ClusterNodeEndpoint(String nodeId, String url) {}
 
-        NodeInfo(String nodeId, String url) {
-            this.nodeId = nodeId;
-            this.url = url;
-        }
-    }
-
-    private List<NodeInfo> getClusterNodes() {
-        List<NodeInfo> nodes = new ArrayList<>();
+    private List<ClusterNodeEndpoint> getClusterNodes() {
+        List<ClusterNodeEndpoint> nodes = new ArrayList<>();
         try {
-            EtcdService etcdService = etcdServiceProvider.getIfAvailable();
-            if (etcdService != null) {
-                Map<String, String> nodesWithKeys = etcdService.getNodesWithKeys();
+            MetadataRegistry metadataRegistry = metadataRegistryProvider.getIfAvailable();
+            if (metadataRegistry != null) {
+                Map<String, String> nodesWithKeys = metadataRegistry.getNodesWithKeys();
                 if (nodesWithKeys != null) {
                     for (Map.Entry<String, String> entry : nodesWithKeys.entrySet()) {
                         String uuid = entry.getKey();
                         String url = entry.getValue();
                         if (!context.uuid.equals(uuid)) {
-                            nodes.add(new NodeInfo(uuid, url));
+                            nodes.add(new ClusterNodeEndpoint(uuid, url));
                         }
                     }
                 }
@@ -255,21 +246,21 @@ public class DashboardApiController {
 
     // ---- 远程节点数据拉取 ----
 
-    private Map<String, Map<String, Object>> fetchAllRemoteNodeStats(List<NodeInfo> nodes) {
+    private Map<String, Map<String, Object>> fetchAllRemoteNodeStats(List<ClusterNodeEndpoint> nodes) {
         if (nodes.isEmpty()) return Collections.emptyMap();
 
         Map<String, Map<String, Object>> results = new ConcurrentHashMap<>();
         List<CompletableFuture<Void>> futures = new ArrayList<>();
 
-        for (NodeInfo node : nodes) {
+        for (ClusterNodeEndpoint node : nodes) {
             CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                 try {
-                    Map<String, Object> stats = fetchNodeStats(node.url);
+                    Map<String, Object> stats = fetchNodeStats(node.url());
                     if (stats != null) {
-                        results.put(node.nodeId, stats);
+                        results.put(node.nodeId(), stats);
                     }
                 } catch (Exception e) {
-                    log.warn("拉取节点 {} ({}) 统计数据失败: {}", node.nodeId, node.url, e.getMessage());
+                    log.warn("拉取节点 {} ({}) 统计数据失败: {}", node.nodeId(), node.url(), e.getMessage());
                 }
             }, clusterFetchExecutor);
             futures.add(future);
@@ -338,9 +329,9 @@ public class DashboardApiController {
 
     private int getEtcdMainResourceCount() {
         try {
-            EtcdService etcdService = etcdServiceProvider.getIfAvailable();
-            if (etcdService != null) {
-                return etcdService.getMainResourceCount();
+            MetadataRegistry metadataRegistry = metadataRegistryProvider.getIfAvailable();
+            if (metadataRegistry != null) {
+                return metadataRegistry.getMainResourceCount();
             }
         } catch (Exception ignored) {}
         return 0;
@@ -365,7 +356,7 @@ public class DashboardApiController {
 
     private Map<String, Object> buildResourceStats() {
         Map<String, Object> resources = new LinkedHashMap<>();
-        Collection<FileObject> all = context.STORAGE.values();
+        Collection<FileObject> all = context.cachedFiles();
         long totalSize = 0;
         int replicaCount = 0;
         for (FileObject fo : all) {
@@ -376,7 +367,7 @@ public class DashboardApiController {
                 replicaCount++;
             }
         }
-        int total = context.STORAGE.size();
+        int total = context.cachedCount();
         int mainCount = Math.max(0, total - replicaCount);
 
         resources.put("total", total);
@@ -391,7 +382,7 @@ public class DashboardApiController {
         for (String cat : new String[]{"image", "video", "audio", "doc", "zip", "other"}) {
             counts.put(cat, 0);
         }
-        for (FileObject fo : context.STORAGE.values()) {
+        for (FileObject fo : context.cachedFiles()) {
             counts.merge(categorize(fo.getFileName()), 1, Integer::sum);
         }
         List<Map<String, Object>> list = new ArrayList<>();
@@ -433,13 +424,13 @@ public class DashboardApiController {
         List<String> nodes = Collections.emptyList();
         int mainCount = 0;
         try {
-            EtcdService etcdService = etcdServiceProvider.getIfAvailable();
-            if (etcdService != null) {
-                List<String> all = etcdService.getAllNodes();
+            MetadataRegistry metadataRegistry = metadataRegistryProvider.getIfAvailable();
+            if (metadataRegistry != null) {
+                List<String> all = metadataRegistry.getAllNodes();
                 if (all != null) {
                     nodes = all;
                 }
-                mainCount = etcdService.getMainResourceCount();
+                mainCount = metadataRegistry.getMainResourceCount();
             }
         } catch (Exception e) {
             log.warn("获取 etcd 集群信息失败，忽略: {}", e.getMessage());

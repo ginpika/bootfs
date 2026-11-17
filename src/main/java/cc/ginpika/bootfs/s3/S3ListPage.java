@@ -1,10 +1,10 @@
 package cc.ginpika.bootfs.s3;
 
+import cc.ginpika.bootfs.file.binding.ObjectKeyBinding;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,13 +16,13 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class S3ListPage {
-    private List<S3ObjectMeta> contents;
+    private List<ObjectKeyBinding> contents;
     private List<String> commonPrefixes;
     private boolean truncated;
     private String nextContinuationToken;
     private String nextMarker;
 
-    public S3ListPage(List<S3ObjectMeta> contents, List<String> commonPrefixes,
+    public S3ListPage(List<ObjectKeyBinding> contents, List<String> commonPrefixes,
                       boolean truncated, String nextContinuationToken) {
         this(contents, commonPrefixes, truncated, nextContinuationToken, null);
     }

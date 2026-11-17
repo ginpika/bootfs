@@ -1,7 +1,7 @@
 package cc.ginpika.bootfs.service;
 
 import com.alibaba.fastjson2.JSONObject;
-import cc.ginpika.bootfs.service.etcd.EtcdService;
+import cc.ginpika.bootfs.metadata.MetadataRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.catalina.connector.ClientAbortException;
 import org.apache.http.Header;
@@ -11,7 +11,6 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.springframework.stereotype.Service;
-
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -24,7 +23,7 @@ import java.util.*;
 @Service
 public class ReverseProxyService {
     @Resource
-    EtcdService etcdService;
+    MetadataRegistry metadataRegistry;
     @Resource FederationService federation;
 
     private static final Set<String> approvedImgExt = new HashSet<>(){{
@@ -190,10 +189,10 @@ public class ReverseProxyService {
         }
     }
     private String getTrueNodeUrl(String uuid) {
-        return etcdService.getOne("/files/" + uuid);
+        return metadataRegistry.getOne("/files/" + uuid);
     }
 
     private String getMetaJson(String uuid) {
-        return etcdService.getOne("/files/" + uuid + "/meta");
+        return metadataRegistry.getOne("/files/" + uuid + "/meta");
     }
 }

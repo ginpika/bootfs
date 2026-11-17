@@ -1,5 +1,6 @@
 package cc.ginpika.bootfs.s3;
 
+import cc.ginpika.bootfs.file.binding.ObjectStorageProperties;
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -9,10 +10,10 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import static org.junit.jupiter.api.Assertions.*;
 
 class S3SignatureSecurityTest {
-    final S3Config config = config();
+    final ObjectStorageProperties config = config();
     final S3SigV4Verifier verifier = new S3SigV4Verifier(config);
-    static S3Config config() {
-        S3Config value = new S3Config(); value.setAccessKey("test"); value.setSecretKey("secret"); return value;
+    static ObjectStorageProperties config() {
+        ObjectStorageProperties value = new ObjectStorageProperties(); value.setAccessKey("test"); value.setSecretKey("secret"); return value;
     }
     MockHttpServletRequest signed(String canonicalQuery, String actualQuery, String headers) {
         String stamp = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'"));

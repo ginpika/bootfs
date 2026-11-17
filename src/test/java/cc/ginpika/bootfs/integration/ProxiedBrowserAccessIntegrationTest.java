@@ -1,9 +1,9 @@
 package cc.ginpika.bootfs.integration;
 
-import cc.ginpika.bootfs.dto.SsoSession;
-import cc.ginpika.bootfs.dto.SsoUser;
+import cc.ginpika.bootfs.sso.SsoSession;
+import cc.ginpika.bootfs.sso.SsoUser;
 import cc.ginpika.bootfs.kernel.metadata.MetadataStore;
-import cc.ginpika.bootfs.service.SsoService;
+import cc.ginpika.bootfs.sso.SsoClient;
 import cc.ginpika.bootfs.settings.NodeSettings;
 import cc.ginpika.bootfs.settings.SettingsValues;
 import com.alibaba.fastjson2.JSON;
@@ -23,7 +23,6 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import reactor.core.publisher.Mono;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
@@ -49,7 +48,7 @@ class ProxiedBrowserAccessIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired NodeSettings settings;
     @Autowired MetadataStore metadata;
-    @MockBean SsoService sso;
+    @MockBean SsoClient sso;
 
     @BeforeEach void authentication() throws Exception {
         updateSettings(Map.of("ssoEnabled", true, "copies", 1));

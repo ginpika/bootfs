@@ -8,9 +8,9 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/cluster/data")
 public class FederationDataController {
     private final FederationService federation;
-    private final cc.ginpika.bootfs.service.FileTransferService replicas;
+    private final cc.ginpika.bootfs.file.FileTransferService replicas;
     private final cc.ginpika.bootfs.kernel.metadata.MetadataStore metadata;
-    public FederationDataController(FederationService federation,cc.ginpika.bootfs.service.FileTransferService replicas,cc.ginpika.bootfs.kernel.metadata.MetadataStore metadata) { this.federation=federation; this.replicas=replicas; this.metadata=metadata; }
+    public FederationDataController(FederationService federation,cc.ginpika.bootfs.file.FileTransferService replicas,cc.ginpika.bootfs.kernel.metadata.MetadataStore metadata) { this.federation=federation; this.replicas=replicas; this.metadata=metadata; }
     @PostMapping("/search") public JSONObject search(@RequestBody JSONObject request) { return federation.localSearch(request); }
     @GetMapping("/resource/{id}") public JSONObject resource(@PathVariable String id) { return federation.localResource(id); }
     @GetMapping("/text-owner/{id}") public JSONObject textOwner(@PathVariable String id) { return federation.localTextOwner(id); }

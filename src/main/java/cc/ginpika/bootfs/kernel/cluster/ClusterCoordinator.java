@@ -1,9 +1,7 @@
 package cc.ginpika.bootfs.kernel.cluster;
 
-import cc.ginpika.bootfs.core.Context;
 import cc.ginpika.bootfs.kernel.metadata.MetadataStore;
 import com.alibaba.fastjson2.JSONObject;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import java.io.IOException;
@@ -19,8 +17,7 @@ public class ClusterCoordinator {
     private volatile String invitationGroup;
     private final java.util.concurrent.ExecutorService notifications=java.util.concurrent.Executors.newSingleThreadExecutor(task -> { Thread thread=new Thread(task,"bootfs-membership-notifications"); thread.setDaemon(true); return thread; });
     private final java.util.concurrent.atomic.AtomicBoolean delivering=new java.util.concurrent.atomic.AtomicBoolean();
-    public ClusterCoordinator(MetadataStore metadata, Context context, @Value("${bootfs.cluster.discovery.enabled:false}") boolean unusedDiscovery,
-                              ClusterCredentials credentials, @Value("${bootfs.cluster.discovery.port:55929}") int unusedPort) {
+    public ClusterCoordinator(MetadataStore metadata, ClusterCredentials credentials) {
         this.metadata=metadata; this.credentials=credentials;
     }
     public DynamicMetadataStore dynamic() {

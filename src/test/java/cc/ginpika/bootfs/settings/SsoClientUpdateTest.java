@@ -1,7 +1,7 @@
 package cc.ginpika.bootfs.settings;
 
 import cc.ginpika.bootfs.sso.SsoConfig;
-import cc.ginpika.bootfs.service.SsoService;
+import cc.ginpika.bootfs.sso.SsoClient;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -22,7 +22,7 @@ class SsoClientUpdateTest {
         var a=server(false); var b=server(true);
         try {
             var config=new SsoConfig(); config.setCookieName("sso_token"); config.setServerUrl("http://127.0.0.1:"+a.getAddress().getPort());
-            var service=new SsoService(WebClient.create(config.getServerUrl()),config);
+            var service=new SsoClient(WebClient.create(config.getServerUrl()),config);
             assertFalse(service.checkSession("token").block(Duration.ofSeconds(5)).isAuthenticated());
             config.setServerUrl("http://127.0.0.1:"+b.getAddress().getPort());
             assertTrue(service.checkSession("token").block(Duration.ofSeconds(5)).isAuthenticated());

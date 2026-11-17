@@ -1,14 +1,21 @@
 package cc.ginpika.bootfs.s3;
 
+import cc.ginpika.bootfs.domain.dto.FileObject;
+import cc.ginpika.bootfs.file.*;
+import cc.ginpika.bootfs.file.binding.ResourceWriteConflictException;
+import cc.ginpika.bootfs.file.binding.ObjectKeyRepository;
+
+import cc.ginpika.bootfs.file.FileTransferService;
+import cc.ginpika.bootfs.file.FileService;
 import cc.ginpika.bootfs.config.TfsConfig;
-import cc.ginpika.bootfs.core.Context;
-import cc.ginpika.bootfs.core.io.ContextIO;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
+import cc.ginpika.bootfs.file.inventory.FileCatalogRepository;
 import cc.ginpika.bootfs.kernel.cluster.NodeIdentity;
 import cc.ginpika.bootfs.kernel.metadata.RocksMetadataStore;
 import cc.ginpika.bootfs.kernel.object.*;
 import cc.ginpika.bootfs.service.*;
-import cc.ginpika.bootfs.service.etcd.EtcdService;
-import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
+import cc.ginpika.bootfs.metadata.MetadataRegistry;
+import cc.ginpika.bootfs.search.ResourceSearchService;
 import cc.ginpika.bootfs.service.thumb.ThumbnailService;
 import com.alibaba.fastjson2.JSONObject;
 import org.junit.jupiter.api.*;
@@ -27,14 +34,17 @@ import static org.mockito.ArgumentMatchers.*;
 class ReplicatedPublicationTest {
     @TempDir Path root;
     RocksMetadataStore store;
-    Context owner;
+    LocalFileInventory owner;
     TfsConfig config;
-    EtcdService routes;
+    MetadataRegistry routes;
     FileTransferService transport;
+    ObjectWritePolicy policy;
+    ResourceReplicationService replications;
+    ResourceRecoveryService recovery;
     FileService files;
-    S3KeyIndex keys;
+    ObjectKeyRepository keys;
     Map<String,FileTransferService> receivers = new HashMap<>();
-    Map<String,Context> contexts = new HashMap<>();
+    Map<String,LocalFileInventory> contexts = new HashMap<>();
     AtomicBoolean unavailable = new AtomicBoolean();
     AtomicBoolean loseReply = new AtomicBoolean();
 
@@ -44,11 +54,11 @@ class ReplicatedPublicationTest {
             TfsConfig cfg = new TfsConfig(); cfg.setRootPath(root.resolve(node).toString()); cfg.setUniqueId(node);
             cfg.setWebEntrypoint("http://" + node); cfg.setCopies(3);
             NodeIdentity identity = new NodeIdentity(cfg);
-            Context context = new Context(cfg, new ContextIO(store, cfg, identity), identity); context.load(); contexts.put(node, context);
-            EtcdService metadata = new EtcdService(store, cfg, context); metadata.registry();
+            LocalFileInventory context = new LocalFileInventory(cfg, new FileCatalogRepository(store, cfg, identity), identity); context.load(); contexts.put(node, context);
+            MetadataRegistry metadata = new MetadataRegistry(store, cfg, context); metadata.registry();
             FileTransferService receiver = new FileTransferService();
             ReflectionTestUtils.setField(receiver, "context", context); ReflectionTestUtils.setField(receiver, "tfsConfig", cfg);
-            ReflectionTestUtils.setField(receiver, "etcdService", metadata); ReflectionTestUtils.setField(receiver, "meiliSearchService", mock(MeiliSearchService.class));
+            ReflectionTestUtils.setField(receiver, "metadataRegistry", metadata); ReflectionTestUtils.setField(receiver, "resourceSearch", mock(ResourceSearchService.class));
             receivers.put("http://" + node, receiver);
             if (node.equals("owner")) { owner = context; config = cfg; routes = metadata; }
         }
@@ -65,47 +75,59 @@ class ReplicatedPublicationTest {
         config.setCopies(1); // Keep optional asynchronous repair out of this protocol test.
         ThumbnailService thumbs = mock(ThumbnailService.class);
         when(thumbs.thumbPath(anyString())).thenAnswer(call -> root.resolve("owner/data/thumb/" + call.getArgument(0) + ".webp"));
-        files = new FileService(owner, config, routes, transport, mock(MeiliSearchService.class), thumbs);
-        keys = new S3KeyIndex(routes); ReflectionTestUtils.setField(files, "s3KeyIndex", keys);
-        ReflectionTestUtils.setField(files, "writePolicy", "replicated"); ReflectionTestUtils.setField(files, "requiredCopies", 3);
-        files.validateWritePolicy();
+        ResourceSearchService search = mock(ResourceSearchService.class);
+        policy = new ObjectWritePolicy(config);
+        ReflectionTestUtils.setField(policy, "writePolicy", "replicated");
+        ReflectionTestUtils.setField(policy, "requiredCopies", 3);
+        policy.validateWritePolicy();
+        keys = new ObjectKeyRepository(routes);
+        ResourceWriteLock lock = new ResourceWriteLock();
+        ResourceDeletionService deletions = new ResourceDeletionService(owner, config, routes, search, thumbs, keys);
+        replications = new ResourceReplicationService(owner, config, routes, transport, deletions);
+        TextReplacementCommitter textCommitter = new TextReplacementCommitter(owner, routes, search, transport, deletions, replications);
+        ResourcePublicationService publications = new ResourcePublicationService(
+                owner, config, routes, transport, search, thumbs, policy, lock, deletions, replications, textCommitter, keys);
+        AlbumPublicationService albums = new AlbumPublicationService(owner, routes, search, policy, lock, deletions, publications, keys);
+        files = new FileService(owner, policy, publications, albums);
+        recovery = new ResourceRecoveryService(publications, albums, transport, replications, deletions,
+                new ObjectKeyBootstrap(owner, routes, policy, keys));
     }
-    @AfterEach void close() { files.close(); store.close(); }
+    @AfterEach void close() { replications.close(); store.close(); }
 
     @Test void unavailableNodesCannotPublishAnyViewAndRestartResumesTheSameImmutableUpload() throws Exception {
         unavailable.set(true);
         PublicationPendingException failure = assertThrows(PublicationPendingException.class,
                 () -> files.publish(new ByteArrayInputStream(new byte[]{1,2,3}), "safe.bin", true));
         String uuid = failure.getUploadId();
-        assertTrue(owner.STORAGE.isEmpty()); assertTrue(store.scan("/files/").isEmpty()); assertTrue(store.scan("/s3/").isEmpty());
+        assertTrue(owner.cachedFiles().isEmpty()); assertTrue(store.scan("/files/").isEmpty()); assertTrue(store.scan("/s3/").isEmpty());
         assertEquals(1, store.scan("/pending-publications/").size()); assertTrue(Files.exists(root.resolve("owner/data/" + uuid)));
         // Recovery uses the persisted policy even after the configured policy is lowered.
-        ReflectionTestUtils.setField(files, "writePolicy", "single-local");
-        files.resumePendingPublications(); assertNull(keys.getIndex("bootfs", "safe.bin"));
-        unavailable.set(false); files.resumePendingPublications();
-        assertEquals(uuid, keys.getIndex("bootfs", "safe.bin").getUuid()); assertEquals(Set.of(uuid), owner.STORAGE.keySet());
+        ReflectionTestUtils.setField(policy, "writePolicy", "single-local");
+        recovery.resumePendingPublications(); assertNull(keys.find("bootfs", "safe.bin"));
+        unavailable.set(false); recovery.resumePendingPublications();
+        assertEquals(uuid, keys.find("bootfs", "safe.bin").getUuid()); assertEquals(Set.of(uuid), owner.cachedFiles().stream().map(FileObject::getUuid).collect(java.util.stream.Collectors.toSet()));
         assertTrue(store.scan("/pending-publications/").isEmpty());
         JSONObject meta = JSONObject.parseObject(store.get("/files/" + uuid + "/meta"));
         assertEquals(3, meta.getIntValue("requiredCopies")); assertEquals(Set.of("owner", "b", "c"), meta.getJSONObject("durableNodes").keySet());
-        assertTrue(contexts.get("b").STORAGE.isEmpty(), "Prepared bytes must not be publicly registered before promotion");
+        assertTrue(contexts.get("b").cachedFiles().isEmpty(), "Prepared bytes must not be publicly registered before promotion");
         receivers.get("http://b").resumePreparedReplicas(); receivers.get("http://c").resumePreparedReplicas();
-        assertEquals(1, contexts.get("b").STORAGE.size()); assertEquals(1, contexts.get("c").STORAGE.size());
+        assertEquals(1, contexts.get("b").cachedCount()); assertEquals(1, contexts.get("c").cachedCount());
         assertTrue(store.scan("/prepared-replicas/").isEmpty());
     }
 
     @Test void lostDurableReceiptIsRetriedWithoutAnotherReplicaIdentity() throws Exception {
         loseReply.set(true);
         assertThrows(PublicationPendingException.class, () -> files.publish(new ByteArrayInputStream(new byte[]{4,5}), "retry", true));
-        assertEquals(2, store.scan("/prepared-replicas/").size()); assertTrue(owner.STORAGE.isEmpty());
-        files.resumePendingPublications();
-        assertEquals(1, owner.STORAGE.size()); assertEquals(2, store.scan("/prepared-replicas/").size());
+        assertEquals(2, store.scan("/prepared-replicas/").size()); assertTrue(owner.cachedFiles().isEmpty());
+        recovery.resumePendingPublications();
+        assertEquals(1, owner.cachedCount()); assertEquals(2, store.scan("/prepared-replicas/").size());
         for (String node : List.of("b", "c")) {
             try (var paths = Files.list(root.resolve(node + "/data"))) { assertEquals(1, paths.count()); }
         }
     }
 
     @Test void aBlackholedFirstCandidateCannotConsumeEveryFallbackAttempt() throws Exception {
-        ReflectionTestUtils.setField(files,"requiredCopies",2); ReflectionTestUtils.setField(files,"prepareTimeoutMs",3000);
+        ReflectionTestUtils.setField(policy,"requiredCopies",2); ReflectionTestUtils.setField(policy,"prepareTimeoutMs",3000);
         java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
         doAnswer(call -> {
             if (attempts.getAndIncrement() == 0) { Thread.sleep((int)call.getArgument(5)); throw new IOException("blackholed until transport deadline"); }
@@ -113,7 +135,7 @@ class ReplicatedPublicationTest {
             return receivers.get(url).prepare(new MockMultipartFile("file",Files.readAllBytes(content.toPath())),call.getArgument(2),call.getArgument(1),call.getArgument(3));
         }).when(transport).prepareRemote(any(),anyString(),anyString(),anyString(),any(),anyInt());
         var published = files.publish(new ByteArrayInputStream(new byte[]{1}),"fallback",true);
-        assertEquals(2,attempts.get()); assertNotNull(keys.getIndex("bootfs","fallback"));
+        assertEquals(2,attempts.get()); assertNotNull(keys.find("bootfs","fallback"));
     }
 
     @Test void aliasOrWrongContentAcknowledgementsCannotSatisfyDistinctNodePolicy() throws Exception {
@@ -126,16 +148,16 @@ class ReplicatedPublicationTest {
     }
 
     @Test void failedReplacementPreservesOldS3BindingUntilBytePolicyIsMet() throws Exception {
-        ReflectionTestUtils.setField(files, "writePolicy", "single-local");
-        var first = files.publishS3(new ByteArrayInputStream(new byte[]{1}), "key", "bootfs", "application/octet-stream", null, null);
+        ReflectionTestUtils.setField(policy, "writePolicy", "single-local");
+        var first = files.publishBoundObject(new ByteArrayInputStream(new byte[]{1}), "key", "bootfs", "application/octet-stream", null, null);
         String expected = routes.getOne("/s3/bootfs/key");
-        ReflectionTestUtils.setField(files, "writePolicy", "replicated"); unavailable.set(true);
+        ReflectionTestUtils.setField(policy, "writePolicy", "replicated"); unavailable.set(true);
         PublicationPendingException pending = assertThrows(PublicationPendingException.class,
-                () -> files.publishS3(new ByteArrayInputStream(new byte[]{2}), "key", "bootfs", "application/octet-stream", expected, null));
-        assertEquals(first.file().getUuid(), keys.getIndex("bootfs", "key").getUuid());
+                () -> files.publishBoundObject(new ByteArrayInputStream(new byte[]{2}), "key", "bootfs", "application/octet-stream", expected, null));
+        assertEquals(first.file().getUuid(), keys.find("bootfs", "key").getUuid());
         assertNull(store.get("/files/" + pending.getUploadId())); assertNotNull(owner.query(first.file().getUuid()));
-        unavailable.set(false); files.resumePendingPublications();
-        assertEquals(pending.getUploadId(), keys.getIndex("bootfs", "key").getUuid()); assertNull(owner.query(first.file().getUuid()));
+        unavailable.set(false); recovery.resumePendingPublications();
+        assertEquals(pending.getUploadId(), keys.find("bootfs", "key").getUuid()); assertNull(owner.query(first.file().getUuid()));
     }
 
     @Test void receiverRejectsCorruptionAndNeverExposesAPreparedObject() throws Exception {
@@ -146,14 +168,14 @@ class ReplicatedPublicationTest {
         String hash = ContentHash.sha256(new ByteArrayInputStream(new byte[]{8,9}));
         JSONObject receipt = receiver.prepare(content, "test", "original", hash);
         assertEquals(receipt, receiver.prepare(content, "test", "original", hash));
-        assertTrue(store.scan("/files/").isEmpty()); assertTrue(contexts.get("b").STORAGE.isEmpty());
+        assertTrue(store.scan("/files/").isEmpty()); assertTrue(contexts.get("b").cachedFiles().isEmpty());
         JSONObject prepared = JSONObject.parseObject(store.scan("/prepared-replicas/").values().iterator().next());
         // The replica UUID identifies the resource; its bytes use a separate content object ID.
         Path contentPath = root.resolve("b/data/" + prepared.getJSONObject("file").getString("contentObjectId"));
         assertArrayEquals(content.getBytes(), Files.readAllBytes(contentPath));
         Files.write(contentPath, new byte[]{0,0}, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
         assertThrows(IOException.class, () -> receiver.prepare(content, "test", "original", hash));
-        assertTrue(store.scan("/files/").isEmpty()); assertTrue(contexts.get("b").STORAGE.isEmpty());
+        assertTrue(store.scan("/files/").isEmpty()); assertTrue(contexts.get("b").cachedFiles().isEmpty());
     }
 
     @Test void callerRetryUsesTheSameUploadAndRejectsReusingTheTokenForDifferentBytes() throws Exception {
@@ -165,8 +187,8 @@ class ReplicatedPublicationTest {
         unavailable.set(false);
         assertEquals("http://owner/f/" + id, files.upload(upload, "request-1"));
         assertEquals("http://owner/f/" + id, files.upload(upload, "request-1"));
-        assertEquals(1, owner.STORAGE.size());
-        assertThrows(S3ConcurrentWriteException.class, () -> files.upload(new MockMultipartFile("file", "same.bin", null, new byte[]{9}), "request-1"));
+        assertEquals(1, owner.cachedCount());
+        assertThrows(ResourceWriteConflictException.class, () -> files.upload(new MockMultipartFile("file", "same.bin", null, new byte[]{9}), "request-1"));
     }
 
     @Test void albumArchiveAndEveryPageRequireDurableConfirmation() throws Exception {
@@ -176,8 +198,8 @@ class ReplicatedPublicationTest {
             zip.putNextEntry(new ZipEntry("2.png")); zip.write(new byte[]{3,4}); zip.closeEntry();
         }
         files.uploadComic(new MockMultipartFile("file", "[Comic]pages.zip", "application/zip", archive.toByteArray()));
-        assertEquals(3, owner.STORAGE.size());
-        for (String uuid : owner.STORAGE.keySet()) assertEquals(3, JSONObject.parseObject(store.get("/files/" + uuid + "/meta")).getIntValue("requiredCopies"));
+        assertEquals(3, owner.cachedCount());
+        for (String uuid : owner.cachedFiles().stream().map(FileObject::getUuid).collect(java.util.stream.Collectors.toSet())) assertEquals(3, JSONObject.parseObject(store.get("/files/" + uuid + "/meta")).getIntValue("requiredCopies"));
         assertEquals(6, store.scan("/prepared-replicas/").size());
     }
 }

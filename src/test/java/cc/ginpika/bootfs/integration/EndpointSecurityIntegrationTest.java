@@ -1,9 +1,12 @@
 package cc.ginpika.bootfs.integration;
 
-import cc.ginpika.bootfs.dto.*;
-import cc.ginpika.bootfs.service.SsoService;
-import cc.ginpika.bootfs.core.Context;
-import cc.ginpika.bootfs.service.FileService;
+import cc.ginpika.bootfs.sso.SsoUser;
+import cc.ginpika.bootfs.sso.SsoSession;
+import cc.ginpika.bootfs.sso.SsoSession;
+import cc.ginpika.bootfs.sso.SsoUser;
+import cc.ginpika.bootfs.sso.SsoClient;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
+import cc.ginpika.bootfs.file.FileService;
 import java.nio.file.Path;
 import javax.servlet.http.Cookie;
 import org.junit.jupiter.api.*;
@@ -17,7 +20,6 @@ import org.springframework.test.context.*;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import reactor.core.publisher.Mono;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -32,8 +34,8 @@ class EndpointSecurityIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired RequestMappingHandlerMapping mappings;
     @Autowired FileService files;
-    @Autowired Context context;
-    @MockBean SsoService sso;
+    @Autowired LocalFileInventory context;
+    @MockBean SsoClient sso;
     final Cookie cookie = new Cookie("sso_token", "test-session");
 
     @BeforeEach void authentication() {
@@ -111,7 +113,7 @@ class EndpointSecurityIntegrationTest {
     }
 
     @Test void complexAndAmbiguousJsonIsRejectedBeforeItCanMutateState() throws Exception {
-        int before = context.STORAGE.size();
+        int before = context.cachedCount();
         for (String body : new String[]{"{\"fileName\":\"first\",\"fileName\":\"second\"}", "{\"extra\":" + "[".repeat(65) + "0" + "]".repeat(65) + "}"}) {
             mvc.perform(post("/virtual-file").cookie(cookie).header("Origin", "http://localhost")
                     .contentType("application/json").content(body)).andExpect(status().isBadRequest());
@@ -119,7 +121,7 @@ class EndpointSecurityIntegrationTest {
         mvc.perform(post("/virtual-file").cookie(cookie).header("Origin", "http://localhost")
                 .contentType("application/json").content("{\"fileName\":\"" + "x".repeat(16 * 1024 * 1024) + "\"}"))
                 .andExpect(status().isPayloadTooLarge());
-        assertEquals(before, context.STORAGE.size());
+        assertEquals(before, context.cachedCount());
     }
 
     @Test void segmentNamesCannotInjectNewPlaylistDirectives() throws Exception {

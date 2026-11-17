@@ -1,8 +1,8 @@
 package cc.ginpika.bootfs.service.tv;
 
 import cc.ginpika.bootfs.config.TfsConfig;
-import cc.ginpika.bootfs.core.Context;
-import cc.ginpika.bootfs.dto.SsoUser;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
+import cc.ginpika.bootfs.sso.SsoUser;
 import cc.ginpika.bootfs.kernel.cluster.DynamicMetadataStore;
 import cc.ginpika.bootfs.kernel.metadata.MetadataStore;
 import cc.ginpika.bootfs.service.FederationService;
@@ -17,7 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.nio.file.Files;
@@ -35,7 +34,7 @@ public class TvService {
     private static final int CHAT_HISTORY_SIZE = 100;
     private static final long CHAT_TTL_MS = TimeUnit.HOURS.toMillis(24);
 
-    private final Context context;
+    private final LocalFileInventory context;
     private final TfsConfig config;
     private final MetadataStore metadata;
     private final FederationService federation;

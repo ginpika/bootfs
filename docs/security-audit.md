@@ -50,8 +50,8 @@
 |---|---|---|---|
 | GET | `/` | 页面启用认证并关闭公开读取时需登录；公开模式仅放行明确的媒体查看页面。 | [WebUIController:52](../src/main/java/cc/ginpika/bootfs/controller/WebUIController.java#L52) |
 | GET | `/album/**` | 页面启用认证并关闭公开读取时需登录；公开模式仅放行明确的媒体查看页面。 | [WebUIController:105](../src/main/java/cc/ginpika/bootfs/controller/WebUIController.java#L105) |
-| GET | `/api/album/{uuid}` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:699](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L699) |
-| GET | `/api/auth/me` | 登录身份回填；跨站登出受来源校验。 | [AuthController:68](../src/main/java/cc/ginpika/bootfs/controller/AuthController.java#L68) |
+| GET | `/api/album/{uuid}` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [FileContentController:234](../src/main/java/cc/ginpika/bootfs/file/web/FileContentController.java#L234) |
+| GET | `/api/auth/me` | 登录身份回填；跨站登出受来源校验。 | [AuthController:64](../src/main/java/cc/ginpika/bootfs/sso/AuthController.java#L64) |
 | POST | `/api/cluster/connect` | 管理角色或本机 owner token；节点间端点另校验签名、nonce 和 actor。redeem 使用一次性短码。 | [ClusterController:41](../src/main/java/cc/ginpika/bootfs/controller/ClusterController.java#L41) |
 | GET | `/api/cluster/data/replica-source/{id}` | 必须有节点凭证及签名；JSON 正文所有 MIME 变体参与摘要检查。 | [FederationDataController:17](../src/main/java/cc/ginpika/bootfs/controller/FederationDataController.java#L17) |
 | POST | `/api/cluster/data/replica/commit` | 必须有节点凭证及签名；JSON 正文所有 MIME 变体参与摘要检查。 | [FederationDataController:22](../src/main/java/cc/ginpika/bootfs/controller/FederationDataController.java#L22) |
@@ -72,71 +72,71 @@
 | GET | `/api/cluster/versions` | 管理角色或本机 owner token；节点间端点另校验签名、nonce 和 actor。redeem 使用一次性短码。 | [ClusterController:48](../src/main/java/cc/ginpika/bootfs/controller/ClusterController.java#L48) |
 | GET | `/api/dashboard/node-stats` | 系统、流量与客户端 IP 仅对授权管理身份；节点统计允许签名 peer。 | [DashboardApiController:81](../src/main/java/cc/ginpika/bootfs/controller/DashboardApiController.java#L81) |
 | GET | `/api/dashboard/stats` | 系统、流量与客户端 IP 仅对授权管理身份；节点统计允许签名 peer。 | [DashboardApiController:64](../src/main/java/cc/ginpika/bootfs/controller/DashboardApiController.java#L64) |
-| DELETE | `/api/etcd/key` | 原始键值具有全局读取和写入能力，仅授权管理身份；不提供普通用户访问。 | [EtcdApiController:107](../src/main/java/cc/ginpika/bootfs/controller/EtcdApiController.java#L107) |
-| GET | `/api/etcd/key` | 原始键值具有全局读取和写入能力，仅授权管理身份；不提供普通用户访问。 | [EtcdApiController:107](../src/main/java/cc/ginpika/bootfs/controller/EtcdApiController.java#L107) |
-| POST | `/api/etcd/key` | 原始键值具有全局读取和写入能力，仅授权管理身份；不提供普通用户访问。 | [EtcdApiController:107](../src/main/java/cc/ginpika/bootfs/controller/EtcdApiController.java#L107) |
-| GET | `/api/etcd/keys` | 原始键值具有全局读取和写入能力，仅授权管理身份；不提供普通用户访问。 | [EtcdApiController:23](../src/main/java/cc/ginpika/bootfs/controller/EtcdApiController.java#L23) |
-| DELETE | `/api/etcd/keys/prefix` | 原始键值具有全局读取和写入能力，仅授权管理身份；不提供普通用户访问。 | [EtcdApiController:122](../src/main/java/cc/ginpika/bootfs/controller/EtcdApiController.java#L122) |
-| GET | `/api/file/{uuid}/ai-metadata` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:517](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L517) |
-| GET | `/api/file/{uuid}/clash` | 只读非机密节点摘要；延迟探测默认拒绝内网/本机/云元数据地址。 | [ClashFileController:30](../src/main/java/cc/ginpika/bootfs/controller/ClashFileController.java#L30) |
-| POST | `/api/file/{uuid}/clash/latency` | 只读非机密节点摘要；延迟探测默认拒绝内网/本机/云元数据地址。 | [ClashFileController:38](../src/main/java/cc/ginpika/bootfs/controller/ClashFileController.java#L38) |
-| GET | `/api/file/{uuid}/cover` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:551](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L551) |
-| GET | `/api/file/{uuid}/details` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:466](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L466) |
-| GET | `/api/file/{uuid}/publication` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:263](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L263) |
-| PUT | `/api/file/{uuid}/rename` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:316](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L316) |
-| DELETE | `/api/file/{uuid}/tags` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:366](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L366) |
-| GET | `/api/file/{uuid}/tags` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:366](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L366) |
-| POST | `/api/file/{uuid}/tags` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:366](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L366) |
-| PUT | `/api/file/{uuid}/tags` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:366](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L366) |
-| GET | `/api/file/{uuid}/text` | 授权管理身份或签名节点；2 MiB 字节限制、编码校验与版本冲突检查。 | [TextFileController:42](../src/main/java/cc/ginpika/bootfs/controller/TextFileController.java#L42) |
-| PUT | `/api/file/{uuid}/text` | 授权管理身份或签名节点；2 MiB 字节限制、编码校验与版本冲突检查。 | [TextFileController:42](../src/main/java/cc/ginpika/bootfs/controller/TextFileController.java#L42) |
-| GET | `/api/logout` | 登录身份回填；跨站登出受来源校验。 | [AuthController:30](../src/main/java/cc/ginpika/bootfs/controller/AuthController.java#L30) |
-| GET | `/api/meilisearch/indexes` | 全局索引读写仅授权管理身份；搜索由内嵌 Lucene 实现，无 SQL 拼接。 | [MeiliSearchApiController:21](../src/main/java/cc/ginpika/bootfs/controller/MeiliSearchApiController.java#L21) |
-| DELETE | `/api/meilisearch/indexes/{indexUid}/documents` | 全局索引读写仅授权管理身份；搜索由内嵌 Lucene 实现，无 SQL 拼接。 | [MeiliSearchApiController:72](../src/main/java/cc/ginpika/bootfs/controller/MeiliSearchApiController.java#L72) |
-| GET | `/api/meilisearch/indexes/{indexUid}/documents` | 全局索引读写仅授权管理身份；搜索由内嵌 Lucene 实现，无 SQL 拼接。 | [MeiliSearchApiController:72](../src/main/java/cc/ginpika/bootfs/controller/MeiliSearchApiController.java#L72) |
-| POST | `/api/meilisearch/indexes/{indexUid}/documents` | 全局索引读写仅授权管理身份；搜索由内嵌 Lucene 实现，无 SQL 拼接。 | [MeiliSearchApiController:72](../src/main/java/cc/ginpika/bootfs/controller/MeiliSearchApiController.java#L72) |
-| DELETE | `/api/meilisearch/indexes/{indexUid}/documents/{docId}` | 全局索引读写仅授权管理身份；搜索由内嵌 Lucene 实现，无 SQL 拼接。 | [MeiliSearchApiController:49](../src/main/java/cc/ginpika/bootfs/controller/MeiliSearchApiController.java#L49) |
-| GET | `/api/meilisearch/indexes/{indexUid}/documents/{docId}` | 全局索引读写仅授权管理身份；搜索由内嵌 Lucene 实现，无 SQL 拼接。 | [MeiliSearchApiController:49](../src/main/java/cc/ginpika/bootfs/controller/MeiliSearchApiController.java#L49) |
-| GET | `/api/meilisearch/indexes/{indexUid}/search` | 全局索引读写仅授权管理身份；搜索由内嵌 Lucene 实现，无 SQL 拼接。 | [MeiliSearchApiController:60](../src/main/java/cc/ginpika/bootfs/controller/MeiliSearchApiController.java#L60) |
-| GET | `/api/tags/list` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:455](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L455) |
-| GET | `/api/tags/search` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:423](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L423) |
-| PUT | `/comic` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:105](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L105) |
+| DELETE | `/api/etcd/key` | 原始键值具有全局读取和写入能力，仅授权管理身份；不提供普通用户访问。 | [MetadataAdminController:105](../src/main/java/cc/ginpika/bootfs/metadata/MetadataAdminController.java#L105) |
+| GET | `/api/etcd/key` | 原始键值具有全局读取和写入能力，仅授权管理身份；不提供普通用户访问。 | [MetadataAdminController:87](../src/main/java/cc/ginpika/bootfs/metadata/MetadataAdminController.java#L87) |
+| POST | `/api/etcd/key` | 原始键值具有全局读取和写入能力，仅授权管理身份；不提供普通用户访问。 | [MetadataAdminController:65](../src/main/java/cc/ginpika/bootfs/metadata/MetadataAdminController.java#L65) |
+| GET | `/api/etcd/keys` | 原始键值具有全局读取和写入能力，仅授权管理身份；不提供普通用户访问。 | [MetadataAdminController:21](../src/main/java/cc/ginpika/bootfs/metadata/MetadataAdminController.java#L21) |
+| DELETE | `/api/etcd/keys/prefix` | 原始键值具有全局读取和写入能力，仅授权管理身份；不提供普通用户访问。 | [MetadataAdminController:120](../src/main/java/cc/ginpika/bootfs/metadata/MetadataAdminController.java#L120) |
+| GET | `/api/file/{uuid}/ai-metadata` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [FileMediaController:87](../src/main/java/cc/ginpika/bootfs/file/web/FileMediaController.java#L87) |
+| GET | `/api/file/{uuid}/clash` | 只读非机密节点摘要；延迟探测默认拒绝内网/本机/云元数据地址。 | [ClashFileController:27](../src/main/java/cc/ginpika/bootfs/clash/ClashFileController.java#L27) |
+| POST | `/api/file/{uuid}/clash/latency` | 只读非机密节点摘要；延迟探测默认拒绝内网/本机/云元数据地址。 | [ClashFileController:35](../src/main/java/cc/ginpika/bootfs/clash/ClashFileController.java#L35) |
+| GET | `/api/file/{uuid}/cover` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [FileMediaController:121](../src/main/java/cc/ginpika/bootfs/file/web/FileMediaController.java#L121) |
+| GET | `/api/file/{uuid}/details` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [FileMediaController:36](../src/main/java/cc/ginpika/bootfs/file/web/FileMediaController.java#L36) |
+| GET | `/api/file/{uuid}/publication` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [FileContentController:228](../src/main/java/cc/ginpika/bootfs/file/web/FileContentController.java#L228) |
+| PUT | `/api/file/{uuid}/rename` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [FileMetadataController:38](../src/main/java/cc/ginpika/bootfs/file/web/FileMetadataController.java#L38) |
+| DELETE | `/api/file/{uuid}/tags` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [FileMetadataController:66](../src/main/java/cc/ginpika/bootfs/file/web/FileMetadataController.java#L66) |
+| GET | `/api/file/{uuid}/tags` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [FileMetadataController:73](../src/main/java/cc/ginpika/bootfs/file/web/FileMetadataController.java#L73) |
+| POST | `/api/file/{uuid}/tags` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [FileMetadataController:59](../src/main/java/cc/ginpika/bootfs/file/web/FileMetadataController.java#L59) |
+| PUT | `/api/file/{uuid}/tags` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [FileMetadataController:52](../src/main/java/cc/ginpika/bootfs/file/web/FileMetadataController.java#L52) |
+| GET | `/api/file/{uuid}/text` | 授权管理身份或签名节点；2 MiB 字节限制、编码校验与版本冲突检查。 | [TextFileController:30](../src/main/java/cc/ginpika/bootfs/file/TextFileController.java#L30) |
+| PUT | `/api/file/{uuid}/text` | 授权管理身份或签名节点；2 MiB 字节限制、编码校验与版本冲突检查。 | [TextFileController:40](../src/main/java/cc/ginpika/bootfs/file/TextFileController.java#L40) |
+| GET | `/api/logout` | 登录身份回填；跨站登出受来源校验。 | [AuthController:26](../src/main/java/cc/ginpika/bootfs/sso/AuthController.java#L26) |
+| GET | `/api/meilisearch/indexes` | 全局索引读写仅授权管理身份；搜索由内嵌 Lucene 实现，无 SQL 拼接。 | [SearchIndexAdminController:19](../src/main/java/cc/ginpika/bootfs/search/SearchIndexAdminController.java#L19) |
+| DELETE | `/api/meilisearch/indexes/{indexUid}/documents` | 全局索引读写仅授权管理身份；搜索由内嵌 Lucene 实现，无 SQL 拼接。 | [SearchIndexAdminController:53](../src/main/java/cc/ginpika/bootfs/search/SearchIndexAdminController.java#L53) |
+| GET | `/api/meilisearch/indexes/{indexUid}/documents` | 全局索引读写仅授权管理身份；搜索由内嵌 Lucene 实现，无 SQL 拼接。 | [SearchIndexAdminController:34](../src/main/java/cc/ginpika/bootfs/search/SearchIndexAdminController.java#L34) |
+| POST | `/api/meilisearch/indexes/{indexUid}/documents` | 全局索引读写仅授权管理身份；搜索由内嵌 Lucene 实现，无 SQL 拼接。 | [SearchIndexAdminController:70](../src/main/java/cc/ginpika/bootfs/search/SearchIndexAdminController.java#L70) |
+| DELETE | `/api/meilisearch/indexes/{indexUid}/documents/{docId}` | 全局索引读写仅授权管理身份；搜索由内嵌 Lucene 实现，无 SQL 拼接。 | [SearchIndexAdminController:47](../src/main/java/cc/ginpika/bootfs/search/SearchIndexAdminController.java#L47) |
+| GET | `/api/meilisearch/indexes/{indexUid}/documents/{docId}` | 全局索引读写仅授权管理身份；搜索由内嵌 Lucene 实现，无 SQL 拼接。 | [SearchIndexAdminController:41](../src/main/java/cc/ginpika/bootfs/search/SearchIndexAdminController.java#L41) |
+| GET | `/api/meilisearch/indexes/{indexUid}/search` | 全局索引读写仅授权管理身份；搜索由内嵌 Lucene 实现，无 SQL 拼接。 | [SearchIndexAdminController:58](../src/main/java/cc/ginpika/bootfs/search/SearchIndexAdminController.java#L58) |
+| GET | `/api/tags/list` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [FileCatalogController:71](../src/main/java/cc/ginpika/bootfs/file/web/FileCatalogController.java#L71) |
+| GET | `/api/tags/search` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [FileCatalogController:39](../src/main/java/cc/ginpika/bootfs/file/web/FileCatalogController.java#L39) |
+| PUT | `/comic` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [FileContentController:73](../src/main/java/cc/ginpika/bootfs/file/web/FileContentController.java#L73) |
 | GET | `/dashboard` | 页面启用认证并关闭公开读取时需登录；公开模式仅放行明确的媒体查看页面。 | [WebUIController:121](../src/main/java/cc/ginpika/bootfs/controller/WebUIController.java#L121) |
-| POST | `/downloadFileBatch` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:210](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L210) |
+| POST | `/downloadFileBatch` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [FileBatchController:58](../src/main/java/cc/ginpika/bootfs/file/web/FileBatchController.java#L58) |
 | GET | `/etcd` | 页面启用认证并关闭公开读取时需登录；公开模式仅放行明确的媒体查看页面。 | [WebUIController:132](../src/main/java/cc/ginpika/bootfs/controller/WebUIController.java#L132) |
-| PUT | `/f` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:88](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L88) |
-| GET | `/f/{uuid}` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:122](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L122) |
-| GET | `/file/{uuid}` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:733](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L733) |
-| GET | `/g/b/{uuid}` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:260](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L260) |
+| PUT | `/f` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [FileContentController:56](../src/main/java/cc/ginpika/bootfs/file/web/FileContentController.java#L56) |
+| GET | `/f/{uuid}` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [FileContentController:95](../src/main/java/cc/ginpika/bootfs/file/web/FileContentController.java#L95) |
+| GET | `/file/{uuid}` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [FileContentController:268](../src/main/java/cc/ginpika/bootfs/file/web/FileContentController.java#L268) |
+| GET | `/g/b/{uuid}` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [FileBatchController:83](../src/main/java/cc/ginpika/bootfs/file/web/FileBatchController.java#L83) |
 | GET | `/gallery` | 页面启用认证并关闭公开读取时需登录；公开模式仅放行明确的媒体查看页面。 | [WebUIController:113](../src/main/java/cc/ginpika/bootfs/controller/WebUIController.java#L113) |
 | POST | `/hls/convert` | 读启用认证并关闭公开读取时需登录；公开模式仅放行单文件播放，管理接口始终受保护。转换进程受协议/格式/时间限制。 | [HlsController:25](../src/main/java/cc/ginpika/bootfs/service/hls/HlsController.java#L25) |
 | GET | `/hls/{folder}/{file}` | 读启用认证并关闭公开读取时需登录；公开模式仅放行单文件播放，管理接口始终受保护。转换进程受协议/格式/时间限制。 | [HlsController:50](../src/main/java/cc/ginpika/bootfs/service/hls/HlsController.java#L50) |
-| POST | `/hls/{uuid}/finalize` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:418](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L418) |
-| POST | `/hls/{uuid}/segments` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:347](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L347) |
-| GET | `/hls/{uuid}/segments/info` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:450](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L450) |
-| GET | `/hls/{uuid}/segments/list` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:502](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L502) |
-| POST | `/hls/{uuid}/segments/reorder` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:574](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L574) |
-| DELETE | `/hls/{uuid}/segments/{fileName}` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:647](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L647) |
+| POST | `/hls/{uuid}/finalize` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [HlsUploadController:37](../src/main/java/cc/ginpika/bootfs/service/hls/HlsUploadController.java#L37) |
+| POST | `/hls/{uuid}/segments` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [HlsUploadController:28](../src/main/java/cc/ginpika/bootfs/service/hls/HlsUploadController.java#L28) |
+| GET | `/hls/{uuid}/segments/info` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [HlsUploadController:42](../src/main/java/cc/ginpika/bootfs/service/hls/HlsUploadController.java#L42) |
+| GET | `/hls/{uuid}/segments/list` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [HlsUploadController:47](../src/main/java/cc/ginpika/bootfs/service/hls/HlsUploadController.java#L47) |
+| POST | `/hls/{uuid}/segments/reorder` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [HlsUploadController:52](../src/main/java/cc/ginpika/bootfs/service/hls/HlsUploadController.java#L52) |
+| DELETE | `/hls/{uuid}/segments/{fileName}` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [HlsUploadController:57](../src/main/java/cc/ginpika/bootfs/service/hls/HlsUploadController.java#L57) |
 | GET | `/index-old` | 页面启用认证并关闭公开读取时需登录；公开模式仅放行明确的媒体查看页面。 | [WebUIController:37](../src/main/java/cc/ginpika/bootfs/controller/WebUIController.java#L37) |
 | GET | `/meilisearch` | 页面启用认证并关闭公开读取时需登录；公开模式仅放行明确的媒体查看页面。 | [WebUIController:143](../src/main/java/cc/ginpika/bootfs/controller/WebUIController.java#L143) |
 | GET | `/old-admin` | 页面启用认证并关闭公开读取时需登录；公开模式仅放行明确的媒体查看页面。 | [WebUIController:68](../src/main/java/cc/ginpika/bootfs/controller/WebUIController.java#L68) |
-| GET | `/p/{uuid}` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:176](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L176) |
-| GET | `/p/{uuid}`（p=vless） | 含代理凭证；启用认证并关闭公开读取时需登录，公开开关开启后持有链接即可导出。 | [ClashSubscriptionController:34](../src/main/java/cc/ginpika/bootfs/controller/ClashSubscriptionController.java#L34) |
-| POST | `/publicAccess/{uuid}` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:279](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L279) |
-| GET | `/queryPageOffset` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:83](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L83) |
-| POST | `/removeFileBatch` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:199](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L199) |
-| POST | `/removeFileByUuid` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:185](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L185) |
+| GET | `/p/{uuid}` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [FileContentController:141](../src/main/java/cc/ginpika/bootfs/file/web/FileContentController.java#L141) |
+| GET | `/p/{uuid}`（p=vless） | 含代理凭证；启用认证并关闭公开读取时需登录，公开开关开启后持有链接即可导出。 | [ClashSubscriptionController:31](../src/main/java/cc/ginpika/bootfs/clash/ClashSubscriptionController.java#L31) |
+| POST | `/publicAccess/{uuid}` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [FileMetadataController:31](../src/main/java/cc/ginpika/bootfs/file/web/FileMetadataController.java#L31) |
+| GET | `/queryPageOffset` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [FileCatalogController:28](../src/main/java/cc/ginpika/bootfs/file/web/FileCatalogController.java#L28) |
+| POST | `/removeFileBatch` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [FileBatchController:52](../src/main/java/cc/ginpika/bootfs/file/web/FileBatchController.java#L52) |
+| POST | `/removeFileByUuid` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [FileBatchController:40](../src/main/java/cc/ginpika/bootfs/file/web/FileBatchController.java#L40) |
 | GET | `/s3` | 启用时所有方法必须通过 SigV4 Filter；MVC 再检查过滤器认证标记；校验对象正文摘要。 | [S3Controller:58](../src/main/java/cc/ginpika/bootfs/s3/S3Controller.java#L58) |
 | GET | `/s3/{bucket}` | 启用时所有方法必须通过 SigV4 Filter；MVC 再检查过滤器认证标记；校验对象正文摘要。 | [S3Controller:63](../src/main/java/cc/ginpika/bootfs/s3/S3Controller.java#L63) |
 | DELETE | `/s3/{bucket}/**` | 启用时所有方法必须通过 SigV4 Filter；MVC 再检查过滤器认证标记；校验对象正文摘要。 | [S3Controller:102](../src/main/java/cc/ginpika/bootfs/s3/S3Controller.java#L102) |
 | GET | `/s3/{bucket}/**` | 启用时所有方法必须通过 SigV4 Filter；MVC 再检查过滤器认证标记；校验对象正文摘要。 | [S3Controller:102](../src/main/java/cc/ginpika/bootfs/s3/S3Controller.java#L102) |
 | HEAD | `/s3/{bucket}/**` | 启用时所有方法必须通过 SigV4 Filter；MVC 再检查过滤器认证标记；校验对象正文摘要。 | [S3Controller:102](../src/main/java/cc/ginpika/bootfs/s3/S3Controller.java#L102) |
 | PUT | `/s3/{bucket}/**` | 启用时所有方法必须通过 SigV4 Filter；MVC 再检查过滤器认证标记；校验对象正文摘要。 | [S3Controller:102](../src/main/java/cc/ginpika/bootfs/s3/S3Controller.java#L102) |
-| GET | `/setu` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:290](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L290) |
-| GET | `/setu-url` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [WebUIApiController:302](../src/main/java/cc/ginpika/bootfs/controller/WebUIApiController.java#L302) |
-| PUT | `/t` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:293](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L293) |
-| PUT | `/t/prepare` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:268](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L268) |
-| GET | `/thumb/{uuid}` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:212](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L212) |
+| GET | `/setu` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [GalleryController:27](../src/main/java/cc/ginpika/bootfs/service/gallery/GalleryController.java#L27) |
+| GET | `/setu-url` | 全局文件管理启用认证并关闭公开读取时需登录；随机图片仅公开模式可匿名，批量 ZIP 始终需登录。 | [GalleryController:35](../src/main/java/cc/ginpika/bootfs/service/gallery/GalleryController.java#L35) |
+| PUT | `/t` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ReplicaTransferController:49](../src/main/java/cc/ginpika/bootfs/file/web/ReplicaTransferController.java#L49) |
+| PUT | `/t/prepare` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ReplicaTransferController:25](../src/main/java/cc/ginpika/bootfs/file/web/ReplicaTransferController.java#L25) |
+| GET | `/thumb/{uuid}` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [FileContentController:177](../src/main/java/cc/ginpika/bootfs/file/web/FileContentController.java#L177) |
 | GET | `/tv` | 启用认证并关闭公开读取时需登录；公开模式可播放，管理接口受保护；TS 读取复用目录/符号链接/删除状态检查。 | [TvController:23](../src/main/java/cc/ginpika/bootfs/service/tv/TvController.java#L23) |
 | GET | `/tv/api/playlist` | 启用认证并关闭公开读取时需登录；公开模式可播放，管理接口受保护；TS 读取复用目录/符号链接/删除状态检查。 | [TvController:117](../src/main/java/cc/ginpika/bootfs/service/tv/TvController.java#L117) |
 | POST | `/tv/api/playlist` | 启用认证并关闭公开读取时需登录；公开模式可播放，管理接口受保护；TS 读取复用目录/符号链接/删除状态检查。 | [TvController:117](../src/main/java/cc/ginpika/bootfs/service/tv/TvController.java#L117) |
@@ -147,7 +147,7 @@
 | GET | `/tv/status` | 启用认证并关闭公开读取时需登录；公开模式可播放，管理接口受保护；TS 读取复用目录/符号链接/删除状态检查。 | [TvController:92](../src/main/java/cc/ginpika/bootfs/service/tv/TvController.java#L92) |
 | GET | `/tv/ts/{uuid}/{fileName}` | 启用认证并关闭公开读取时需登录；公开模式可播放，管理接口受保护；TS 读取复用目录/符号链接/删除状态检查。 | [TvController:65](../src/main/java/cc/ginpika/bootfs/service/tv/TvController.java#L65) |
 | GET | `/video-player` | 页面启用认证并关闭公开读取时需登录；公开模式仅放行明确的媒体查看页面。 | [WebUIController:83](../src/main/java/cc/ginpika/bootfs/controller/WebUIController.java#L83) |
-| POST | `/virtual-file` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [ManageController:301](../src/main/java/cc/ginpika/bootfs/controller/ManageController.java#L301) |
+| POST | `/virtual-file` | 文件/媒体/上传链路；启用认证并关闭公开读取时需登录。复制走 owner 凭证或签名快照；HLS 文件名与重排受约束。 | [HlsUploadController:20](../src/main/java/cc/ginpika/bootfs/service/hls/HlsUploadController.java#L20) |
 
 合计 100 个显式方法/路径组合（含条件订阅表示和 S3 GET/HEAD）。
 

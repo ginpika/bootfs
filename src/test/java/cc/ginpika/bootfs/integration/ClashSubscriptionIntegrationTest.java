@@ -1,9 +1,9 @@
 package cc.ginpika.bootfs.integration;
 
-import cc.ginpika.bootfs.core.Context;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
 import cc.ginpika.bootfs.domain.dto.Tag;
-import cc.ginpika.bootfs.service.FileService;
-import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
+import cc.ginpika.bootfs.file.FileService;
+import cc.ginpika.bootfs.search.ResourceSearchService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -12,7 +12,6 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.charset.Charset;
@@ -20,7 +19,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
 import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -33,8 +31,8 @@ class ClashSubscriptionIntegrationTest {
     @DynamicPropertySource static void properties(DynamicPropertyRegistry registry) { registry.add("tfs.root-path", ROOT::toString); }
     @Autowired MockMvc mvc;
     @Autowired FileService files;
-    @Autowired MeiliSearchService search;
-    @Autowired Context context;
+    @Autowired ResourceSearchService search;
+    @Autowired LocalFileInventory context;
 
     private static final String CONFIG = """
             proxies:
@@ -46,7 +44,7 @@ class ClashSubscriptionIntegrationTest {
             """;
 
     @Test void publicSubscriptionExportsAllConvertibleTypesAndLeavesStoredYamlUntouched() throws Exception {
-        int initialCount = context.STORAGE.size();
+        int initialCount = context.cachedCount();
         String id = publish("Clash.YAML", CONFIG, true);
         var response = mvc.perform(get("/p/" + id).param("p", "vless")
                         .header("Range", "bytes=0-2").header("If-None-Match", "*"))
@@ -64,7 +62,7 @@ class ClashSubscriptionIntegrationTest {
         assertTrue(subscription.contains("VLESS%20%E6%97%A5%E6%9C%AC"));
         assertFalse(subscription.contains("socks5://"));
         assertEquals(CONFIG, Files.readString(Path.of(context.query(id).getPath())));
-        assertEquals(initialCount + 1, context.STORAGE.size());
+        assertEquals(initialCount + 1, context.cachedCount());
         mvc.perform(get("/api/file/" + id + "/clash")).andExpect(status().is3xxRedirection());
         mvc.perform(post("/api/file/" + id + "/clash/latency")).andExpect(status().is3xxRedirection());
     }

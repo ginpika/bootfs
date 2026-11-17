@@ -1,6 +1,6 @@
 package cc.ginpika.bootfs.service.tv;
 
-import cc.ginpika.bootfs.core.Context;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
 import cc.ginpika.bootfs.service.FederationService;
 import cc.ginpika.bootfs.service.hls.HlsFileService;
 import com.alibaba.fastjson2.JSONObject;
@@ -9,7 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -20,7 +19,7 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 class TvCatalog {
-    private final Context context;
+    private final LocalFileInventory context;
     private final FederationService federation;
     private final HlsFileService hls;
 

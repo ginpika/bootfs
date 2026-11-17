@@ -2,11 +2,10 @@ package cc.ginpika.bootfs.service.hls;
 
 import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.domain.dto.FileObject;
-import cc.ginpika.bootfs.core.Context;
-import cc.ginpika.bootfs.core.io.ContextIO;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
+import cc.ginpika.bootfs.file.inventory.FileCatalogRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-
 import javax.annotation.Resource;
 import java.io.*;
 import java.nio.file.Files;
@@ -16,13 +15,13 @@ import java.nio.file.Path;
 @Service
 public class MediaConvertService {
     @Resource
-    Context context;
+    LocalFileInventory context;
     @Resource
     TfsConfig tfsConfig;
     @Resource
-    ContextIO contextIO;
+    FileCatalogRepository contextIO;
     @Resource
-    cc.ginpika.bootfs.service.meilisearch.MeiliSearchService search;
+    cc.ginpika.bootfs.search.ResourceSearchService search;
     @Resource
     cc.ginpika.bootfs.kernel.cluster.ResourceVisibility visibility;
 
@@ -34,7 +33,7 @@ public class MediaConvertService {
         if (visibility.deleted(uuid)) throw new IllegalArgumentException("Resource was deleted");
         Path ffmpeg = Path.of(tfsConfig.getFfmpegUrl());
 
-        FileObject fileObject = context.STORAGE.get(uuid);
+        FileObject fileObject = context.cached(uuid);
         if (fileObject == null) throw new IllegalArgumentException("Resource not found");
 
         // output_segment
@@ -128,7 +127,7 @@ public class MediaConvertService {
             }
             fileObject.setHlsAvailable("1");
             contextIO.update(uuid, fileObject);
-            search.addToFullText(cc.ginpika.bootfs.service.meilisearch.FullTextDocument.builder().uuid(uuid).hlsAvailable("1").build());
+            search.addToFullText(cc.ginpika.bootfs.search.FullTextDocument.builder().uuid(uuid).hlsAvailable("1").build());
         } catch (Exception e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             throw new IllegalStateException("Media conversion failed", e);

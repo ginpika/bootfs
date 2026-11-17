@@ -1,18 +1,23 @@
 package cc.ginpika.bootfs.s3;
 
+import cc.ginpika.bootfs.kernel.object.PayloadDigestMismatchException;
+import cc.ginpika.bootfs.file.binding.ResourceWriteConflictException;
+import cc.ginpika.bootfs.file.binding.ObjectKeyBinding;
+
+import cc.ginpika.bootfs.file.binding.ObjectKeyRepository;
 import cc.ginpika.bootfs.config.TfsConfig;
-import cc.ginpika.bootfs.core.Context;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
 import cc.ginpika.bootfs.core.IdGenerator;
 import cc.ginpika.bootfs.domain.dto.FileObject;
-import cc.ginpika.bootfs.service.FileService;
+import cc.ginpika.bootfs.file.FileService;
+import cc.ginpika.bootfs.file.PublishedResource;
+import cc.ginpika.bootfs.file.ResourceDeletionService;
 import cc.ginpika.bootfs.service.ReverseProxyService;
-import cc.ginpika.bootfs.service.etcd.EtcdService;
+import cc.ginpika.bootfs.metadata.MetadataRegistry;
 import com.alibaba.fastjson2.JSONObject;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.File;
@@ -33,7 +38,7 @@ import java.util.HexFormat;
 import java.util.TimeZone;
 
 /**
- * S3 存储协调:落盘/读取/删除,复用现有 Context/EtcdService/FileService/ReverseProxyService。
+ * S3 存储协调:落盘/读取/删除,复用现有 LocalFileInventory/MetadataRegistry/FileService/ReverseProxyService。
  * PutObject 走与 /f/{uuid} 一致的链路,实现双向互通。
  */
 @Slf4j
@@ -42,41 +47,42 @@ import java.util.TimeZone;
 public class S3StorageService {
 
     private final TfsConfig tfsConfig;
-    private final Context context;
-    private final EtcdService etcdService;
+    private final LocalFileInventory context;
+    private final MetadataRegistry metadataRegistry;
     private final FileService fileService;
+    private final ResourceDeletionService deletionService;
     private final ReverseProxyService reverseProxyService;
-    private final S3KeyIndex keyIndex;
+    private final ObjectKeyRepository keyIndex;
     private final S3XmlWriter xmlWriter;
 
-    public synchronized S3ObjectMeta putObject(String bucket, String key, HttpServletRequest req) throws IOException {
+    public synchronized ObjectKeyBinding putObject(String bucket, String key, HttpServletRequest req) throws IOException {
         String hash = req.getHeader("x-amz-content-sha256");
         String encoding = req.getHeader("Content-Encoding");
         if ((encoding != null && encoding.toLowerCase(Locale.ROOT).contains("aws-chunked"))
                 || (hash != null && !hash.equals("UNSIGNED-PAYLOAD") && !hash.matches("[0-9a-fA-F]{64}"))) {
-            throw new S3PayloadException("Streaming aws-chunked signing modes are not supported", false);
+            throw new UnsupportedS3PayloadException("Streaming aws-chunked signing modes are not supported");
         }
-        String expected = keyIndex.rawIndex(bucket, key);
+        String expected = keyIndex.findRaw(bucket, key);
         String type = req.getContentType() == null ? "application/octet-stream" : req.getContentType();
-        FileService.PublishedResource published = fileService.publishS3(req.getInputStream(), key, bucket, type, expected, hash, req.getHeader("X-BootFS-Request-Id"));
-        return new S3ObjectMeta(published.file().getUuid(), published.file().getSize(), published.etag(),
+        PublishedResource published = fileService.publishBoundObject(req.getInputStream(), key, bucket, type, expected, hash, req.getHeader("X-BootFS-Request-Id"));
+        return new ObjectKeyBinding(published.file().getUuid(), published.file().getSize(), published.etag(),
                 published.file().getCreatedAt(), key, type);
     }
 
     /** CopyObject has an empty request body; the new object must be published from the source bytes. */
-    public synchronized S3ObjectMeta copyObject(String bucket, String key, String sourceKey, HttpServletRequest req) throws IOException {
+    public synchronized ObjectKeyBinding copyObject(String bucket, String key, String sourceKey, HttpServletRequest req) throws IOException {
         String hash = req.getHeader("x-amz-content-sha256");
         String encoding = req.getHeader("Content-Encoding");
         if ((encoding != null && encoding.toLowerCase(Locale.ROOT).contains("aws-chunked"))
                 || (hash != null && !hash.equals("UNSIGNED-PAYLOAD") && !hash.matches("[0-9a-fA-F]{64}"))) {
-            throw new S3PayloadException("Streaming aws-chunked signing modes are not supported", false);
+            throw new UnsupportedS3PayloadException("Streaming aws-chunked signing modes are not supported");
         }
         if (req.getInputStream().read() != -1) throw new IllegalArgumentException("CopyObject requests must have an empty body");
         if (hash != null && !"UNSIGNED-PAYLOAD".equals(hash) && !S3CryptoUtils.sha256Hex(new byte[0]).equalsIgnoreCase(hash)) {
-            throw new S3PayloadException("The provided x-amz-content-sha256 does not match the payload", true);
+            throw new PayloadDigestMismatchException();
         }
-        S3ObjectMeta source = keyIndex.getIndex(bucket, sourceKey);
-        if (source == null || etcdService.getOne("/tombstones/" + source.getUuid()) != null) {
+        ObjectKeyBinding source = keyIndex.find(bucket, sourceKey);
+        if (source == null || metadataRegistry.getOne("/tombstones/" + source.getUuid()) != null) {
             throw new S3OperationException(S3ErrorCode.NO_SUCH_KEY);
         }
         String match = req.getHeader("x-amz-copy-source-if-match");
@@ -92,7 +98,7 @@ public class S3StorageService {
         }
         String type = "REPLACE".equals(directive) ? req.getContentType() : source.getContentType();
         if (type == null) type = "application/octet-stream";
-        String expected = keyIndex.rawIndex(bucket, key);
+        String expected = keyIndex.findRaw(bucket, key);
         FileObject file = context.query(source.getUuid());
         if (file != null && file.getPath() != null && Files.isRegularFile(Path.of(file.getPath()))) {
             try (InputStream input = verifiedCopyStream(Files.newInputStream(Path.of(file.getPath())), source)) {
@@ -102,21 +108,21 @@ public class S3StorageService {
         return copyRemoteObject(bucket, key, source, type, expected, req);
     }
 
-    private S3ObjectMeta publishCopy(InputStream input, String bucket, String key, String type, String expected,
+    private ObjectKeyBinding publishCopy(InputStream input, String bucket, String key, String type, String expected,
                                      HttpServletRequest req) throws IOException {
         // The request hash describes the empty CopyObject request, not the copied object's contents.
-        FileService.PublishedResource published = fileService.publishS3(input, key, bucket, type, expected, null,
+        PublishedResource published = fileService.publishBoundObject(input, key, bucket, type, expected, null,
                 req.getHeader("X-BootFS-Request-Id"));
-        return new S3ObjectMeta(published.file().getUuid(), published.file().getSize(), published.etag(),
+        return new ObjectKeyBinding(published.file().getUuid(), published.file().getSize(), published.etag(),
                 published.file().getCreatedAt(), key, type);
     }
 
-    private S3ObjectMeta copyRemoteObject(String bucket, String key, S3ObjectMeta source, String type, String expected,
+    private ObjectKeyBinding copyRemoteObject(String bucket, String key, ObjectKeyBinding source, String type, String expected,
                                           HttpServletRequest req) throws IOException {
         java.util.Set<String> candidates = new java.util.LinkedHashSet<>();
-        String primary = etcdService.getOne("/files/" + source.getUuid());
+        String primary = metadataRegistry.getOne("/files/" + source.getUuid());
         if (primary != null) candidates.add(primary);
-        etcdService.scan("/files/" + source.getUuid() + "/replicas/").forEach((route, url) -> {
+        metadataRegistry.scan("/files/" + source.getUuid() + "/replicas/").forEach((route, url) -> {
             if (!route.endsWith("/meta")) candidates.add(url);
         });
         var config = org.apache.http.client.config.RequestConfig.custom().setConnectTimeout(5000).setSocketTimeout(60000).build();
@@ -133,7 +139,7 @@ public class S3StorageService {
                     try (InputStream input = verifiedCopyStream(upstream.getEntity().getContent(), source)) {
                         return publishCopy(input, bucket, key, type, expected, req);
                     }
-                } catch (S3ConcurrentWriteException | cc.ginpika.bootfs.kernel.object.PublicationPendingException failure) {
+                } catch (ResourceWriteConflictException | cc.ginpika.bootfs.kernel.object.PublicationPendingException failure) {
                     throw failure;
                 } catch (IOException failure) {
                     log.warn("S3 copy source {} candidate {} unavailable", source.getUuid(), url, failure);
@@ -143,7 +149,7 @@ public class S3StorageService {
         throw new S3OperationException(S3ErrorCode.SERVICE_UNAVAILABLE);
     }
 
-    private InputStream verifiedCopyStream(InputStream input, S3ObjectMeta source) {
+    private InputStream verifiedCopyStream(InputStream input, ObjectKeyBinding source) {
         MessageDigest digest;
         try { digest = MessageDigest.getInstance("MD5"); }
         catch (java.security.NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
@@ -174,15 +180,15 @@ public class S3StorageService {
 
     public void getObject(String bucket, String key, HttpServletRequest req, HttpServletResponse resp) throws IOException {
         for (int attempt = 0; attempt < 4; attempt++) {
-        S3ObjectMeta meta = keyIndex.getIndex(bucket, key);
-        if (meta == null || etcdService.getOne("/tombstones/" + meta.getUuid()) != null) {
+        ObjectKeyBinding meta = keyIndex.find(bucket, key);
+        if (meta == null || metadataRegistry.getOne("/tombstones/" + meta.getUuid()) != null) {
             writeError(resp, S3ErrorCode.NO_SUCH_KEY, req);
             return;
         }
         FileObject fo = context.query(meta.getUuid());
         File localFile = (fo != null && fo.getPath() != null) ? new File(fo.getPath()) : null;
         if (localFile != null && localFile.exists()) {
-            String raw = etcdService.getOne("/files/" + meta.getUuid() + "/meta");
+            String raw = metadataRegistry.getOne("/files/" + meta.getUuid() + "/meta");
             if (raw != null) {
                 JSONObject resourceMeta = JSONObject.parseObject(raw);
                 String contentId = fo.getContentObjectId() == null ? fo.getUuid() : fo.getContentObjectId();
@@ -201,8 +207,8 @@ public class S3StorageService {
     }
 
     public void headObject(String bucket, String key, HttpServletResponse resp, HttpServletRequest req) throws IOException {
-        S3ObjectMeta meta = keyIndex.getIndex(bucket, key);
-        if (meta == null || etcdService.getOne("/tombstones/" + meta.getUuid()) != null) {
+        ObjectKeyBinding meta = keyIndex.find(bucket, key);
+        if (meta == null || metadataRegistry.getOne("/tombstones/" + meta.getUuid()) != null) {
             writeError(resp, S3ErrorCode.NO_SUCH_KEY, req);
             return;
         }
@@ -214,25 +220,25 @@ public class S3StorageService {
         resp.setContentLengthLong(meta.getSize());
     }
 
-    public synchronized void deleteObject(String bucket, String key) throws S3ConcurrentWriteException {
-        S3ObjectMeta meta = keyIndex.getIndex(bucket, key);
+    public synchronized void deleteObject(String bucket, String key) throws ResourceWriteConflictException {
+        ObjectKeyBinding meta = keyIndex.find(bucket, key);
         if (meta == null) return;
         // The shared lifecycle commits the tombstone before conditionally removing its bindings.
         // A competing PUT with a different resource generation is preserved.
-        fileService.deleteResource(meta.getUuid());
+        deletionService.deleteResource(meta.getUuid());
     }
 
-    private void proxyRemoteObject(S3ObjectMeta meta, HttpServletRequest req, HttpServletResponse resp) throws IOException {
-        if (etcdService.getOne("/tombstones/" + meta.getUuid()) != null) {
+    private void proxyRemoteObject(ObjectKeyBinding meta, HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        if (metadataRegistry.getOne("/tombstones/" + meta.getUuid()) != null) {
             writeError(resp, S3ErrorCode.NO_SUCH_KEY, req);
             return;
         }
         java.util.Set<String> candidates = new java.util.LinkedHashSet<>();
-        String resourceMetadata = etcdService.getOne("/files/" + meta.getUuid() + "/meta");
+        String resourceMetadata = metadataRegistry.getOne("/files/" + meta.getUuid() + "/meta");
         boolean editableRevision = resourceMetadata != null && JSONObject.parseObject(resourceMetadata).getString("textVersion") != null;
-        String primary = etcdService.getOne("/files/" + meta.getUuid());
+        String primary = metadataRegistry.getOne("/files/" + meta.getUuid());
         if (primary != null) candidates.add(primary);
-        etcdService.scan("/files/" + meta.getUuid() + "/replicas/").forEach((key, value) -> {
+        metadataRegistry.scan("/files/" + meta.getUuid() + "/replicas/").forEach((key, value) -> {
             if (!key.endsWith("/meta")) candidates.add(value);
         });
         org.apache.http.client.config.RequestConfig config = org.apache.http.client.config.RequestConfig.custom()
@@ -269,7 +275,7 @@ public class S3StorageService {
         resp.sendError(503, "No confirmed object replica is currently reachable");
     }
 
-    private void writeLocalObject(File file, S3ObjectMeta meta, HttpServletRequest req, HttpServletResponse resp) throws IOException {
+    private void writeLocalObject(File file, ObjectKeyBinding meta, HttpServletRequest req, HttpServletResponse resp) throws IOException {
         long total = file.length();
         long start = 0;
         long end = total - 1;

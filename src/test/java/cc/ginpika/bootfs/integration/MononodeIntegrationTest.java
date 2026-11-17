@@ -1,8 +1,9 @@
 package cc.ginpika.bootfs.integration;
 
-import cc.ginpika.bootfs.core.Context;
+import cc.ginpika.bootfs.file.binding.ObjectKeyRepository;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
 import cc.ginpika.bootfs.s3.*;
-import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
+import cc.ginpika.bootfs.search.ResourceSearchService;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -25,10 +26,10 @@ class MononodeIntegrationTest {
     static Path tempRoot() { try { return Files.createTempDirectory("bootfs-integration-"); } catch(Exception e) { throw new RuntimeException(e); } }
     @DynamicPropertySource static void properties(DynamicPropertyRegistry registry) { registry.add("tfs.root-path",ROOT::toString); }
     @Autowired MockMvc mvc;
-    @Autowired Context context;
-    @Autowired S3KeyIndex keys;
-    @Autowired MeiliSearchService search;
-    @Autowired cc.ginpika.bootfs.kernel.cluster.InventoryReconciler reconciler;
+    @Autowired LocalFileInventory context;
+    @Autowired ObjectKeyRepository keys;
+    @Autowired ResourceSearchService search;
+    @Autowired cc.ginpika.bootfs.file.InventoryReconciler reconciler;
 
     // Exercise the real S3 filter as well as its MVC authentication marker.
     private org.springframework.test.web.servlet.ResultActions perform(org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request) throws Exception {
@@ -55,7 +56,7 @@ class MononodeIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         String id=url.substring(url.lastIndexOf('/')+1);
         assertNotNull(context.query(id));
-        assertNotNull(keys.getIndex("bootfs","星空笔记.txt"));
+        assertNotNull(keys.find("bootfs","星空笔记.txt"));
         perform(get("/s3/bootfs/星空笔记.txt")).andExpect(status().isOk()).andExpect(content().string("hello"));
         perform(get("/queryPageOffset").param("search","星空")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
         perform(delete("/s3/bootfs/星空笔记.txt")).andExpect(status().isNoContent());
@@ -68,11 +69,11 @@ class MononodeIntegrationTest {
         String key="books/银河说明.txt";
         perform(put("/s3/bootfs/"+key).contentType("text/plain").content("first"))
                 .andExpect(status().isOk()).andExpect(header().exists("ETag"));
-        String oldId=keys.getIndex("bootfs",key).getUuid();
+        String oldId=keys.find("bootfs",key).getUuid();
         assertNotNull(context.query(oldId));
         perform(get("/f/"+oldId)).andExpect(status().isOk()).andExpect(content().string("first"));
         perform(put("/s3/bootfs/"+key).contentType("text/plain").content("second")).andExpect(status().isOk());
-        String id=keys.getIndex("bootfs",key).getUuid();
+        String id=keys.find("bootfs",key).getUuid();
         assertNotEquals(oldId,id);
         assertNull(context.query(oldId));
         perform(get("/queryPageOffset").param("search","银河")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
@@ -85,7 +86,7 @@ class MononodeIntegrationTest {
     @Test void failedTranscodeCannotBeReportedAsAvailable() throws Exception {
         String key="invalid-video.mp4";
         perform(put("/s3/bootfs/"+key).contentType("video/mp4").content("not-a-video")).andExpect(status().isOk());
-        String id=keys.getIndex("bootfs",key).getUuid();
+        String id=keys.find("bootfs",key).getUuid();
         perform(post("/hls/convert").param("uuid",id)).andExpect(status().isInternalServerError());
         assertNotEquals("1",context.query(id).getHlsAvailable());
         perform(delete("/s3/bootfs/"+key)).andExpect(status().isNoContent());
@@ -94,7 +95,7 @@ class MononodeIntegrationTest {
     @Test void ownerInventoryConvergesAfterSharedMetadataWasEditedElsewhere() throws Exception {
         String key="owner-view.txt";
         perform(put("/s3/bootfs/"+key).contentType("text/plain").content("data")).andExpect(status().isOk());
-        String id=keys.getIndex("bootfs",key).getUuid();
+        String id=keys.find("bootfs",key).getUuid();
         search.updateDocumentTitle("full-text",id,"renamed.txt");
         search.updateDocumentTags("full-text",id,java.util.List.of(cc.ginpika.bootfs.domain.dto.Tag.manual("shared")));
         reconciler.reconcile();

@@ -1,9 +1,9 @@
 package cc.ginpika.bootfs.integration;
 
-import cc.ginpika.bootfs.core.Context;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
 import cc.ginpika.bootfs.s3.S3CryptoUtils;
-import cc.ginpika.bootfs.s3.S3KeyIndex;
-import cc.ginpika.bootfs.service.etcd.EtcdService;
+import cc.ginpika.bootfs.file.binding.ObjectKeyRepository;
+import cc.ginpika.bootfs.metadata.MetadataRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -14,7 +14,6 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
-
 import java.net.URI;
 import java.net.InetSocketAddress;
 import java.net.URLEncoder;
@@ -27,7 +26,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -40,9 +38,9 @@ class S3CopyObjectIntegrationTest {
     static final Path ROOT = MononodeIntegrationTest.tempRoot();
     @DynamicPropertySource static void properties(DynamicPropertyRegistry registry) { registry.add("tfs.root-path", ROOT::toString); }
     @Autowired MockMvc mvc;
-    @Autowired Context context;
-    @Autowired S3KeyIndex keys;
-    @Autowired EtcdService routes;
+    @Autowired LocalFileInventory context;
+    @Autowired ObjectKeyRepository keys;
+    @Autowired MetadataRegistry routes;
 
     private String encoded(String key) { return URLEncoder.encode(key, StandardCharsets.UTF_8).replace("+", "%20").replace("%2F", "/"); }
     private String path(String key) { return "/s3/bootfs/" + encoded(key); }
@@ -76,13 +74,13 @@ class S3CopyObjectIntegrationTest {
     @Test void copyThenDeleteMovesExactBytesAndReturnsTheXmlCyberduckParses() throws Exception {
         String source = "待归档 +%?#.txt", target = "资料/子目录/待归档 +%?#.txt", body = "profile contents\n中文\u0000end";
         mvc.perform(signed("PUT", path(source), body)).andExpect(status().isOk());
-        String sourceId = keys.getIndex("bootfs", source).getUuid();
-        String etag = "\"" + keys.getIndex("bootfs", source).getEtag() + "\"";
+        String sourceId = keys.find("bootfs", source).getUuid();
+        String etag = "\"" + keys.find("bootfs", source).getEtag() + "\"";
         mvc.perform(copy(target, source, Map.of())).andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith("application/xml"))
                 .andExpect(xpath("/*[local-name()='CopyObjectResult']/*[local-name()='ETag']").string(etag))
                 .andExpect(xpath("/*[local-name()='CopyObjectResult']/*[local-name()='LastModified']").exists());
-        String targetId = keys.getIndex("bootfs", target).getUuid();
+        String targetId = keys.find("bootfs", target).getUuid();
         assertNotEquals(sourceId, targetId);
         mvc.perform(signed("GET", path(source), "")).andExpect(status().isOk()).andExpect(content().bytes(body.getBytes(StandardCharsets.UTF_8)));
         mvc.perform(signed("HEAD", path(target), "")).andExpect(status().isOk())
@@ -97,13 +95,13 @@ class S3CopyObjectIntegrationTest {
     @Test void missingOrInvalidSourcesCannotOverwriteAnExistingDestination() throws Exception {
         String target = "protected-copy.txt";
         mvc.perform(signed("PUT", path(target), "original")).andExpect(status().isOk());
-        String id = keys.getIndex("bootfs", target).getUuid();
+        String id = keys.find("bootfs", target).getUuid();
         mvc.perform(copy(target, "missing-source", Map.of())).andExpect(status().isNotFound()).andExpect(xpath("/Error/Code").string("NoSuchKey"));
         mvc.perform(signed("PUT", path(target), new byte[0], "application/octet-stream", Map.of("x-amz-copy-source", "/missing/file")))
                 .andExpect(status().isNotFound()).andExpect(xpath("/Error/Code").string("NoSuchBucket"));
         mvc.perform(signed("PUT", path(target), new byte[0], "application/octet-stream", Map.of("x-amz-copy-source", "bad-source")))
                 .andExpect(status().isBadRequest()).andExpect(xpath("/Error/Code").string("InvalidRequest"));
-        assertEquals(id, keys.getIndex("bootfs", target).getUuid());
+        assertEquals(id, keys.find("bootfs", target).getUuid());
         mvc.perform(signed("GET", path(target), "")).andExpect(content().string("original"));
     }
 
@@ -112,7 +110,7 @@ class S3CopyObjectIntegrationTest {
         mvc.perform(signed("PUT", path(source), "content")).andExpect(status().isOk());
         mvc.perform(copy(target, source, Map.of("x-amz-copy-source-if-match", "\"wrong\"")))
                 .andExpect(status().isPreconditionFailed()).andExpect(xpath("/Error/Code").string("PreconditionFailed"));
-        assertNull(keys.getIndex("bootfs", target));
+        assertNull(keys.find("bootfs", target));
         mvc.perform(copy(target, source, Map.of("x-amz-metadata-directive", "REPLACE"))).andExpect(status().isOk());
         mvc.perform(signed("GET", path(target), "")).andExpect(status().isOk()).andExpect(content().string("content"))
                 .andExpect(content().contentTypeCompatibleWith("application/octet-stream"));
@@ -121,14 +119,14 @@ class S3CopyObjectIntegrationTest {
     @Test void anUnsignedCopySourceCannotBeAddedToASignedPut() throws Exception {
         mvc.perform(signed("PUT", path("unsigned-copy.txt"), "").header("x-amz-copy-source", "/bootfs/anything"))
                 .andExpect(status().isForbidden()).andExpect(xpath("/Error/Code").string("SignatureDoesNotMatch"));
-        assertNull(keys.getIndex("bootfs", "unsigned-copy.txt"));
+        assertNull(keys.find("bootfs", "unsigned-copy.txt"));
     }
 
     @Test void copyReadsARemoteReplicaAndDoesNotPublishTruncatedSourceBytes() throws Exception {
         String source = "remote-copy-source.txt", target = "remote-copy-target.txt";
         byte[] body = "remote source bytes".getBytes(StandardCharsets.UTF_8);
         mvc.perform(signed("PUT", path(source), body, "text/plain", Map.of())).andExpect(status().isOk());
-        var sourceMeta = keys.getIndex("bootfs", source);
+        var sourceMeta = keys.find("bootfs", source);
         Files.delete(Path.of(context.query(sourceMeta.getUuid()).getPath()));
         var served = new java.util.concurrent.atomic.AtomicReference<>("truncated".getBytes(StandardCharsets.UTF_8));
         var server = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -147,7 +145,7 @@ class S3CopyObjectIntegrationTest {
             routes.put("/files/" + sourceMeta.getUuid(), "http://127.0.0.1:" + server.getAddress().getPort() + "/source");
             mvc.perform(copy(target, source, Map.of())).andExpect(status().isServiceUnavailable())
                     .andExpect(xpath("/Error/Code").string("ServiceUnavailable"));
-            assertNull(keys.getIndex("bootfs", target));
+            assertNull(keys.find("bootfs", target));
             served.set(body);
             mvc.perform(copy(target, source, Map.of())).andExpect(status().isOk());
             mvc.perform(signed("GET", path(target), "")).andExpect(status().isOk()).andExpect(content().bytes(body));

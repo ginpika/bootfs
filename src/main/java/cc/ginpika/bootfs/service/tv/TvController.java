@@ -1,10 +1,10 @@
 package cc.ginpika.bootfs.service.tv;
 
 import cc.ginpika.bootfs.config.TfsConfig;
-import cc.ginpika.bootfs.core.Context;
-import cc.ginpika.bootfs.dto.SsoUser;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
+import cc.ginpika.bootfs.sso.SsoUser;
 import cc.ginpika.bootfs.service.FederationService;
-import cc.ginpika.bootfs.service.SsoService;
+import cc.ginpika.bootfs.sso.SsoClient;
 import cc.ginpika.bootfs.service.hls.HlsFileService;
 import com.alibaba.fastjson2.JSONObject;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +15,6 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.ModelAndView;
-
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -27,10 +26,10 @@ import java.util.Map;
 public class TvController {
     private final TvService tv;
     private final TvCatalog catalog;
-    private final Context context;
+    private final LocalFileInventory context;
     private final HlsFileService hls;
     private final FederationService federation;
-    private final SsoService sso;
+    private final SsoClient sso;
     private final TfsConfig config;
 
     @GetMapping({"/tv", "/tv/"})

@@ -1,8 +1,8 @@
 package cc.ginpika.bootfs.service;
 
-import cc.ginpika.bootfs.core.Context;
-import cc.ginpika.bootfs.service.etcd.EtcdService;
-import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
+import cc.ginpika.bootfs.metadata.MetadataRegistry;
+import cc.ginpika.bootfs.search.ResourceSearchService;
 import com.alibaba.fastjson2.JSON;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
@@ -11,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockHttpServletRequest;
-
 import java.io.ByteArrayOutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -20,7 +19,6 @@ import java.util.Locale;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.GZIPOutputStream;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 
@@ -41,7 +39,7 @@ class ClusterProxyServiceTest {
     private final AtomicReference<String> receivedTarget = new AtomicReference<>();
     private final AtomicReference<byte[]> receivedBody = new AtomicReference<>();
     private final ClusterProxyService proxy = new ClusterProxyService(
-            mock(MeiliSearchService.class), mock(EtcdService.class), mock(Context.class));
+            mock(ResourceSearchService.class), mock(MetadataRegistry.class), mock(LocalFileInventory.class));
 
     @BeforeEach void startOwner() throws Exception {
         owner = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);

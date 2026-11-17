@@ -2,17 +2,15 @@ package cc.ginpika.bootfs.kernel.search;
 
 import cc.ginpika.bootfs.domain.dto.Tag;
 import cc.ginpika.bootfs.kernel.metadata.RocksMetadataStore;
-import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
+import cc.ginpika.bootfs.search.ResourceSearchService;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import cc.ginpika.bootfs.domain.result.SearchResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 class EmbeddedSearchEngineTest {
@@ -45,7 +43,7 @@ class EmbeddedSearchEngineTest {
     @Test void facadePreservesFieldsUpdatesTagsAndNeverResurrectsDeletedDocuments() throws Exception {
         try (RocksMetadataStore metadata = new RocksMetadataStore(temp.resolve("metadata"));
              EmbeddedSearchEngine engine = new EmbeddedSearchEngine(metadata, temp.resolve("search"))) {
-            MeiliSearchService facade = new MeiliSearchService(engine);
+            ResourceSearchService facade = new ResourceSearchService(engine);
             facade.addToFullText("{\"uuid\":\"a\",\"title\":\"old\",\"author\":\"original\",\"resources\":[\"page\"],\"tags\":[\"manual:old\"]}");
             facade.updateDocumentTitle("full-text", "a", "new title");
             facade.updateDocumentTags("full-text", "a", List.of(Tag.manual("new")));
@@ -78,7 +76,7 @@ class EmbeddedSearchEngineTest {
             sources.put("/documents/full-text/child", "{\"uuid\":\"child\",\"parent\":\"id-0000\",\"fileName\":\"child\"}");
             sources.put("/documents/full-text/copy", "{\"uuid\":\"copy\",\"copyOf\":\"id-0000\",\"fileName\":\"copy\"}");
             metadata.writeBatch(sources, Set.of());
-            MeiliSearchService facade = new MeiliSearchService(engine);
+            ResourceSearchService facade = new ResourceSearchService(engine);
             SearchResult tail = facade.searchResources("", List.of(), 1100, 20, false);
             assertEquals(1105, tail.getEstimatedTotalHits());
             assertEquals(5, tail.getHits().size());
@@ -106,7 +104,7 @@ class EmbeddedSearchEngineTest {
     @Test void revisionBarrierReportsPendingAndBecomesVisibleAfterCommit() throws Exception {
         try (RocksMetadataStore metadata = new RocksMetadataStore(temp.resolve("metadata"));
              EmbeddedSearchEngine engine = new EmbeddedSearchEngine(metadata, temp.resolve("search"))) {
-            MeiliSearchService facade = new MeiliSearchService(engine);
+            ResourceSearchService facade = new ResourceSearchService(engine);
             long next = metadata.revision() + 1;
             Map<String, Object> pending = facade.searchDocuments("full-text", "", 0, 10, null, false, next, 0);
             assertEquals(false, pending.get("succeed"));
@@ -187,7 +185,7 @@ class EmbeddedSearchEngineTest {
              EmbeddedSearchEngine nodeA = new EmbeddedSearchEngine(metadata, temp.resolve("node-a"));
              EmbeddedSearchEngine nodeB = new EmbeddedSearchEngine(metadata, temp.resolve("node-b"))) {
             nodeA.upsert("full-text", JSON.parseObject("{\"uuid\":\"shared\",\"title\":\"tags\"}"));
-            MeiliSearchService a = new MeiliSearchService(nodeA), b = new MeiliSearchService(nodeB);
+            ResourceSearchService a = new ResourceSearchService(nodeA), b = new ResourceSearchService(nodeB);
             var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
             var start = new java.util.concurrent.CountDownLatch(1);
             try {
@@ -221,7 +219,7 @@ class EmbeddedSearchEngineTest {
     @Test void galleryDerivesCanonicalMetadataAndRevocationHidesItImmediately() throws Exception {
         try (RocksMetadataStore metadata = new RocksMetadataStore(temp.resolve("metadata"));
              EmbeddedSearchEngine engine = new EmbeddedSearchEngine(metadata, temp.resolve("search"))) {
-            MeiliSearchService catalog = new MeiliSearchService(engine);
+            ResourceSearchService catalog = new ResourceSearchService(engine);
             catalog.addToFullText("{\"uuid\":\"public\",\"title\":\"before\",\"tags\":[\"manual:old\"],\"author\":\"kept\"}");
             catalog.setResourcePublic("public", true, "/p/public");
             catalog.updateDocumentTitle("full-text", "public", "after.jpg");
@@ -249,7 +247,7 @@ class EmbeddedSearchEngineTest {
     @Test void galleryBatchSamplesLivePostersOnceAndRepeatsAShortPool() throws Exception {
         try (RocksMetadataStore metadata = new RocksMetadataStore(temp.resolve("metadata"));
              EmbeddedSearchEngine engine = new EmbeddedSearchEngine(metadata, temp.resolve("search"))) {
-            MeiliSearchService catalog = new MeiliSearchService(engine);
+            ResourceSearchService catalog = new ResourceSearchService(engine);
             catalog.addToFullText("{\"uuid\":\"a\",\"title\":\"a.jpg\"}");
             catalog.addToFullText("{\"uuid\":\"b\",\"title\":\"b.jpg\"}");
             catalog.addToFullText("{\"uuid\":\"secret\",\"title\":\"secret.jpg\"}");
@@ -276,7 +274,7 @@ class EmbeddedSearchEngineTest {
             metadata.put("/documents/image-host/private", "{\"uuid\":\"private\",\"poster\":\"/p/private\",\"isPublicAccess\":\"0\"}");
             try (EmbeddedSearchEngine engine = new EmbeddedSearchEngine(metadata, indexPath)) {
                 assertEquals("saved", engine.get("full-text", "legacy").getString("description"));
-                Tag restoredTag = new MeiliSearchService(engine).getDocumentTags("full-text", "legacy").get(0);
+                Tag restoredTag = new ResourceSearchService(engine).getDocumentTags("full-text", "legacy").get(0);
                 assertEquals("ai", restoredTag.getSource());
                 assertEquals(.73f, restoredTag.getConfidence());
                 JSONObject conflict = engine.get("full-text", "conflict");
@@ -284,7 +282,7 @@ class EmbeddedSearchEngineTest {
                 assertEquals("old gallery author", conflict.getJSONObject("legacyImageHost").getString("author"));
                 assertEquals(Set.of("manual:canonical", "manual:gallery"), new HashSet<>(conflict.getJSONArray("tags").toList(String.class)));
                 assertNull(engine.get("image-host", "private"));
-                new MeiliSearchService(engine).setResourcePublic("legacy", false, null);
+                new ResourceSearchService(engine).setResourcePublic("legacy", false, null);
                 assertNull(engine.get("image-host", "legacy"));
             }
         }

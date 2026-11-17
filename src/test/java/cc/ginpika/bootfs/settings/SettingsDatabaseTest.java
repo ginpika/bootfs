@@ -182,10 +182,10 @@ class SettingsDatabaseTest {
     @Test void privateProbeSwitchAffectsNewJobsAndDoesNotReuseOppositePolicyCache() throws Exception {
         try (var settings=new NodeSettings(env()); var metadata=new RocksMetadataStore(root.resolve("kernel/metadata"));
              var socket=new java.net.ServerSocket(0,5,java.net.InetAddress.getByName("127.0.0.1"))) {
-            var latency=new cc.ginpika.bootfs.service.ClashLatencyService(settings);
+            var latency=new cc.ginpika.bootfs.clash.ClashLatencyService(settings);
             try {
-                var details=new cc.ginpika.bootfs.service.ClashFileService.ClashDetails("file","version",List.of(
-                    new cc.ginpika.bootfs.service.ClashFileService.ClashEndpoint("one","local","vless","127.0.0.1",socket.getLocalPort())),List.of(),"tcp","server");
+                var details=new cc.ginpika.bootfs.clash.ClashFileService.ClashDetails("file","version",List.of(
+                    new cc.ginpika.bootfs.clash.ClashFileService.ClashEndpoint("one","local","vless","127.0.0.1",socket.getLocalPort())),List.of(),"tcp","server");
                 assertEquals("ok",latency.measure(details,0,1).nodes().get(0).status());
                 settings.update(1,changed(settings.current(),"allowPrivateProbes",false),false,false,metadata);
                 assertEquals("blocked",latency.measure(details,0,1).nodes().get(0).status());

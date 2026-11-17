@@ -1,8 +1,8 @@
 package cc.ginpika.bootfs.s3;
 
+import cc.ginpika.bootfs.file.binding.ObjectStorageProperties;
 import org.springframework.stereotype.Component;
 import lombok.RequiredArgsConstructor;
-
 import javax.servlet.http.HttpServletRequest;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -23,7 +23,7 @@ public class S3SigV4Verifier {
     private static final long MAX_CLOCK_SKEW_MS = 15 * 60 * 1000L;
     private static final String ALGO = "AWS4-HMAC-SHA256";
 
-    private final S3Config s3Config;
+    private final ObjectStorageProperties s3Config;
 
     /**
      * @return null 表示通过,否则返回对应错误码。

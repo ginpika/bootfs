@@ -1,9 +1,9 @@
 package cc.ginpika.bootfs.service;
 
-import cc.ginpika.bootfs.core.Context;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
 import cc.ginpika.bootfs.kernel.cluster.*;
 import cc.ginpika.bootfs.kernel.metadata.MetadataStore;
-import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
+import cc.ginpika.bootfs.search.ResourceSearchService;
 import cc.ginpika.bootfs.domain.result.SearchResult;
 import com.alibaba.fastjson2.*;
 import org.springframework.stereotype.Service;
@@ -18,10 +18,10 @@ import java.util.concurrent.*;
 @Service
 public class FederationService {
     private final MetadataStore metadata;
-    private final MeiliSearchService search;
-    private final Context context;
+    private final ResourceSearchService search;
+    private final LocalFileInventory context;
     private final ThreadPoolExecutor queries = new ThreadPoolExecutor(8,8,30,TimeUnit.SECONDS,new ArrayBlockingQueue<>(256),r -> { Thread t=new Thread(r,"bootfs-federation-query"); t.setDaemon(true); return t; },new ThreadPoolExecutor.AbortPolicy());
-    public FederationService(MetadataStore metadata,MeiliSearchService search,Context context) {
+    public FederationService(MetadataStore metadata,ResourceSearchService search,LocalFileInventory context) {
         this.metadata=metadata; this.search=search; this.context=context;
         queries.allowCoreThreadTimeOut(true);
     }

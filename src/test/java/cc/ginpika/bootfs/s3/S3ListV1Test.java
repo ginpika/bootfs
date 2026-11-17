@@ -1,18 +1,20 @@
 package cc.ginpika.bootfs.s3;
 
-import cc.ginpika.bootfs.service.etcd.EtcdService;
+import cc.ginpika.bootfs.file.binding.ObjectStorageProperties;
+import cc.ginpika.bootfs.file.binding.ObjectKeyBinding;
+
+import cc.ginpika.bootfs.file.binding.ObjectKeyRepository;
+import cc.ginpika.bootfs.metadata.MetadataRegistry;
 import com.alibaba.fastjson2.JSON;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
@@ -22,22 +24,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** Cyberduck lists with V1 markers; its cursor must advance across directory-only pages. */
 class S3ListV1Test {
     private final Map<String, String> records = new TreeMap<>();
-    private S3KeyIndex keys;
+    private S3ObjectListing listing;
     private S3XmlWriter xml;
     private MockMvc mvc;
 
     @BeforeEach void setup() {
-        EtcdService routes = mock(EtcdService.class);
+        MetadataRegistry routes = mock(MetadataRegistry.class);
         when(routes.scan(anyString())).thenAnswer(call -> {
             String prefix = call.getArgument(0);
             Map<String, String> result = new TreeMap<>();
             records.forEach((key, value) -> { if (key.startsWith(prefix)) result.put(key, value); });
             return result;
         });
-        keys = new S3KeyIndex(routes);
+        listing = new S3ObjectListing(new ObjectKeyRepository(routes));
         xml = new S3XmlWriter();
-        S3Config config = new S3Config(); config.setBucket("bootfs");
-        mvc = MockMvcBuilders.standaloneSetup(new S3Controller(config, mock(S3StorageService.class), keys, xml)).build();
+        ObjectStorageProperties config = new ObjectStorageProperties(); config.setBucket("bootfs");
+        mvc = MockMvcBuilders.standaloneSetup(new S3Controller(config, mock(S3StorageService.class), listing, xml)).build();
     }
 
     @Test void v1MarkerAdvancesAcrossCommonPrefixesAndNeverReplaysADirectory() {
@@ -47,7 +49,7 @@ class S3ListV1Test {
         List<String> listed = new ArrayList<>();
         String marker = null;
         for (int pageNumber = 0; pageNumber < 3; pageNumber++) {
-            S3ListPage page = keys.listIndexV1("bootfs", "", "/", 1, marker);
+            S3ListPage page = listing.listV1("bootfs", "", "/", 1, marker);
             listed.addAll(page.getCommonPrefixes());
             page.getContents().forEach(meta -> listed.add(meta.getKey()));
             assertNull(page.getNextContinuationToken());
@@ -56,15 +58,15 @@ class S3ListV1Test {
         }
         assertEquals(List.of("docs/", "images/", "notes.txt"), listed);
         assertNull(marker);
-        assertEquals(List.of("images/"), keys.listIndexV1("bootfs", "", "/", 1, "docs/z").getCommonPrefixes());
+        assertEquals(List.of("images/"), listing.listV1("bootfs", "", "/", 1, "docs/z").getCommonPrefixes());
     }
 
     @Test void nestedListingPreservesThePlaceholderAndCountsEachChildFolderOnce() {
         object("docs/", "folder"); object("docs/readme.md", "readme");
         object("docs/sub/", "subfolder"); object("docs/sub/a.txt", "a");
         object("docs/sub/b.txt", "b"); object("other.txt", "other");
-        S3ListPage page = keys.listIndexV1("bootfs", "docs/", "/", 1000, null);
-        assertEquals(List.of("docs/", "docs/readme.md"), page.getContents().stream().map(S3ObjectMeta::getKey).toList());
+        S3ListPage page = listing.listV1("bootfs", "docs/", "/", 1000, null);
+        assertEquals(List.of("docs/", "docs/readme.md"), page.getContents().stream().map(ObjectKeyBinding::getKey).toList());
         assertEquals(List.of("docs/sub/"), page.getCommonPrefixes());
         assertFalse(page.isTruncated());
     }
@@ -72,12 +74,12 @@ class S3ListV1Test {
     @Test void moreThanAThousandObjectsCanBeReadWithTheV1Cursor() {
         for (int n = 0; n < 1105; n++) object(String.format("file-%04d.txt", n), "id-" + n);
         List<String> listed = new ArrayList<>();
-        S3ListPage first = keys.listIndexV1("bootfs", null, null, 1000, null);
+        S3ListPage first = listing.listV1("bootfs", null, null, 1000, null);
         assertEquals(1000, first.getContents().size());
         assertEquals("file-0999.txt", first.getNextMarker());
-        listed.addAll(first.getContents().stream().map(S3ObjectMeta::getKey).toList());
-        S3ListPage next = keys.listIndexV1("bootfs", null, null, 1000, first.getNextMarker());
-        listed.addAll(next.getContents().stream().map(S3ObjectMeta::getKey).toList());
+        listed.addAll(first.getContents().stream().map(ObjectKeyBinding::getKey).toList());
+        S3ListPage next = listing.listV1("bootfs", null, null, 1000, first.getNextMarker());
+        listed.addAll(next.getContents().stream().map(ObjectKeyBinding::getKey).toList());
         assertFalse(next.isTruncated());
         assertEquals(1105, new HashSet<>(listed).size());
         assertEquals("file-1104.txt", listed.get(listed.size() - 1));
@@ -85,22 +87,22 @@ class S3ListV1Test {
 
     @Test void tombstonesAndEmptyPagesDoNotProduceDanglingDirectoriesOrCursors() {
         object("deleted/a.txt", "deleted"); records.put("/tombstones/deleted", "deleted");
-        S3ListPage page = keys.listIndexV1("bootfs", "", "/", 1, null);
+        S3ListPage page = listing.listV1("bootfs", "", "/", 1, null);
         assertTrue(page.getContents().isEmpty()); assertTrue(page.getCommonPrefixes().isEmpty());
         assertFalse(page.isTruncated()); assertNull(page.getNextMarker());
         object("kept.txt", "kept");
-        S3ListPage zero = keys.listIndexV1("bootfs", "", "/", 0, null);
+        S3ListPage zero = listing.listV1("bootfs", "", "/", 0, null);
         assertTrue(zero.getContents().isEmpty()); assertFalse(zero.isTruncated());
         assertNull(zero.getNextMarker());
     }
 
     @Test void v2StillUsesAnOpaqueContextBoundContinuationToken() {
         object("a.txt", "a"); object("b.txt", "b");
-        S3ListPage first = keys.listIndex("bootfs", "", "/", 1, null);
+        S3ListPage first = listing.listV2("bootfs", "", "/", 1, null);
         assertTrue(first.isTruncated()); assertNotEquals("a.txt", first.getNextContinuationToken());
         assertNull(first.getNextMarker());
-        assertEquals("b.txt", keys.listIndex("bootfs", "", "/", 1, first.getNextContinuationToken()).getContents().get(0).getKey());
-        assertThrows(IllegalArgumentException.class, () -> keys.listIndex("bootfs", "different/", "/", 1, first.getNextContinuationToken()));
+        assertEquals("b.txt", listing.listV2("bootfs", "", "/", 1, first.getNextContinuationToken()).getContents().get(0).getKey());
+        assertThrows(IllegalArgumentException.class, () -> listing.listV2("bootfs", "different/", "/", 1, first.getNextContinuationToken()));
     }
 
     @Test void controllerSelectsV1MarkersOrV2ContinuationTokensAndHonorsZeroMaxKeys() throws Exception {
@@ -125,6 +127,6 @@ class S3ListV1Test {
     }
 
     private void object(String key, String uuid) {
-        records.put("/s3/bootfs/" + key, JSON.toJSONString(new S3ObjectMeta(uuid, 1, "etag", 1, key, "text/plain")));
+        records.put("/s3/bootfs/" + key, JSON.toJSONString(new ObjectKeyBinding(uuid, 1, "etag", 1, key, "text/plain")));
     }
 }

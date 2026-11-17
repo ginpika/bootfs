@@ -2,8 +2,8 @@ package cc.ginpika.bootfs.controller;
 
 import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.domain.dto.FileObject;
-import cc.ginpika.bootfs.core.Context;
-import cc.ginpika.bootfs.dto.SsoUser;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
+import cc.ginpika.bootfs.sso.SsoUser;
 import cc.ginpika.bootfs.sso.SsoConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.ModelAndView;
-
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -26,7 +25,7 @@ import lombok.RequiredArgsConstructor;
 @SuppressWarnings("all")
 @RequiredArgsConstructor
 public class WebUIController {
-    private final Context context;
+    private final LocalFileInventory context;
     private final TfsConfig tfsConfig;
     private final SsoConfig ssoConfig;
 
@@ -88,7 +87,7 @@ public class WebUIController {
         mv.setViewName("video-player");
         Map<String, Object> model = mv.getModel();
         if (StringUtils.isNotBlank(uuid)) {
-            FileObject fileObject = context.STORAGE.get(uuid);
+            FileObject fileObject = context.cached(uuid);
             if (Objects.isNull(fileObject)) return mv;
             List<String> resources = new ArrayList<>();
             if (StringUtils.isNotBlank(fileObject.getHlsAvailable())) {

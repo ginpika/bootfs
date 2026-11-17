@@ -1,12 +1,13 @@
 package cc.ginpika.bootfs.kernel.cluster;
 
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
 import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.core.*;
-import cc.ginpika.bootfs.core.io.ContextIO;
+import cc.ginpika.bootfs.file.inventory.FileCatalogRepository;
 import cc.ginpika.bootfs.kernel.backup.KernelBackup;
 import cc.ginpika.bootfs.kernel.search.EmbeddedSearchEngine;
 import cc.ginpika.bootfs.service.FederationService;
-import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
+import cc.ginpika.bootfs.search.ResourceSearchService;
 import com.alibaba.fastjson2.*;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.*;
@@ -29,8 +30,8 @@ class DynamicClusterTest {
         final java.util.concurrent.ExecutorService executor=java.util.concurrent.Executors.newCachedThreadPool();
         DynamicMetadataStore store;
         EmbeddedSearchEngine index;
-        Context context;
-        ContextIO inventory;
+        LocalFileInventory context;
+        FileCatalogRepository inventory;
         FederationService federation;
         ClusterCoordinator coordinator;
         Node(String id) throws Exception {
@@ -69,10 +70,10 @@ class DynamicClusterTest {
             }); http.start(); nodes.add(this);
         }
         void open() throws Exception {
-            store=new DynamicMetadataStore(config); NodeIdentity identity=new NodeIdentity(config); inventory=new ContextIO(store,config,identity);
-            context=new Context(config,inventory,identity); context.load(); index=new EmbeddedSearchEngine(store,root.resolve(config.getUniqueId()+"-index"));
-            MeiliSearchService search=new MeiliSearchService(index); federation=new FederationService(store,search,context);
-            coordinator=new ClusterCoordinator(store,context,false,credentials,55929);
+            store=new DynamicMetadataStore(config); NodeIdentity identity=new NodeIdentity(config); inventory=new FileCatalogRepository(store,config,identity);
+            context=new LocalFileInventory(config,inventory,identity); context.load(); index=new EmbeddedSearchEngine(store,root.resolve(config.getUniqueId()+"-index"));
+            ResourceSearchService search=new ResourceSearchService(index); federation=new FederationService(store,search,context);
+            coordinator=new ClusterCoordinator(store, credentials);
         }
         void restart() throws Exception { federation.close(); index.close(); store.close(); open(); }
         void resource(String id,String body) throws Exception {

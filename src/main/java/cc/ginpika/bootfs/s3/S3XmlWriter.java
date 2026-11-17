@@ -1,5 +1,6 @@
 package cc.ginpika.bootfs.s3;
 
+import cc.ginpika.bootfs.file.binding.ObjectKeyBinding;
 import org.springframework.stereotype.Component;
 
 import java.text.SimpleDateFormat;
@@ -15,7 +16,7 @@ public class S3XmlWriter {
 
     private static final String DECL = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
 
-    public String copyObjectResult(S3ObjectMeta object) {
+    public String copyObjectResult(ObjectKeyBinding object) {
         StringBuilder sb = new StringBuilder(DECL);
         sb.append("<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">");
         tag(sb, "LastModified", formatIso(object.getLastModified()));
@@ -66,9 +67,9 @@ public class S3XmlWriter {
             tag(sb, "NextContinuationToken", page.getNextContinuationToken());
         }
         if (!v2 && page.isTruncated() && page.getNextMarker() != null) tag(sb, "NextMarker", page.getNextMarker());
-        List<S3ObjectMeta> contents = page.getContents();
+        List<ObjectKeyBinding> contents = page.getContents();
         if (contents != null) {
-            for (S3ObjectMeta meta : contents) {
+            for (ObjectKeyBinding meta : contents) {
                 sb.append("<Contents>");
                 tag(sb, "Key", meta.getKey());
                 tag(sb, "LastModified", formatIso(meta.getLastModified()));

@@ -1,13 +1,12 @@
 package cc.ginpika.bootfs.service.thumb;
 
 import cc.ginpika.bootfs.config.TfsConfig;
-import cc.ginpika.bootfs.core.Context;
-import cc.ginpika.bootfs.core.io.ContextIO;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
+import cc.ginpika.bootfs.file.inventory.FileCatalogRepository;
 import cc.ginpika.bootfs.domain.dto.FileObject;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,9 +20,9 @@ import java.util.concurrent.Executors;
 @RequiredArgsConstructor
 public class ThumbnailService {
     private final TfsConfig tfsConfig;
-    private final Context context;
-    private final ContextIO contextIO;
-    private final cc.ginpika.bootfs.service.meilisearch.MeiliSearchService search;
+    private final LocalFileInventory context;
+    private final FileCatalogRepository contextIO;
+    private final cc.ginpika.bootfs.search.ResourceSearchService search;
     private final cc.ginpika.bootfs.kernel.cluster.ResourceVisibility visibility;
 
     public static final Set<String> IMAGE_EXTENSIONS = Set.of(".jpg", ".jpeg", ".png", ".gif");
@@ -152,7 +151,7 @@ public class ThumbnailService {
         }
         fileObject.setThumbAvailable("1");
         contextIO.update(uuid, fileObject);
-        search.addToFullText(cc.ginpika.bootfs.service.meilisearch.FullTextDocument.builder().uuid(uuid).thumbAvailable("1").build());
+        search.addToFullText(cc.ginpika.bootfs.search.FullTextDocument.builder().uuid(uuid).thumbAvailable("1").build());
     }
 
     @javax.annotation.PreDestroy

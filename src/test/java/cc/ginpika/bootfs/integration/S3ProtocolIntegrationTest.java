@@ -1,7 +1,7 @@
 package cc.ginpika.bootfs.integration;
 
 import cc.ginpika.bootfs.s3.S3CryptoUtils;
-import cc.ginpika.bootfs.s3.S3Config;
+import cc.ginpika.bootfs.file.binding.ObjectStorageProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -27,7 +27,7 @@ class S3ProtocolIntegrationTest {
     static final Path ROOT = MononodeIntegrationTest.tempRoot();
     @DynamicPropertySource static void properties(DynamicPropertyRegistry registry) { registry.add("tfs.root-path",ROOT::toString); }
     @Autowired MockMvc mvc;
-    @Autowired S3Config config;
+    @Autowired ObjectStorageProperties config;
     private MockHttpServletRequestBuilder signed(String method,String path,byte[] body,String type,String declared) {
         URI uri = URI.create(path);
         String query = uri.getRawQuery() == null ? "" : java.util.Arrays.stream(uri.getRawQuery().split("&"))

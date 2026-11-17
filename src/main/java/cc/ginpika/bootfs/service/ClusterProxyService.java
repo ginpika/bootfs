@@ -1,9 +1,9 @@
 package cc.ginpika.bootfs.service;
 
 import com.alibaba.fastjson2.JSONObject;
-import cc.ginpika.bootfs.core.Context;
-import cc.ginpika.bootfs.service.etcd.EtcdService;
-import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
+import cc.ginpika.bootfs.metadata.MetadataRegistry;
+import cc.ginpika.bootfs.search.ResourceSearchService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -18,7 +18,6 @@ import org.apache.http.util.EntityUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-
 import javax.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -29,9 +28,9 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class ClusterProxyService {
-    private final MeiliSearchService meiliSearchService;
-    private final EtcdService etcdService;
-    private final Context context;
+    private final ResourceSearchService resourceSearch;
+    private final MetadataRegistry metadataRegistry;
+    private final LocalFileInventory context;
     @org.springframework.beans.factory.annotation.Autowired private FederationService federation;
 
     // 压缩由此跳的 HttpClient 协商，不能照搬浏览器的 br/zstd 等解码能力。
@@ -59,7 +58,7 @@ public class ClusterProxyService {
             JSONObject found=federation.locate(uuid); return found == null ? null : found.getString("url");
         }
         try {
-            Map<String, Object> docResult = meiliSearchService.getDocument("full-text", uuid);
+            Map<String, Object> docResult = resourceSearch.getDocument("full-text", uuid);
             if (docResult == null || !Boolean.TRUE.equals(docResult.get("succeed")) || docResult.get("data") == null) {
                 return null;
             }
@@ -75,7 +74,7 @@ public class ClusterProxyService {
             if (StringUtils.isBlank(contextUuid) || contextUuid.equals(context.uuid)) {
                 return null;
             }
-            String nodeUrl = etcdService.getOne("/cluster/node/" + contextUuid);
+            String nodeUrl = metadataRegistry.getOne("/cluster/node/" + contextUuid);
             return StringUtils.isNotBlank(nodeUrl) ? nodeUrl : null;
         } catch (Exception e) {
             log.warn("解析文件 contextUuid 失败, uuid={}: {}", uuid, e.getMessage());

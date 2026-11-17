@@ -1,12 +1,13 @@
 package cc.ginpika.bootfs.service.gallery;
 
-import cc.ginpika.bootfs.core.Context;
+import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
 import cc.ginpika.bootfs.domain.dto.FileObject;
 import cc.ginpika.bootfs.kernel.cluster.ClusterHttp;
 import cc.ginpika.bootfs.kernel.metadata.MetadataStore;
 import cc.ginpika.bootfs.service.FederationService;
-import cc.ginpika.bootfs.service.FileService;
-import cc.ginpika.bootfs.service.meilisearch.MeiliSearchService;
+import cc.ginpika.bootfs.file.FileDownload;
+import cc.ginpika.bootfs.file.FileService;
+import cc.ginpika.bootfs.search.ResourceSearchService;
 import cc.ginpika.bootfs.service.thumb.ThumbnailService;
 import com.alibaba.fastjson2.JSONObject;
 import lombok.RequiredArgsConstructor;
@@ -16,8 +17,6 @@ import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-
-import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -32,10 +31,10 @@ public class GalleryService {
     private static final Comparator<Publication> NEWEST = Comparator.comparingLong(Publication::publishedAt)
             .reversed().thenComparing(Publication::uuid);
 
-    private final Context context;
+    private final LocalFileInventory context;
     private final MetadataStore metadata;
     private final FederationService federation;
-    private final MeiliSearchService search;
+    private final ResourceSearchService search;
     private final FileService files;
     private final ThumbnailService thumbnails;
     private volatile Catalog catalog;
@@ -72,7 +71,7 @@ public class GalleryService {
         long revision = metadata.revision();
         if (catalog != null && catalog.revision() == revision) return catalog;
         Map<String, Long> published = new TreeMap<>();
-        for (FileObject file : context.STORAGE.values()) {
+        for (FileObject file : context.cachedFiles()) {
             if (imageType(file.getFileName()) == null) continue;
             JSONObject document = search.findDocument("image-host", file.getUuid());
             if (document != null) published.put(file.getUuid(), document.getLongValue("galleryPublishedAt"));
@@ -149,19 +148,19 @@ public class GalleryService {
         return ClusterHttp.digest(value.getBytes(StandardCharsets.UTF_8));
     }
 
-    public ResponseEntity<Resource> localImage(String uuid, boolean thumbnail, HttpServletRequest request) throws IOException {
+    public ResponseEntity<Resource> localImage(String uuid, boolean thumbnail) throws IOException {
         if (!validId(uuid) || !published(uuid)) return ResponseEntity.notFound().build();
-        Object[] file = files.download(uuid, request);
+        FileDownload file = files.openDownload(uuid);
         if (file == null) return ResponseEntity.notFound().build();
-        String type = imageType((String) file[1]);
+        String type = imageType(file.filename());
         if (type == null) return ResponseEntity.notFound().build();
-        Resource asset = (Resource) file[0];
+        Resource asset = new FileSystemResource(file.path());
         if (thumbnail) {
             Path preview = thumbnails.thumbPath(uuid);
             if (Files.isRegularFile(preview)) {
                 asset = new FileSystemResource(preview);
                 type = "image/webp";
-            } else if (thumbnails.isImage((String) file[1])) {
+            } else if (thumbnails.isImage(file.filename())) {
                 thumbnails.generateAsync(uuid);
             }
         }

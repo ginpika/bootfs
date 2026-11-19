@@ -46,14 +46,18 @@ public class RequestStatsService {
     public void record(RequestCategory cat, String method, String uri, int status,
                        long bytes, long durationMs, String clientIp) {
         totalRequests.incrementAndGet();
-        totalBytesOut.addAndGet(bytes);
         requestsByCategory.get(cat).incrementAndGet();
-        bytesByCategory.get(cat).addAndGet(bytes);
 
+        boolean detailed = cat != RequestCategory.OTHER;
         long now = System.currentTimeMillis();
         long hour = now - (now % HOUR_MS);
-        hourlyBuckets.computeIfAbsent(hour, HourBucket::new).record(bytes);
+        hourlyBuckets.computeIfAbsent(hour, HourBucket::new).record(detailed ? bytes : 0);
+        if (!detailed) {
+            return;
+        }
 
+        totalBytesOut.addAndGet(bytes);
+        bytesByCategory.get(cat).addAndGet(bytes);
         String truncatedUri = uri != null && uri.length() > 120 ? uri.substring(0, 120) + "..." : uri;
         RequestLogEntry entry = new RequestLogEntry(
                 TIME_FMT.format(Instant.ofEpochMilli(now)),

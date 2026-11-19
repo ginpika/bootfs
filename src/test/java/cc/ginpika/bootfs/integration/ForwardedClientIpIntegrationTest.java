@@ -53,24 +53,24 @@ class ForwardedClientIpIntegrationTest {
         // Loopback stands in for the configured Caddy/Docker gateway address.
         try (var app = start("--server.forward-headers-strategy=native",
                 "--server.tomcat.remoteip.internal-proxies=127[.]0[.]0[.]1")) {
-            assertEquals("203.0.113.42", recordedIp(app, "/proxy-test/ipv4", "203.0.113.42"));
-            assertEquals("2001:db8::42", recordedIp(app, "/proxy-test/ipv6", "2001:db8::42"));
-            assertEquals("203.0.113.43", recordedIp(app, "/proxy-test/chain", "198.51.100.99, 203.0.113.43"));
-            assertEquals("127.0.0.1", recordedIp(app, "/proxy-test/direct", null));
+            assertEquals("203.0.113.42", recordedIp(app, "/f/missing-ipv4", "203.0.113.42"));
+            assertEquals("2001:db8::42", recordedIp(app, "/f/missing-ipv6", "2001:db8::42"));
+            assertEquals("203.0.113.43", recordedIp(app, "/f/missing-chain", "198.51.100.99, 203.0.113.43"));
+            assertEquals("127.0.0.1", recordedIp(app, "/f/missing-direct", null));
         }
     }
 
     @Test @Timeout(30) void nativeHeadersAreIgnoredForAnUntrustedConnection() throws Exception {
         try (var app = start("--server.forward-headers-strategy=native",
                 "--server.tomcat.remoteip.internal-proxies=192[.]0[.]2[.]10")) {
-            assertEquals("127.0.0.1", recordedIp(app, "/proxy-test/untrusted", "203.0.113.42"));
+            assertEquals("127.0.0.1", recordedIp(app, "/f/missing-untrusted", "203.0.113.42"));
         }
     }
 
     @Test @Timeout(30) void forwardedHeadersRemainDisabledByDefault() throws Exception {
         try (var app = start()) {
             assertEquals("none", app.getEnvironment().getProperty("server.forward-headers-strategy"));
-            assertEquals("127.0.0.1", recordedIp(app, "/proxy-test/default", "203.0.113.42"));
+            assertEquals("127.0.0.1", recordedIp(app, "/f/missing-default", "203.0.113.42"));
         }
     }
 }

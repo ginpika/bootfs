@@ -11,7 +11,6 @@
         var submit = document.getElementById('clusterLinkSubmit');
         var message = document.getElementById('clusterLinkMessage');
         var summary = document.getElementById('clusterSummary');
-        var coordinatorStatus = document.getElementById('clusterCoordinatorStatus');
         var removeOpen = document.getElementById('clusterRemoveOpen');
         var removeDialog = document.getElementById('clusterRemoveDialog');
         var removeTitle = document.getElementById('clusterRemoveTitle');
@@ -123,11 +122,7 @@
                 summary.textContent = phaseLabel(state) + (state.lastError ? BootFSI18n.t('：{0}', state.lastError) : '');
                 if (!target) showMessage(summary.textContent, Boolean(state.lastError));
             }
-            var coordinatorId = state.phase === 'ACTIVE' && !state.independent && state.coordinatorId;
-            var coordinatorEndpoint = coordinatorId && state.peers?.[coordinatorId];
-            coordinatorStatus.hidden = !coordinatorId;
-            coordinatorStatus.textContent = coordinatorId ? BootFSI18n.t('调度节点（Master） ·') + ' ' + coordinatorId +
-                (coordinatorEndpoint ? ' · ' + coordinatorEndpoint : '') : '';
+            setDashboardCoordinator(state.phase === 'ACTIVE' && !state.independent ? state.coordinatorId || null : null);
             var nextKey = window.bootfsClusterAvailable ? state.phase + JSON.stringify(state.peers || {}) : '';
             if (nextKey && (reloadStats || nextKey !== statsKey)) loadStats(reloadStats);
             statsKey = nextKey;

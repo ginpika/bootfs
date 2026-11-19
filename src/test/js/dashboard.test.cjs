@@ -22,6 +22,7 @@ function dashboard(clusterState) {
             if (!elements.has(id)) elements.set(id, {
                 textContent: '', innerHTML: '', dataset: {}, listeners: {}, style: {},
                 classList: {add() {}, remove() {}, toggle() {}},
+                querySelectorAll() { return []; },
                 addEventListener(name, fn) { this.listeners[name] = fn; },
                 showModal() { this.open = true; },
                 close() { this.open = false; },
@@ -123,10 +124,53 @@ test('offline and older nodes clear all previous statistics and uptime', async (
     assert.match(page.element('systemStats').innerHTML, /节点不可达/);
     assert.equal(page.sandbox.uptimeStartTime, 0);
     assert.equal(page.intervals.size, 0);
-    await page.load([{nodeId: 'b', online: true, isCurrent: true}]);
-    assert.match(page.element('selectedNodeStatus').textContent, /请升级节点/);
+    await page.load([{nodeId: 'b', online: true, isCurrent: true, url: 'http://b'}]);
+    assert.match(page.element('selectedNodeStatus').textContent, /^http:\/\/b · 最近刷新 /);
     assert.equal(page.element('trafficTotalReqs').textContent, '--');
-    assert.match(page.element('recentReqBody').innerHTML, /未提供请求统计/);
+    assert.match(page.element('recentReqBody').innerHTML, /请求统计暂不可用/);
+});
+
+test('polling keeps the focused card when possible and restores focus without scrolling when it changes', async () => {
+    const page = dashboard();
+    const a = {...node('a', true, 1), disk: {usagePercent: 20}};
+    await page.load([a]);
+    const focusCalls = [];
+    const card = {dataset: {nodeId: 'a'}, focus(options) { focusCalls.push(options.preventScroll); }};
+    page.sandbox.document.activeElement = card;
+    page.element('nodesGrid').querySelectorAll = () => [card];
+    await page.load([a]);
+    assert.deepEqual(focusCalls, []);
+    await page.load([{...a, disk: {usagePercent: 30}}]);
+    assert.deepEqual(focusCalls, [true]);
+});
+
+test('filters older peer logs and displays background traffic as a count', async () => {
+    const page = dashboard();
+    const a = node('a', true, 4);
+    const detail = a.requests.recent[0];
+    a.requests.recent = [detail,
+        {...detail, category: 'OTHER', uri: '/api/cluster/status'},
+        {...detail, category: 'OTHER', uri: '/api/dashboard/stats'},
+        {...detail, category: 'OTHER', uri: '/dashboard.js'},
+        {...detail, category: 'HLS', uri: '/tv/status'},
+        {...detail, category: 'HLS', uri: '/tv/playlist.m3u8'},
+        {...detail, category: 'S3', uri: '/s3'}
+    ];
+    a.traffic.totalBytesOut = 1024;
+    a.traffic.byCategory = [
+        {category: 'FILE', requests: 1, bytesOut: 256, percent: 25},
+        {category: 'OTHER', requests: 3, bytesOut: 768, percent: 75}
+    ];
+    await page.load([a]);
+    const recent = page.element('recentReqBody').innerHTML;
+    assert.doesNotMatch(recent, /cluster|dashboard|\/tv\/status/);
+    assert.match(recent, /\/only-a/);
+    assert.match(recent, /\/tv\/playlist.m3u8/);
+    assert.match(recent, /\/s3/);
+    assert.equal(page.element('trafficTotal').textContent, '256 B');
+    assert.match(page.element('trafficCategoryList').innerHTML, /静态资源和其他<\/span><span[^>]+>3 次请求/);
+    assert.match(page.element('trafficCategoryList').innerHTML, /width: 100%/);
+    assert.doesNotMatch(page.element('trafficCategoryList').innerHTML, /768 B|75%/);
 });
 
 test('supports keyboard selection and escapes requester IP and system metadata', async () => {
@@ -227,7 +271,7 @@ test('remote removal on a non-coordinator links to the coordinator for the selec
     assert.equal(confirm.disabled, false);
 });
 
-test('the Master display follows cluster status and confirmed local departure clears cluster details', async () => {
+test('the coordinator badge follows cluster status and confirmed local departure clears it', async () => {
     const state = {phase: 'ACTIVE', nodeId: 'a', coordinatorId: 'b', groupId: 'group', independent: false,
         peers: {a: 'http://a', b: 'http://b'}};
     const page = dashboard(state);
@@ -236,12 +280,13 @@ test('the Master display follows cluster status and confirmed local departure cl
     page.init();
     await new Promise(setImmediate);
 
-    const coordinator = page.element('clusterCoordinatorStatus');
-    assert.equal(coordinator.hidden, false);
-    assert.equal(coordinator.textContent, '调度节点（Master） · b · http://b');
+    const grid = page.element('nodesGrid');
+    assert.match(grid.innerHTML.split('data-node-id="b"')[1], /调度节点/);
+    assert.doesNotMatch(grid.innerHTML.split('data-node-id="b"')[0], /调度节点/);
     state.coordinatorId = 'a';
     await page.refreshCluster();
-    assert.equal(coordinator.textContent, '调度节点（Master） · a · http://a');
+    assert.match(grid.innerHTML.split('data-node-id="b"')[0], /当前节点<\/span><span[^>]+>调度节点/);
+    assert.doesNotMatch(grid.innerHTML.split('data-node-id="b"')[1], /调度节点/);
 
     const open = page.element('clusterRemoveOpen');
     const dialog = page.element('clusterRemoveDialog');
@@ -266,8 +311,7 @@ test('the Master display follows cluster status and confirmed local departure cl
     assert.equal(open.disabled, true);
     assert.equal(page.element('clusterRemoveFeedback').textContent, '本机已退出集群，可继续独立使用。');
     assert.equal(page.element('clusterPairingCode').textContent, '');
-    assert.equal(coordinator.hidden, true);
-    assert.equal(coordinator.textContent, '');
+    assert.doesNotMatch(grid.innerHTML, /调度节点/);
     assert.equal(page.sandbox.selectedNodeId, 'a');
     assert.doesNotMatch(page.element('nodesGrid').innerHTML, /data-node-id="b"/);
 });

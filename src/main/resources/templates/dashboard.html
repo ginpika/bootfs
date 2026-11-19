@@ -214,7 +214,7 @@
             </header>
 
             <!-- Main Content -->
-            <main class="flex-1 overflow-y-auto p-4 theme-page-bg">
+            <main class="dashboard-content flex-1 overflow-y-auto p-4 theme-page-bg">
                 <div id="errorBanner" class="hidden mb-3 theme-card theme-rounded-xl theme-shadow p-3"
                     style="border-left: 4px solid var(--color-danger);">
                     <p data-i18n class="text-sm" style="color: var(--color-danger);" id="errorMsg">加载失败</p>
@@ -234,7 +234,6 @@
                     </div>
                     <p data-i18n id="clusterSummary" role="status" aria-live="polite" class="text-sm mb-3" style="color: var(--color-text-secondary);">正在读取组网状态…</p>
                     <p id="clusterRemoveFeedback" role="status" class="text-sm mb-3 break-words empty:hidden" style="color: var(--color-success);"></p>
-                    <p data-i18n class="text-xs mb-3" style="color: var(--color-text-muted);">点击节点卡片，查看对应节点的系统资源、流量与请求。每 15 秒自动刷新。</p>
                     <div id="nodesGrid" class="flex flex-wrap gap-4">
                         <p data-i18n class="text-sm w-full" style="color: var(--color-text-muted);">加载中...</p>
                     </div>
@@ -243,10 +242,8 @@
                 <section class="mb-5" aria-labelledby="selectedNodeTitle">
                     <h2 data-i18n id="selectedNodeTitle" class="text-sm font-semibold font-display mb-1"
                         style="color: var(--color-text-primary);">节点统计</h2>
-                    <p data-i18n id="selectedNodeStatus" role="status" aria-live="polite" class="text-xs mb-3 break-words"
-                        style="color: var(--color-text-muted);">请选择节点</p>
-                    <p id="clusterCoordinatorStatus" hidden class="text-xs mb-3 break-words"
-                        style="color: var(--color-text-secondary);"></p>
+                    <p id="selectedNodeStatus" class="text-xs mb-3 break-words empty:hidden"
+                        style="color: var(--color-text-muted);"></p>
                     <div id="systemStats" class="grid grid-cols-1 lg:grid-cols-3 gap-4"></div>
                 </section>
 
@@ -280,7 +277,6 @@
                                     </div>
                                 </div>
                                 <div id="reqHourlyChart" class="flex items-end gap-0.5 h-24"></div>
-                                <p data-i18n class="text-xs mt-1.5" style="color: var(--color-text-muted);">每小时请求次数（悬停查看明细）</p>
                             </div>
                             <div class="theme-card theme-rounded-xl theme-shadow p-4">
                                 <div class="flex items-center justify-between mb-3">
@@ -411,6 +407,7 @@
         .dashboard-node { cursor: pointer; border: 2px solid transparent; text-align: left; }
         .dashboard-node:hover, .dashboard-node:focus-visible { outline: 2px solid var(--color-accent-primary); outline-offset: 3px; }
         .dashboard-node[aria-pressed="true"] { border-color: var(--color-accent-primary); }
+        .dashboard-content, .dashboard-requests-scroll { overflow-anchor: none; }
         .dashboard-recent-card { display: flex; flex-direction: column; min-width: 0; }
         .dashboard-requests-scroll { flex: 1 1 auto; height: 380px; min-height: 0; overflow: auto; }
         .dashboard-requests-table { width: 100%; min-width: 860px; table-layout: fixed; }

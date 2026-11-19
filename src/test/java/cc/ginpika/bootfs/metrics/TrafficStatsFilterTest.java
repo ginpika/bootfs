@@ -8,6 +8,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -118,7 +119,7 @@ class TrafficStatsFilterTest {
 
     @Test void preservesIpv6AndBoundsRecentEntriesWhileKeepingTotals() throws Exception {
         RequestStatsService service = new RequestStatsService();
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/test");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/f/test");
         request.setRemoteAddr("2001:db8::42");
         TrafficStatsFilter filter = new TrafficStatsFilter(service);
         for (int i = 0; i < 55; i++) {
@@ -129,5 +130,40 @@ class TrafficStatsFilterTest {
         assertEquals(50, recent.size());
         assertEquals("2001:db8::42", recent.getJSONObject(0).getString("clientIp"));
         assertEquals(55, stats.getJSONObject("requests").getIntValue("total24h"));
+    }
+
+    @Test void backgroundTrafficCountsWithoutDisplacingFileS3OrStreamingRequests() throws Exception {
+        var service = new RequestStatsService();
+        var filter = new TrafficStatsFilter(service);
+        var servicePaths = List.of("/f", "/api/file/sample/text", "/s3", "/s3/files/object", "/tv/playlist.m3u8", "/hls/sample/1.ts");
+        var backgroundPaths = List.of("/api/cluster/status", "/api/dashboard/stats", "/dashboard", "/dashboard.js", "/tv/status/");
+        for (String uri : servicePaths) {
+            filter.doFilter(new MockHttpServletRequest("GET", uri), new MockHttpServletResponse(),
+                    (req, resp) -> resp.getOutputStream().write(1));
+        }
+        for (int i = 0; i < 55; i++) {
+            for (String uri : backgroundPaths) {
+                filter.doFilter(new MockHttpServletRequest("GET", uri), new MockHttpServletResponse(),
+                        (req, resp) -> resp.getOutputStream().write(1));
+            }
+        }
+
+        JSONObject stats = JSON.parseObject(JSON.toJSONString(service.buildStats()));
+        JSONObject requests = stats.getJSONObject("requests");
+        var recent = requests.getJSONArray("recent");
+        assertEquals(servicePaths.size(), recent.size());
+        assertEquals(List.of("HLS", "HLS", "S3", "S3", "FILE", "FILE"), recent.stream()
+                .map(entry -> ((JSONObject) entry).getString("category")).toList());
+        int backgroundCount = 55 * backgroundPaths.size();
+        assertEquals(servicePaths.size() + backgroundCount, requests.getLongValue("total24h"));
+        assertEquals(servicePaths.size(), requests.getLongValue("bytes24h"));
+
+        JSONObject traffic = stats.getJSONObject("traffic");
+        assertEquals(servicePaths.size() + backgroundCount, traffic.getLongValue("totalRequests"));
+        assertEquals(servicePaths.size(), traffic.getLongValue("totalBytesOut"));
+        JSONObject other = traffic.getJSONArray("byCategory").stream().map(JSONObject.class::cast)
+                .filter(entry -> "OTHER".equals(entry.getString("category"))).findFirst().orElseThrow();
+        assertEquals(backgroundCount, other.getLongValue("requests"));
+        assertEquals(0, other.getLongValue("bytesOut"));
     }
 }

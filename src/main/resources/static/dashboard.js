@@ -15,8 +15,18 @@ var CATEGORY_LABELS = {
 };
 
 var dashboardNodes = [];
+var dashboardCoordinatorId = null;
 var selectedNodeId = new URLSearchParams(window.location.search).get('node');
 var statsRequest = null;
+var statsUpdatedAt = null;
+var renderedHtml = new WeakMap();
+
+function updateHtml(element, html) {
+    if (renderedHtml.get(element) === html) return false;
+    element.innerHTML = html;
+    renderedHtml.set(element, html);
+    return true;
+}
 
 function setTheme(theme) {
     document.documentElement.classList.forEach(function (c) {
@@ -78,11 +88,8 @@ function ringSvg(percent, size, strokeColor, centerTop, centerBottom) {
 
 function renderNodes(nodes) {
     var grid = document.getElementById('nodesGrid');
-    if (!nodes || nodes.length === 0) {
-        grid.innerHTML = '<p class="text-sm w-full" style="color: var(--color-text-muted);">' + BootFSI18n.html('无节点数据') + '</p>';
-        return;
-    }
-    grid.innerHTML = nodes.map(function (n) {
+    var focusedNodeId = document.activeElement?.dataset?.nodeId;
+    var html = nodes.map(function (n) {
         var cardOpacity = n.online ? '' : 'opacity: 0.65;';
         var cardCls = 'dashboard-node theme-card theme-rounded-xl theme-shadow p-4 w-[340px] max-w-full';
         var attributes = ' role="button" tabindex="0" aria-pressed="' + (n.nodeId === selectedNodeId) +
@@ -103,7 +110,19 @@ function renderNodes(nodes) {
             renderNodeResources(n.resources) +
             renderNodeFileTypes(n.fileTypes) +
         '</div>';
-    }).join('');
+    }).join('') || '<p class="text-sm w-full" style="color: var(--color-text-muted);">' + BootFSI18n.html('无节点数据') + '</p>';
+    if (updateHtml(grid, html) && focusedNodeId) {
+        var card = Array.from(grid.querySelectorAll('[data-node-id]')).find(function (item) {
+            return item.dataset.nodeId === focusedNodeId;
+        });
+        card?.focus({preventScroll: true});
+    }
+}
+
+function setDashboardCoordinator(nodeId) {
+    if (nodeId === dashboardCoordinatorId) return;
+    dashboardCoordinatorId = nodeId;
+    if (dashboardNodes.length) renderNodes(dashboardNodes);
 }
 
 function selectNode(nodeId) {
@@ -112,7 +131,7 @@ function selectNode(nodeId) {
     var url = new URL(window.location.href);
     url.searchParams.set('node', nodeId);
     window.history.replaceState(null, '', url);
-    // 更新选中态时保留键盘焦点；轮询时才重绘卡片内容。
+    // 保留卡片及键盘焦点。
     document.querySelectorAll('#nodesGrid [data-node-id]').forEach(function (card) {
         card.setAttribute('aria-pressed', String(card.dataset.nodeId === nodeId));
     });
@@ -123,15 +142,13 @@ function renderSelectedNode() {
     var node = dashboardNodes.find(function (item) { return item.nodeId === selectedNodeId; });
     var available = node && node.online;
     document.getElementById('selectedNodeTitle').textContent = node ? BootFSI18n.t('节点统计 ·') + ' ' + node.nodeId : BootFSI18n.t('节点统计');
-    document.getElementById('selectedNodeStatus').textContent = !node ? BootFSI18n.t('暂无节点数据') :
-        (node.isCurrent ? BootFSI18n.t('当前访问节点 ·') + ' ' : BootFSI18n.t('远程节点 ·') + ' ') + (node.url || '') +
-        (!available ? ' ' + BootFSI18n.t('· 节点不可达，统计暂不可用') :
-            (!node.requests ? ' ' + BootFSI18n.t('· 该节点未提供流量与请求数据，请升级节点') :
-                ' ' + BootFSI18n.t('· 统计仅属于此节点 · 最近刷新 {0}', new Date().toLocaleTimeString(BootFSI18n.language))));
-    renderSystem(available ? node.system : null, available ? BootFSI18n.t('该节点未提供系统信息，请升级节点') : BootFSI18n.t('节点不可达，系统信息暂不可用'));
+    var updated = available && statsUpdatedAt ?
+        BootFSI18n.t('最近刷新 {0}', statsUpdatedAt.toLocaleTimeString(BootFSI18n.language)) : '';
+    document.getElementById('selectedNodeStatus').textContent = node ? [node.url, updated].filter(Boolean).join(' · ') : '';
+    renderSystem(available ? node.system : null, available ? BootFSI18n.t('系统信息暂不可用') : BootFSI18n.t('节点不可达'));
     renderTraffic(available ? node.traffic : null);
     renderRequests(available ? node.requests : null,
-        available ? BootFSI18n.t('该节点未提供请求统计') : BootFSI18n.t('节点不可达，请求统计暂不可用'));
+        available ? BootFSI18n.t('请求统计暂不可用') : BootFSI18n.t('节点不可达'));
     renderUptime(available ? node.appStartTime : null);
     document.dispatchEvent(new Event('dashboard-node-selected'));
 }
@@ -150,7 +167,7 @@ function systemCard(title, content) {
 function renderSystem(system, emptyMessage) {
     var container = document.getElementById('systemStats');
     if (!system) {
-        container.innerHTML = systemCard(BootFSI18n.t('系统资源'), '<p class="text-xs" style="color: var(--color-text-muted);">' + escapeHtml(emptyMessage) + '</p>');
+        updateHtml(container, systemCard(BootFSI18n.t('系统资源'), '<p class="text-xs" style="color: var(--color-text-muted);">' + escapeHtml(emptyMessage) + '</p>'));
         return;
     }
     var memory = system.memory || {};
@@ -161,8 +178,7 @@ function renderSystem(system, emptyMessage) {
         (percent == null ? '--' : Number(percent).toFixed(2) + '%') + '</p>' +
         '<dl>' + systemRow(BootFSI18n.t('堆已用 / 上限'), formatBytes(memory.heapUsedBytes) + ' / ' + formatBytes(memory.heapMaxBytes)) +
         systemRow(BootFSI18n.t('堆已提交'), formatBytes(memory.heapCommittedBytes)) +
-        systemRow(BootFSI18n.t('非堆已用'), formatBytes(memory.nonHeapUsedBytes)) + '</dl>' +
-        '<p class="text-xs mt-2" style="color: var(--color-text-muted);">' + BootFSI18n.html('RSS 包含堆、非堆及本地内存等；无法采集的指标显示 --。') + '</p>';
+        systemRow(BootFSI18n.t('非堆已用'), formatBytes(memory.nonHeapUsedBytes)) + '</dl>';
     var host = '<dl>' + systemRow(BootFSI18n.t('CPU 型号'), system.cpuModel) +
         systemRow(BootFSI18n.t('架构 / 宿主机逻辑 CPU'), (system.architecture || '--') + ' / ' + (system.logicalProcessors || '--')) +
         systemRow(BootFSI18n.t('JVM 可用 CPU'), system.availableProcessors) +
@@ -176,13 +192,17 @@ function renderSystem(system, emptyMessage) {
     var runtime = '<dl>' + systemRow(BootFSI18n.t('运行环境'), runtimeLabels[system.runtime] || system.runtime) +
         systemRow(BootFSI18n.t('操作系统'), (system.os || '--') + ' ' + (system.osVersion || '')) +
         systemRow(BootFSI18n.t('Java 版本'), system.javaVersion) + systemRow(BootFSI18n.t('虚拟机'), system.jvmName) + systemRow(BootFSI18n.t('进程 PID'), system.pid) + '</dl>';
-    container.innerHTML = systemCard(BootFSI18n.t('JVM 进程内存'), jvm) + systemCard(BootFSI18n.t('硬件与内存资源'), host) + systemCard(BootFSI18n.t('节点运行环境'), runtime);
+    updateHtml(container, systemCard(BootFSI18n.t('JVM 进程内存'), jvm) + systemCard(BootFSI18n.t('硬件与内存资源'), host) + systemCard(BootFSI18n.t('节点运行环境'), runtime));
+}
+
+function nodeRoleBadge(label) {
+    return '<span class="shrink-0 whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium" style="background-color: var(--color-accent-muted); color: var(--color-accent-primary);">' + BootFSI18n.html(label) + '</span>';
 }
 
 function renderNodeHeader(n) {
     var badge;
     if (n.isCurrent) {
-        badge = '<span class="shrink-0 whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium" style="background-color: var(--color-accent-muted); color: var(--color-accent-primary);">' + BootFSI18n.html('当前节点') + '</span>';
+        badge = nodeRoleBadge('当前节点');
     } else if (n.online) {
         badge = '<span class="inline-flex shrink-0 whitespace-nowrap items-center gap-1 text-xs font-medium" style="color: var(--color-success);">' +
             '<span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--color-success);"></span>' + BootFSI18n.html('在线') + '</span>';
@@ -190,15 +210,14 @@ function renderNodeHeader(n) {
         badge = '<span class="inline-flex shrink-0 whitespace-nowrap items-center gap-1 text-xs font-medium" style="color: var(--color-danger);">' +
             '<span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--color-danger);"></span>' + BootFSI18n.html('离线') + '</span>';
     }
+    if (n.nodeId === dashboardCoordinatorId) badge += nodeRoleBadge('调度节点');
 
     var shortId = n.nodeId.length > 16 ? n.nodeId.substring(0, 16) + '...' : n.nodeId;
     var host = extractHost(n.url);
 
-    return '<div class="flex items-center justify-between mb-3 gap-2">' +
-        '<div class="flex flex-1 items-center gap-2 min-w-0">' +
-            badge +
-            '<span class="font-mono text-xs truncate" style="color: var(--color-text-primary);" title="' + escapeHtml(n.nodeId) + '">' + escapeHtml(shortId) + '</span>' +
-        '</div>' +
+    return '<div class="flex flex-wrap items-center gap-2 mb-2">' + badge + '</div>' +
+        '<div class="flex items-center justify-between mb-3 gap-2">' +
+        '<span class="font-mono text-xs min-w-0 truncate" style="color: var(--color-text-primary);" title="' + escapeHtml(n.nodeId) + '">' + escapeHtml(shortId) + '</span>' +
         '<span class="font-mono text-xs shrink-0 max-w-[45%] truncate" style="color: var(--color-text-muted);" title="' + escapeHtml(n.url || '') + '">' + escapeHtml(host) + '</span>' +
     '</div>';
 }
@@ -256,31 +275,40 @@ function renderNodeFileTypes(fileTypes) {
 // ============ Section 3: 本节点流量与请求 ============
 
 function renderTraffic(traffic) {
-    document.getElementById('trafficTotal').textContent = formatBytes(traffic && traffic.totalBytesOut);
+    var cats = traffic && traffic.byCategory || [];
+    var otherBytes = cats.find(function (c) { return c.category === 'OTHER'; })?.bytesOut || 0;
+    var totalBytes = traffic ? traffic.totalBytesOut - otherBytes : null;
+    document.getElementById('trafficTotal').textContent = formatBytes(totalBytes);
     document.getElementById('trafficTotalReqs').textContent = traffic ? traffic.totalRequests : '--';
 
     var list = document.getElementById('trafficCategoryList');
-    var cats = traffic && traffic.byCategory || [];
     if (cats.length === 0) {
-        list.innerHTML = '<p class="text-sm" style="color: var(--color-text-muted);">' + BootFSI18n.html('暂无数据') + '</p>';
+        updateHtml(list, '<p class="text-sm" style="color: var(--color-text-muted);">' + BootFSI18n.html('暂无数据') + '</p>');
         return;
     }
-    list.innerHTML = cats.map(function (c) {
+    updateHtml(list, cats.map(function (c) {
         var label = CATEGORY_LABELS[c.category] || c.label || c.category;
+        var count = BootFSI18n.html('{0} 次请求', c.requests);
+        if (c.category === 'OTHER') {
+            return '<div class="flex items-center justify-between">' +
+                '<span class="text-sm font-medium" style="color: var(--color-text-primary);">' + escapeHtml(label) + '</span>' +
+                '<span class="text-xs" style="color: var(--color-text-muted);">' + count + '</span></div>';
+        }
+        var percent = otherBytes ? (totalBytes > 0 ? Math.round(c.bytesOut * 10000 / totalBytes) / 100 : 0) : c.percent;
         return '<div>' +
             '<div class="flex items-center justify-between mb-1">' +
                 '<span class="text-sm font-medium" style="color: var(--color-text-primary);">' + escapeHtml(label) + '</span>' +
                 '<span class="text-sm font-semibold" style="color: var(--color-accent-primary);">' + formatBytes(c.bytesOut) + '</span>' +
             '</div>' +
             '<div class="flex items-center justify-between mb-1">' +
-                '<span class="text-xs" style="color: var(--color-text-muted);">' + BootFSI18n.html('{0} 次请求', c.requests) + '</span>' +
-                '<span class="text-xs" style="color: var(--color-text-muted);">' + c.percent + '%</span>' +
+                '<span class="text-xs" style="color: var(--color-text-muted);">' + count + '</span>' +
+                '<span class="text-xs" style="color: var(--color-text-muted);">' + percent + '%</span>' +
             '</div>' +
             '<div class="w-full h-2 rounded-full overflow-hidden" style="background-color: var(--color-bg-tertiary);">' +
-                '<div class="h-full rounded-full transition-all duration-300" style="width: ' + c.percent + '%; background-color: var(--color-accent-primary);"></div>' +
+                '<div class="h-full rounded-full transition-all duration-300" style="width: ' + percent + '%; background-color: var(--color-accent-primary);"></div>' +
             '</div>' +
         '</div>';
-    }).join('');
+    }).join(''));
 }
 
 function renderRequests(reqs, emptyMessage) {
@@ -292,23 +320,26 @@ function renderRequests(reqs, emptyMessage) {
     var maxCount = 1;
     hourly.forEach(function (h) { if (h.count > maxCount) maxCount = h.count; });
     if (hourly.length === 0) {
-        chart.innerHTML = '<p class="text-sm w-full text-center" style="color: var(--color-text-muted);">' + BootFSI18n.html('暂无数据') + '</p>';
+        updateHtml(chart, '<p class="text-sm w-full text-center" style="color: var(--color-text-muted);">' + BootFSI18n.html('暂无数据') + '</p>');
     } else {
-        chart.innerHTML = hourly.map(function (h) {
+        updateHtml(chart, hourly.map(function (h) {
             var heightPct = maxCount > 0 ? Math.max(2, (h.count * 100 / maxCount)) : 0;
             var title = h.hour + ' | ' + BootFSI18n.t('{0} 次', h.count) + ' | ' + formatBytes(h.bytes);
             return '<div title="' + escapeHtml(title) + '" class="flex-1 rounded-t transition-all duration-300 cursor-pointer" style="height: ' + heightPct + '%; min-height: 2px; background-color: var(--color-accent-primary); opacity: 0.85;"></div>';
-        }).join('');
+        }).join(''));
     }
 
     var tbody = document.getElementById('recentReqBody');
-    var recent = reqs && reqs.recent || [];
+    var recent = (reqs && reqs.recent || []).filter(function (r) {
+        return r.category === 'FILE' || r.category === 'S3' ||
+            (r.category === 'HLS' && !/^\/tv\/status(?:[/?]|$)/.test(r.uri));
+    });
     if (recent.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="px-3 py-8 text-center" style="color: var(--color-text-muted);">' +
-            escapeHtml(reqs ? BootFSI18n.t('暂无请求记录') : (emptyMessage || BootFSI18n.t('请求统计暂不可用'))) + '</td></tr>';
+        updateHtml(tbody, '<tr><td colspan="8" class="px-3 py-8 text-center" style="color: var(--color-text-muted);">' +
+            escapeHtml(reqs ? BootFSI18n.t('暂无请求记录') : (emptyMessage || BootFSI18n.t('请求统计暂不可用'))) + '</td></tr>');
         return;
     }
-    tbody.innerHTML = recent.map(function (r) {
+    updateHtml(tbody, recent.map(function (r) {
         var statusColor = r.status >= 200 && r.status < 300 ? 'var(--color-success)' : (r.status >= 400 ? 'var(--color-danger)' : 'var(--color-warning)');
         var catLabel = CATEGORY_LABELS[r.category] || r.category;
         return '<tr class="border-t" style="border-color: var(--color-border-primary);">' +
@@ -321,7 +352,7 @@ function renderRequests(reqs, emptyMessage) {
             '<td class="px-2 py-1 text-right text-xs whitespace-nowrap" style="color: var(--color-text-secondary);">' + formatBytes(r.bytes) + '</td>' +
             '<td class="px-2 py-1 text-right text-xs whitespace-nowrap" style="color: var(--color-text-muted);">' + r.durationMs + 'ms</td>' +
         '</tr>';
-    }).join('');
+    }).join(''));
 }
 
 // ============ 运行时长 ============
@@ -370,7 +401,6 @@ function formatUptime(ms) {
 function loadStats(reload) {
     if (window.bootfsClusterAvailable === false) return;
     if (statsRequest) return reload ? statsRequest.then(function () { return loadStats(); }) : statsRequest;
-    hideError();
     statsRequest = fetch('/api/dashboard/stats')
         .then(function (r) { return r.json(); })
         .then(function (res) {
@@ -378,17 +408,14 @@ function loadStats(reload) {
                 showError(res.message);
                 return;
             }
+            hideError();
+            statsUpdatedAt = new Date();
             dashboardNodes = res.data.nodes || [];
             if (!dashboardNodes.some(function (node) { return node.nodeId === selectedNodeId; })) {
                 var current = dashboardNodes.find(function (node) { return node.isCurrent; }) || dashboardNodes[0];
                 selectedNodeId = current ? current.nodeId : null;
             }
-            var focused = document.activeElement && document.activeElement.dataset.nodeId;
             renderNodes(dashboardNodes);
-            if (focused) {
-                var card = Array.from(document.querySelectorAll('#nodesGrid [data-node-id]')).find(function (item) { return item.dataset.nodeId === focused; });
-                if (card) card.focus();
-            }
             renderSelectedNode();
         })
         .catch(function () {

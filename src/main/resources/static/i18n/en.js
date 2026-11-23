@@ -338,6 +338,7 @@ window.BootFSEnglish = Object.freeze({
     "总流出 ·": "Total outbound ·",
     "总码率": "Overall bitrate",
     "您的浏览器不支持视频播放": "Your browser does not support video playback",
+    "视频不可用": "Video unavailable",
     "悬停预览": "Preview on hover",
     "成功发布": "Published",
     "成员目录正在同步": "Syncing cluster members",

@@ -103,7 +103,10 @@ public class SsoInterceptor implements HandlerInterceptor {
                 "/video-player", "/album/**", "/gallery", "/gallery/image/{node}/{uuid}", "/hls/{folder}/{file}").contains(path);
         if (read && config.isPublicSharingEnabled() && publicRead) return true;
         privateResponse(request, response);
-        boolean navigation = !path.equals("/api/logout") && BrowserRequestPolicy.isDocumentNavigation(request);
+        boolean videoEmbed = read && path.equals("/video-player")
+                && "navigate".equals(request.getHeader("Sec-Fetch-Mode"))
+                && "iframe".equals(request.getHeader("Sec-Fetch-Dest"));
+        boolean navigation = videoEmbed || (!path.equals("/api/logout") && BrowserRequestPolicy.isDocumentNavigation(request));
         if (!ssoService.isEnabled()) {
             return navigation || BrowserRequestPolicy.allows(request, false, appConfig.getWebEntrypoint())
                     || deny(response, 403, "Cross-origin request denied");

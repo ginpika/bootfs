@@ -1,23 +1,19 @@
 package cc.ginpika.bootfs.controller;
 
-import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.domain.dto.FileObject;
 import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
 import cc.ginpika.bootfs.sso.SsoUser;
 import cc.ginpika.bootfs.sso.SsoConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.ModelAndView;
-import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.util.*;
 import lombok.RequiredArgsConstructor;
 
 @Slf4j
@@ -25,8 +21,9 @@ import lombok.RequiredArgsConstructor;
 @SuppressWarnings("all")
 @RequiredArgsConstructor
 public class WebUIController {
+    private static final String VIDEO_FRAME_ANCESTORS = "frame-ancestors 'self'"
+            + " https://*.ginpika.cc:* http://*.ginpika.cc:* https://localhost:* http://localhost:*";
     private final LocalFileInventory context;
-    private final TfsConfig tfsConfig;
     private final SsoConfig ssoConfig;
 
     @ModelAttribute("ssoLocalAccess")
@@ -82,22 +79,17 @@ public class WebUIController {
 
     // Embed Video.js hls player
     @GetMapping("/video-player")
-    public ModelAndView hlsPreview(@RequestParam(value = "uuid", required = false) String uuid) {
-        ModelAndView mv = new ModelAndView();
-        mv.setViewName("video-player");
-        Map<String, Object> model = mv.getModel();
+    public ModelAndView hlsPreview(@RequestParam(value = "uuid", required = false) String uuid,
+                                   HttpServletResponse response) {
+        // Browsers that enforce frame-ancestors use it in place of the default X-Frame-Options.
+        response.addHeader("Content-Security-Policy", VIDEO_FRAME_ANCESTORS);
+        ModelAndView mv = new ModelAndView("video-player");
         if (StringUtils.isNotBlank(uuid)) {
             FileObject fileObject = context.cached(uuid);
-            if (Objects.isNull(fileObject)) return mv;
-            List<String> resources = new ArrayList<>();
-            if (StringUtils.isNotBlank(fileObject.getHlsAvailable())) {
-                resources.add(tfsConfig.getWebEntrypoint() + "/hls/" + uuid + "/playlist.m3u8");
-                model.put("hls", "1");
-            } else {
-                resources.add(tfsConfig.getWebEntrypoint() + "/p/" + uuid);
-                model.put("hls", "0");
+            if (fileObject != null) {
+                mv.addObject("uuid", uuid);
+                mv.addObject("hls", StringUtils.isNotBlank(fileObject.getHlsAvailable()));
             }
-            model.put("resources", resources);
         }
         return mv;
     }

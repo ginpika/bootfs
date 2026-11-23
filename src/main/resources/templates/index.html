@@ -289,7 +289,7 @@
                         formatter: function (val, row) {
                             return "<span style='margin:0px'>"
                                 + (row.copyOf ? "<span style='margin:0px 4px;position:relative;top:-2px' title=" + row.copyOf + " class='badge text-bg-primary'>" + BootFSI18n.html('副本') + "</span>" : "")
-                                + (row.hlsAvailable ? "<span  style='margin:0px 4px;position:relative;top:-2px' class='badge text-bg-success'><a style='color:white' href='" + window.location + "/video-player?uuid=" + row.uuid + "'>" + BootFSI18n.html('HLS可用') + "</a></span>" : "")
+                                + (row.hlsAvailable ? "<span  style='margin:0px 4px;position:relative;top:-2px' class='badge text-bg-success'><a style='color:white' href='" + BootFSSecurity.html("/video-player?uuid=" + encodeURIComponent(row.uuid)) + "'>" + BootFSI18n.html('HLS可用') + "</a></span>" : "")
                                 + (row.albumAvailable ? "<span  style='margin:0px 4px;position:relative;top:-2px;color: white' class='badge rounded-pill text-bg-info'><a style='color:white' href='" + window.location + "album/" + row.uuid + "'>" + BootFSI18n.html('相册可用') + "</a></span>" : "")
                                 + (row.isPublicAccess ? "<span  style='margin:0px 4px;position:relative;top:-2px;color: white' class='badge rounded-pill text-bg-dark'><a style='color:white'>" + BootFSI18n.html('画廊') + "</a></span>" : "")
                                 + (row.copyOf || row.hlsAvailable || row.albumAvailable || row.isPublicAccess ? "<br/>" : "")

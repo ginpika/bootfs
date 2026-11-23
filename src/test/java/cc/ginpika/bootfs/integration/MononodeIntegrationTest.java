@@ -14,6 +14,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import java.nio.file.*;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -47,6 +49,30 @@ class MononodeIntegrationTest {
             req.addHeader("Authorization", "AWS4-HMAC-SHA256 Credential=test/" + scope + ", SignedHeaders=" + headers + ", Signature=" + signature);
             return req;
         }));
+    }
+
+    @Test void publicVideoPlayerCanBeEmbeddedAndUsesMediaFromItsOwnOrigin() throws Exception {
+        String url = perform(multipart("/f").file(new MockMultipartFile("file", "video.mp4", "video/mp4", new byte[]{1}))
+                .with(request -> { request.setMethod("PUT"); return request; }))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String uuid = url.substring(url.lastIndexOf('/') + 1);
+
+        var embed = get("/video-player").param("uuid", uuid)
+                .header("Sec-Fetch-Mode", "navigate").header("Sec-Fetch-Dest", "iframe")
+                .header("Sec-Fetch-Site", "cross-site").header("Referer", "http://localhost:3000/");
+        perform(embed).andExpect(status().isOk())
+                .andExpect(header().string("Content-Security-Policy", "frame-ancestors 'self'"
+                        + " https://*.ginpika.cc:* http://*.ginpika.cc:* https://localhost:* http://localhost:*"))
+                .andExpect(content().string(containsString("src=\"/p/" + uuid + "\"")));
+
+        context.cached(uuid).setHlsAvailable("1");
+        perform(embed).andExpect(status().isOk())
+                .andExpect(content().string(containsString("src=\"/hls/" + uuid + "/playlist.m3u8\"")))
+                .andExpect(content().string(not(containsString("src=\"/p/" + uuid + "\""))));
+
+        perform(get("/")).andExpect(status().isOk())
+                .andExpect(header().string("X-Frame-Options", "SAMEORIGIN"))
+                .andExpect(header().doesNotExist("Content-Security-Policy"));
     }
 
     @Test void browserUploadIsS3ReadableAndS3DeleteRemovesBrowserResource() throws Exception {

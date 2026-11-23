@@ -104,6 +104,17 @@ class EndpointSecurityIntegrationTest {
                 .header("Access-Control-Request-Method", "POST")).andExpect(status().isForbidden());
     }
 
+    @Test void privateVideoEmbedStillRequiresAuthentication() throws Exception {
+        var embed = get("/video-player").header("Sec-Fetch-Mode", "navigate").header("Sec-Fetch-Dest", "iframe")
+                .header("Sec-Fetch-Site", "same-site").header("Referer", "https://blog.ginpika.cc/");
+        mvc.perform(embed).andExpect(status().isFound())
+                .andExpect(header().doesNotExist("Content-Security-Policy"));
+        mvc.perform(embed.cookie(cookie)).andExpect(status().isOk())
+                .andExpect(view().name("video-player"))
+                .andExpect(header().exists("Content-Security-Policy"))
+                .andExpect(header().string("Cache-Control", "no-store"));
+    }
+
     @Test void aForgedProxyMimeCannotTurnAnUploadIntoSameOriginHtml() throws Exception {
         String id = files.publish(new java.io.ByteArrayInputStream("<script>alert(1)</script>".getBytes()), "test.html", false).file().getUuid();
         mvc.perform(get("/f/" + id).cookie(cookie).header("Is-Proxy", "1").header("Accept-Type", "text/html"))

@@ -1,36 +1,26 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
 
 <head>
-    <script src="/security-utils.js"></script>
-    <script src="/i18n/en.js"></script>
-    <script src="/i18n.js"></script>
     <meta charset="UTF-8">
-    <meta name="viewport"
-          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BootFS</title>
-    <link rel="stylesheet" href="/default.css">
-    <link rel="icon" href="/favicon.ico" sizes="any">
-    <link href="//vjs.zencdn.net/8.23.4/video-js.min.css" rel="stylesheet">
-    <script src="//vjs.zencdn.net/8.23.4/video.min.js"></script>
-    <style>
-        body {
-            background: black
-        }
-    </style>
+    <link rel="icon" th:href="@{/favicon.ico}" sizes="any">
+    <link th:if="${uuid != null}" rel="stylesheet" href="https://vjs.zencdn.net/8.23.4/video-js.min.css">
+    <link rel="stylesheet" th:href="@{/video-player.css}">
+    <script defer th:src="@{/security-utils.js}"></script>
+    <script defer th:src="@{/i18n/en.js}"></script>
+    <script defer th:src="@{/i18n.js}"></script>
+    <script th:if="${uuid != null}" defer src="https://vjs.zencdn.net/8.23.4/video.min.js"></script>
 </head>
 
 <body>
-<div class="container-fluid row" style="height: 100vh;">
-    <div class="super-center-container">
-        <video id="vjs-player" width="1280" height="720" class="video-js" controls preload="auto" data-setup='{}'>
-            <source th:if="${hls == '1'}" th:each="resource:${resources}" th:src="${resource}" type="application/x-mpegURL" />
-            <source th:if="${hls == '0'}" th:each="resource:${resources}" th:src="${resource}" type="video/mp4" />
-        </video>
-    </div>
-</div>
+    <video th:if="${uuid != null}" id="vjs-player" class="video-js vjs-big-play-centered" controls playsinline preload="metadata"
+           data-setup='{"fill": true, "responsive": true}'>
+        <source th:if="${hls}" th:src="@{/hls/{uuid}/playlist.m3u8(uuid=${uuid})}"
+                type="application/x-mpegURL">
+        <source th:unless="${hls}" th:src="@{/p/{uuid}(uuid=${uuid})}" type="video/mp4">
+    </video>
+    <p th:if="${uuid == null}" class="embed-empty" data-i18n>视频不可用</p>
 </body>
-
-<footer>
-</footer>
+</html>

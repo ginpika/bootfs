@@ -1,5 +1,6 @@
 package cc.ginpika.bootfs.file;
 
+import cc.ginpika.bootfs.core.ResourceUrls;
 import cc.ginpika.bootfs.search.FullTextDocument;
 import cc.ginpika.bootfs.search.ResourceSearchService;
 import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
@@ -41,25 +42,32 @@ public class InventoryReconciler {
         reconcile();
         for (FileObject file:new ArrayList<>(context.cachedFiles())) {
             String id=file.getUuid();
-            if (deleted(file) || !Files.isRegularFile(Path.of(file.getPath()))) continue;
-            if (metadata.getOne("/files/"+id)==null) {
+            if (deleted(file)) continue;
+            String routeKey = "/files/" + id;
+            String route = metadata.getOne(routeKey);
+            if (route != null && !route.equals(ResourceUrls.file(id))) {
+                String relative = ResourceUrls.relative(route, id);
+                if (!relative.equals(route)) metadata.compareAndSet(routeKey, route, relative);
+            }
+            if (file.getCopyOf() != null) {
+                String replicaKey = "/files/" + file.getCopyOf() + "/replicas/" + id;
+                String replica = metadata.getOne(replicaKey);
+                String relative = ResourceUrls.relative(replica, id);
+                if (!Objects.equals(replica, relative)) metadata.compareAndSet(replicaKey, replica, relative);
+            }
+            boolean hasPayload = Files.isRegularFile(Path.of(file.getPath()));
+            if (route==null && hasPayload) {
                 JSONObject meta=new JSONObject();
                 meta.put("size",file.getSize());
                 if (file.getContentObjectId() != null) meta.put("contentObjectId", file.getContentObjectId());
                 String name=file.getFileName();
                 int dot=name==null ? -1 : name.lastIndexOf('.');
                 meta.put("ext",dot<0 ? "" : name.substring(dot).toLowerCase(Locale.ROOT));
-                metadata.putFile(id,context.buildUrl(id),meta.toJSONString());
+                metadata.putFile(id,ResourceUrls.file(id),meta.toJSONString());
             }
             // Only bootstrap absent sources. Tombstones and richer imported documents win.
             if (metadata.getOne("/documents/full-text/"+id)==null) {
-                search.addToFullText(FullTextDocument.builder().uuid(id).fileName(file.getFileName()).title(file.getFileName())
-                    .size(file.getSize()).tags(file.getTags()==null ? new JSONArray() : JSONArray.from(file.getTags().stream().map(t -> t.toIndexFormat()).toArray()))
-                    .parent(file.getParent()).copyOf(file.getCopyOf()).albumAvailable(file.getAlbumAvailable())
-                    .hlsAvailable(file.getHlsAvailable()).thumbAvailable(file.getThumbAvailable()).nsfw(file.getNsfw())
-                    .isPublicAccess(file.getIsPublicAccess()).fileCreatedAt(file.getCreatedAt()).createdAt(LocalDateTime.now())
-                    .updatedAt(LocalDateTime.now()).contextUuid(context.uuid).thumbUrl(context.buildThumbUrl(id))
-                    .poster(context.buildThumbUrl(id)).build());
+                if (hasPayload) search.addToFullText(catalogDocument(file, context.uuid));
             } else {
                 String key="/documents/full-text/"+id;
                 for (int attempt=0;attempt<16;attempt++) {
@@ -73,11 +81,24 @@ public class InventoryReconciler {
                     merged.putIfAbsent("size",file.getSize());
                     merged.putIfAbsent("fileCreatedAt",file.getCreatedAt());
                     merged.putIfAbsent("thumbUrl",context.buildThumbUrl(id));
+                    ResourceUrls.normalizeDocument(merged);
                     if (merged.equals(doc) || metadata.compareAndSet(key,raw,merged.toJSONString())) break;
                 }
             }
         }
         recovery.bootstrapExistingBindings();
+    }
+
+    static FullTextDocument catalogDocument(FileObject file, String node) {
+        LocalDateTime now = LocalDateTime.now();
+        String thumbnail = ResourceUrls.thumb(file.getUuid());
+        return FullTextDocument.builder().uuid(file.getUuid()).fileName(file.getFileName()).title(file.getFileName())
+                .size(file.getSize()).tags(file.getTags() == null ? new JSONArray()
+                        : JSONArray.from(file.getTags().stream().map(t -> t.toIndexFormat()).toArray()))
+                .parent(file.getParent()).copyOf(file.getCopyOf()).albumAvailable(file.getAlbumAvailable())
+                .hlsAvailable(file.getHlsAvailable()).thumbAvailable(file.getThumbAvailable()).nsfw(file.getNsfw())
+                .isPublicAccess(file.getIsPublicAccess()).fileCreatedAt(file.getCreatedAt()).createdAt(now)
+                .updatedAt(now).contextUuid(node).thumbUrl(thumbnail).poster(thumbnail).build();
     }
     private boolean deleted(FileObject file) {
         return metadata.getOne("/tombstones/"+file.getUuid())!=null ||

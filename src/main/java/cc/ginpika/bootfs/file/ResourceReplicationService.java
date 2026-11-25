@@ -132,9 +132,10 @@ public class ResourceReplicationService {
             if (!key.endsWith("/meta")) {
                 String replicaMeta = metadataRegistry.getOne(key + "/meta");
                 if (hash != null && (replicaMeta == null || !hash.equals(JSONObject.parseObject(replicaMeta).getString("sha256")))) return;
-                int path = value.lastIndexOf("/f/");
-                if (path > 0 && !stripSlash(value.substring(0, path)).equals(stripSlash(tfsConfig.getWebEntrypoint()))) {
-                    nodes.add(stripSlash(value.substring(0, path)));
+                String route = metadataRegistry.resolveFileRoute(key, value);
+                int path = route == null ? -1 : route.lastIndexOf("/f/");
+                if (path > 0 && !stripSlash(route.substring(0, path)).equals(stripSlash(tfsConfig.getWebEntrypoint()))) {
+                    nodes.add(stripSlash(route.substring(0, path)));
                 }
             }
         });

@@ -1,5 +1,7 @@
 package cc.ginpika.bootfs.file.web;
 
+import cc.ginpika.bootfs.core.ResourceUrls;
+
 import cc.ginpika.bootfs.domain.result.SearchResult;
 import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
 import cc.ginpika.bootfs.search.ResourceSearchService;
@@ -26,7 +28,7 @@ class FileListQuery {
         if (StringUtils.containsIgnoreCase(query, "meta:local")) {
             var page = inventory.searchCached(offset, size, query.replaceAll("(?i)meta:local", "").trim());
             var rows = page.rows().stream().map(file -> FileListResponse.Row.fromInventory(file,
-                    inventory.buildUrl(file.getUuid()), inventory.buildThumbUrl(file.getUuid()))).toList();
+                    ResourceUrls.file(file.getUuid()), inventory.buildThumbUrl(file.getUuid()))).toList();
             return new FileListResponse(offset, size, page.total(), rows, false, null);
         }
         List<String> tagFilter = tags == null ? List.of() : Arrays.stream(tags.split(","))
@@ -49,8 +51,8 @@ class FileListQuery {
                 String uuid = (String) document.get("uuid");
                 if (uuid == null) continue;
                 Object origin = document.get("originEndpoint");
-                String url = origin == null ? inventory.buildUrl(uuid) : origin + "/f/" + uuid;
-                rows.add(FileListResponse.Row.fromSearchHit(document, url));
+                String endpoint = origin == null ? "" : origin.toString();
+                rows.add(FileListResponse.Row.fromSearchHit(document, endpoint + ResourceUrls.file(uuid), endpoint));
             }
         }
         return rows;

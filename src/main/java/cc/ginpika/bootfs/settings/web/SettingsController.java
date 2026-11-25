@@ -1,5 +1,6 @@
 package cc.ginpika.bootfs.settings.web;
 
+import cc.ginpika.bootfs.file.DatabaseRebuildService;
 import cc.ginpika.bootfs.settings.NodeSettings;
 import cc.ginpika.bootfs.settings.SettingsValues;
 import cc.ginpika.bootfs.kernel.cluster.ClusterCredentials;
@@ -22,8 +23,11 @@ public class SettingsController {
     private final MetadataStore metadata;
     private final SsoConfig sso;
     private final ClusterCredentials credentials;
-    public SettingsController(NodeSettings settings,MetadataStore metadata,SsoConfig sso,ClusterCredentials credentials) {
+    private final DatabaseRebuildService databaseRebuild;
+    public SettingsController(NodeSettings settings,MetadataStore metadata,SsoConfig sso,ClusterCredentials credentials,
+                              DatabaseRebuildService databaseRebuild) {
         this.settings=settings; this.metadata=metadata; this.sso=sso; this.credentials=credentials;
+        this.databaseRebuild=databaseRebuild;
     }
     @GetMapping("/settings") public String page() { return "settings"; }
     @GetMapping("/api/settings") @ResponseBody public Map<String,Object> read() { return settings.view(); }
@@ -86,6 +90,19 @@ public class SettingsController {
         browser(request);
         if (!body.keySet().equals(Set.of("confirm")) || !"ROTATE".equals(body.getString("confirm"))) throw new IllegalArgumentException("请确认轮换节点管理凭证");
         credentials.rotate(); return Map.of("rotated",true);
+    }
+    @PostMapping("/api/settings/database/rebuild") @ResponseBody
+    public ResponseEntity<Map<String,Object>> rebuildDatabase(@RequestBody JSONObject body,HttpServletRequest request) {
+        browser(request);
+        if (!body.keySet().equals(Set.of("confirm")) || !"REBUILD".equals(body.getString("confirm"))) {
+            throw new IllegalArgumentException("请确认重建数据库");
+        }
+        try {
+            return ResponseEntity.ok(Map.of("files", databaseRebuild.rebuild()));
+        } catch (IOException failure) {
+            org.slf4j.LoggerFactory.getLogger(SettingsController.class).warn("Database rebuild failed", failure);
+            return ResponseEntity.status(503).body(Map.of("error", "重建失败，请检查 db.json 和 data"));
+        }
     }
     @ExceptionHandler(IllegalArgumentException.class) @ResponseBody
     public ResponseEntity<?> invalid(IllegalArgumentException e) { return ResponseEntity.badRequest().body(Map.of("error",e.getMessage())); }

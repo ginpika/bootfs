@@ -1,6 +1,7 @@
 package cc.ginpika.bootfs.kernel.search;
 
 import cc.ginpika.bootfs.config.TfsConfig;
+import cc.ginpika.bootfs.core.ResourceUrls;
 import cc.ginpika.bootfs.kernel.metadata.MetadataStore;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
@@ -68,7 +69,17 @@ public class EmbeddedSearchEngine implements AutoCloseable {
         // corrupt previous Lucene commit. This never deletes canonical documents.
         index("full-text");
         index("image-host");
+        normalizeStoredUrls();
         synchronizeProjection();
+    }
+
+    private void normalizeStoredUrls() {
+        metadata.scan(SOURCE_PREFIX).forEach((key, raw) -> {
+            JSONObject source = JSON.parseObject(raw);
+            String original = source.toJSONString();
+            String relative = ResourceUrls.normalizeDocument(source).toJSONString();
+            if (!relative.equals(original)) metadata.compareAndSet(key, raw, relative);
+        });
     }
 
     public JSONObject get(String index, String id) {
@@ -79,7 +90,7 @@ public class EmbeddedSearchEngine implements AutoCloseable {
         String raw = metadata.get(sourceKey(index, id));
         if (raw == null) return null;
         JSONObject doc = JSON.parseObject(raw);
-        return doc.getBooleanValue(DELETED) || isResourceDeleted(doc) ? null : doc;
+        return doc.getBooleanValue(DELETED) || isResourceDeleted(doc) ? null : ResourceUrls.normalizeDocument(doc);
     }
 
     public void upsert(String index, JSONObject changes) {
@@ -115,6 +126,7 @@ public class EmbeddedSearchEngine implements AutoCloseable {
                     merged.put("poster", merged.get("thumbUrl"));
                 }
             }
+            ResourceUrls.normalizeDocument(merged);
             ensureResourceLive(merged);
             luceneDocument(merged); // Validate indexable values before committing authority.
             if (metadata.compareAndSet(key, existing, merged.toJSONString())) {
@@ -149,6 +161,7 @@ public class EmbeddedSearchEngine implements AutoCloseable {
             if (merged.containsKey(DELETED) || !id.equals(merged.getString("uuid"))) {
                 throw new IllegalArgumentException("Document identity cannot change");
             }
+            ResourceUrls.normalizeDocument(merged);
             ensureResourceLive(merged);
             luceneDocument(merged);
             if (metadata.compareAndSet(key, existing, merged.toJSONString())) {
@@ -409,6 +422,10 @@ public class EmbeddedSearchEngine implements AutoCloseable {
         }
     }
 
+    public void validateDocument(JSONObject source) {
+        luceneDocument(source);
+    }
+
     private synchronized void synchronizeProjection() {
         if (closed) throw new IllegalStateException("Search engine is closed");
         long revisionBeforeScan = metadata.revision();
@@ -452,7 +469,7 @@ public class EmbeddedSearchEngine implements AutoCloseable {
                         || isResourceDeleted(JSON.parseObject(raw), tombstones)) {
                     state.writer.deleteDocuments(new Term("uuid", id));
                 } else {
-                    JSONObject source = JSON.parseObject(raw);
+                    JSONObject source = ResourceUrls.normalizeDocument(JSON.parseObject(raw));
                     if (!id.equals(source.getString("uuid"))) throw new IllegalStateException("Mismatched document identity");
                     state.writer.updateDocument(new Term("uuid", id), luceneDocument(source));
                 }
@@ -562,6 +579,7 @@ public class EmbeddedSearchEngine implements AutoCloseable {
                     merged.put("publicUrl", legacy.getString("poster"));
                 }
                 merged.put("legacyImageHost", legacy);
+                ResourceUrls.normalizeDocument(merged);
                 if (isResourceDeleted(merged)) return;
                 luceneDocument(merged);
                 if (metadata.compareAndSet(canonicalKey, previous, merged.toJSONString())) return;

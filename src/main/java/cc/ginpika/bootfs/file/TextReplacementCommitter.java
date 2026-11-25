@@ -1,5 +1,7 @@
 package cc.ginpika.bootfs.file;
 
+import cc.ginpika.bootfs.core.ResourceUrls;
+
 import cc.ginpika.bootfs.domain.dto.FileObject;
 import cc.ginpika.bootfs.file.binding.ObjectKeyBinding;
 import cc.ginpika.bootfs.file.binding.ResourceWriteConflictException;
@@ -61,6 +63,7 @@ public class TextReplacementCommitter {
             document.put("uuid", id);
             document.put("size", resource.getSize());
             if (encoding != null) document.put("textEncoding", encoding);
+            ResourceUrls.normalizeDocument(document);
             document.put("contextUuid", context.uuid);
             document.put("updatedAt", LocalDateTime.now());
             document.put("thumbUrl", context.buildThumbUrl(id));
@@ -81,7 +84,7 @@ public class TextReplacementCommitter {
             Map<String, String> puts = new LinkedHashMap<>();
             puts.put(receiptKey, receipt.toJSONString());
             puts.put("/tombstones/" + originalId, Long.toString(System.currentTimeMillis()));
-            puts.put("/files/" + id, context.buildUrl(id));
+            puts.put("/files/" + id, ResourceUrls.file(id));
             puts.put("/files/" + id + "/meta", metadata.toJSONString());
             puts.put("/documents/full-text/" + id, document.toJSONString());
             puts.put("/nodes/" + context.uuid + "/catalog/" + id, catalog.toJSONString());

@@ -189,7 +189,8 @@ public class ReverseProxyService {
         }
     }
     private String getTrueNodeUrl(String uuid) {
-        return metadataRegistry.getOne("/files/" + uuid);
+        String key = "/files/" + uuid;
+        return metadataRegistry.resolveFileRoute(key, metadataRegistry.getOne(key));
     }
 
     private String getMetaJson(String uuid) {

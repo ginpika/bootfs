@@ -1,5 +1,7 @@
 package cc.ginpika.bootfs.kernel.backup;
 
+import cc.ginpika.bootfs.core.ResourceUrls;
+
 import cc.ginpika.bootfs.core.io.DurableFiles;
 import cc.ginpika.bootfs.kernel.metadata.RocksMetadataStore;
 import cc.ginpika.bootfs.kernel.object.ContentHash;
@@ -273,8 +275,6 @@ public final class KernelBackup {
 
     private static Map<String,String> remap(Map<String,String> original, String node, String endpoint) throws IOException {
         Map<String,String> result = new TreeMap<>();
-        Set<String> oldEndpoints = new HashSet<>();
-        original.forEach((key,value) -> { if (key.startsWith("/cluster/node/")) oldEndpoints.add(value.replaceAll("/+$", "")); });
         for (Map.Entry<String,String> entry : original.entrySet()) {
             String key = entry.getKey();
             if (!(key.startsWith("/nodes/") || key.startsWith("/files/") || key.startsWith("/cluster/")
@@ -282,12 +282,12 @@ public final class KernelBackup {
                     || key.startsWith("/replication-jobs/") || key.startsWith("/migration/") || key.startsWith("/recovery/"))) {
                 String value = entry.getValue();
                 if (key.startsWith("/documents/")) {
-                    value = remapDocument(JSON.parseObject(value), node, oldEndpoints, endpoint).toJSONString();
+                    value = remapDocument(JSON.parseObject(value), node).toJSONString();
                 }
                 if (key.startsWith("/versions/")) {
                     JSONObject record = JSON.parseObject(value);
                     if ("resource".equals(record.getString("namespace"))) {
-                        record.put("value", remapDocument(JSON.parseObject(record.getString("value")), node, oldEndpoints, endpoint).toJSONString());
+                        record.put("value", remapDocument(JSON.parseObject(record.getString("value")), node).toJSONString());
                         value = record.toJSONString();
                     }
                 }
@@ -301,36 +301,22 @@ public final class KernelBackup {
             String uuid = file.getString("uuid"); id(uuid); file.remove("path");
             String key = "/nodes/" + node + "/catalog/" + uuid;
             if (result.containsKey(key) && !JSON.parseObject(result.get(key)).equals(file)) throw new IOException("Conflicting catalogs for " + uuid);
-            result.put(key, file.toJSONString()); result.put("/files/" + uuid, endpoint + "/f/" + uuid);
+            result.put(key, ResourceUrls.normalizeDocument(file).toJSONString());
+            result.put("/files/" + uuid, ResourceUrls.file(uuid));
             JSONObject meta = original.containsKey("/files/" + uuid + "/meta") ? JSON.parseObject(original.get("/files/" + uuid + "/meta")) : new JSONObject();
             meta.put("size", file.getLongValue("size")); meta.remove("durableNodes"); meta.put("requiredCopies", 1);
             result.put("/files/" + uuid + "/meta", meta.toJSONString());
             String copyOf = file.getString("copyOf");
             if (copyOf != null) {
-                result.put("/files/" + copyOf + "/replicas/" + uuid, endpoint + "/f/" + uuid);
+                result.put("/files/" + copyOf + "/replicas/" + uuid, ResourceUrls.file(uuid));
                 result.put("/files/" + copyOf + "/replicas/" + uuid + "/meta", meta.toJSONString());
             }
         }
         result.put("/cluster/node/" + node, endpoint);
         return result;
     }
-    private static JSONObject remapDocument(JSONObject doc, String node, Set<String> oldEndpoints, String endpoint) {
+    private static JSONObject remapDocument(JSONObject doc, String node) {
         if (doc.containsKey("contextUuid")) doc.put("contextUuid", node);
-        for (String field : List.of("poster", "thumbUrl", "url", "resources")) {
-            Object content = doc.get(field);
-            if (content instanceof String) doc.put(field, remapUrl((String)content, oldEndpoints, endpoint));
-            else if (content instanceof JSONArray) {
-                JSONArray urls = new JSONArray();
-                for (Object url : (JSONArray)content) urls.add(url instanceof String ? remapUrl((String)url, oldEndpoints, endpoint) : url);
-                doc.put(field, urls);
-            }
-        }
-        return doc;
-    }
-    private static String remapUrl(String url, Set<String> oldEndpoints, String endpoint) {
-        for (String old : oldEndpoints) {
-            if (!old.isBlank() && url.startsWith(old + "/") && url.substring(old.length()).matches("/(?:f|p|thumb|hls)/.*")) return endpoint + url.substring(old.length());
-        }
-        return url;
+        return ResourceUrls.normalizeDocument(doc);
     }
 }

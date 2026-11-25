@@ -15,6 +15,8 @@ public interface MetadataStore extends AutoCloseable {
     boolean compareAndSet(String key, String expectedValue, String replacementValue);
     /** Atomic conditional batch; absent values in expected are represented by null. */
     boolean compareAndWrite(Map<String,String> expected, Map<String,String> puts, Set<String> deletes);
+    /** Commit a batch only if the metadata snapshot used to build it is still current. */
+    boolean compareAndWrite(long revision, Map<String,String> puts, Set<String> deletes);
     long revision();
     @Override void close();
 }

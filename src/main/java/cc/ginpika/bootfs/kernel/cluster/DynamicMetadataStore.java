@@ -355,5 +355,10 @@ public final class DynamicMetadataStore implements MetadataStore {
             local.writeBatch(versioned(puts,deletes),deletes); return true;
         }
     }
+    @Override public boolean compareAndWrite(long revision, Map<String,String> puts, Set<String> deletes) {
+        synchronized (local) {
+            return revision == local.revision() && local.compareAndWrite(revision, versioned(puts,deletes), deletes);
+        }
+    }
     @Override public void close() { local.close(); }
 }

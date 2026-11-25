@@ -41,12 +41,12 @@ class KernelBackupTest {
         assertFalse(Files.exists(seed.resolve("kernel/search"))); assertFalse(Files.exists(seed.resolve("kernel/raft")));
         try (var store = new RocksMetadataStore(seed.resolve("kernel/metadata"))) {
             RestorePlan.apply(store, plan); long revision = store.revision(); RestorePlan.apply(store, plan); assertEquals(revision, store.revision());
-            assertEquals("http://new/f/book", store.get("/files/book")); assertEquals("original text", store.get("custom-key"));
+            assertEquals("/f/book", store.get("/files/book")); assertEquals("original text", store.get("custom-key"));
             assertEquals(original.get("/s3/bootfs/books"), store.get("/s3/bootfs/books"));
             assertNull(store.get("/nodes/old/catalog/book")); assertNotNull(store.get("/nodes/new/catalog/book")); assertEquals("123", store.get("/tombstones/deleted"));
             try (var search = new EmbeddedSearchEngine(store, seed.resolve("kernel/search"))) {
                 var restored = search.get("full-text", "book"); assertEquals("作者甲", restored.getString("author"));
-                assertEquals(List.of("http://new/thumb/page2", "http://new/thumb/page1"), restored.getJSONArray("resources").toList(String.class));
+                assertEquals(List.of("/thumb/page2", "/thumb/page1"), restored.getJSONArray("resources").toList(String.class));
                 assertEquals(1, search.search("full-text", "银河", List.of("manual:科幻"), 0, 10, true, null, false).total);
             }
         }
@@ -128,7 +128,7 @@ class KernelBackupTest {
         }
         try (var store = new RocksMetadataStore(temporary.resolve("resumable"))) {
             store.put("/recovery/plan", ContentHash.sha256(plan) + ":claimed");
-            RestorePlan.apply(store, plan); assertEquals("http://new/f/book", store.get("/files/book"));
+            RestorePlan.apply(store, plan); assertEquals("/f/book", store.get("/files/book"));
         }
     }
 }

@@ -127,6 +127,15 @@ final class MetadataStateMachine extends BaseStateMachine {
             Set<String> deletes = Set.of();
             boolean mutate = true;
             switch (command.getString("op")) {
+                case "revisionBatch": {
+                    mutate = data.revision() == command.getLongValue("revision");
+                    result.put("matched", mutate);
+                    if (mutate) {
+                        puts = stringMap(command.getJSONObject("puts"));
+                        deletes = new TreeSet<>(command.getJSONArray("deletes").toJavaList(String.class));
+                    }
+                    break;
+                }
                 case "conditionalBatch": {
                     Map<String,String> expected = stringMap(command.getJSONObject("expected"));
                     boolean matched = true;

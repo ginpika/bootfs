@@ -215,6 +215,15 @@ public final class RaftMetadataStore implements MetadataStore {
         } catch (IOException failure) { throw new MetadataException("Membership change is uncertain; inspect committed membership before retrying", failure); }
     }
     @Override public long revision() { return send(request("revision"), true).getLongValue("revision"); }
+    @Override public boolean compareAndWrite(long revision, Map<String,String> puts, Set<String> deletes) {
+        puts.forEach((key, value) -> { RocksMetadataStore.validateKey(key); Objects.requireNonNull(value); });
+        deletes.forEach(RocksMetadataStore::validateKey);
+        JSONObject command = request("revisionBatch");
+        command.put("revision", revision);
+        command.put("puts", new TreeMap<>(puts));
+        command.put("deletes", new TreeSet<>(deletes));
+        return send(command, false).getBooleanValue("matched");
+    }
     public String nodeId() { return server.getId().toString(); }
     public boolean isLeader() {
         try { return server.getDivision(raftGroupId).getInfo().isLeader(); }

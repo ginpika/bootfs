@@ -1,6 +1,7 @@
 package cc.ginpika.bootfs.file.inventory;
 
 import cc.ginpika.bootfs.config.TfsConfig;
+import cc.ginpika.bootfs.core.ResourceUrls;
 import cc.ginpika.bootfs.domain.dto.FileObject;
 import cc.ginpika.bootfs.kernel.cluster.NodeIdentity;
 import org.apache.commons.lang3.StringUtils;
@@ -19,7 +20,7 @@ public class LocalFileInventory {
     private final TfsConfig config;
     private final FileCatalogRepository io;
     public final String uuid;
-    private final Map<String, FileObject> files = new ConcurrentHashMap<>();
+    private volatile Map<String, FileObject> files = new ConcurrentHashMap<>();
     private boolean loaded;
     public LocalFileInventory(TfsConfig config, FileCatalogRepository io, NodeIdentity identity) {
         this.config=config;
@@ -37,15 +38,15 @@ public class LocalFileInventory {
     }
     public synchronized void reload() throws IOException {
         Map<String,FileObject> files = io.load(); files.values().forEach(this::fillCreatedAt);
-        this.files.clear(); this.files.putAll(files);
+        this.files = new ConcurrentHashMap<>(files);
     }
     private String endpoint() {
         String value=config.getWebEntrypoint();
         return value==null || value.equals("/") ? "" : value.replaceAll("/+$","");
     }
     public String buildUrl(String id) { return endpoint()+"/f/"+id; }
-    public String buildProxyUrl(String id) { return endpoint()+"/p/"+id; }
-    public String buildThumbUrl(String id) { return endpoint()+"/thumb/"+id; }
+    public String buildProxyUrl(String id) { return ResourceUrls.proxy(id); }
+    public String buildThumbUrl(String id) { return ResourceUrls.thumb(id); }
     public FileObject cached(String id) { return files.get(id); }
 
     /** Read-only live view of the current node's materialized records. */
@@ -70,11 +71,12 @@ public class LocalFileInventory {
         this.files.remove(id);
     }
     public FileObject query(String id) {
-        FileObject cached = this.files.get(id), committed = io.current(id);
+        Map<String, FileObject> view = this.files;
+        FileObject cached = view.get(id), committed = io.current(id);
         if (committed == null) return cached;
         if (cached == null || !Objects.equals(cached.getContentObjectId(), committed.getContentObjectId())
                 || !Objects.equals(cached.getSize(), committed.getSize())) {
-            this.files.put(id, committed);
+            view.put(id, committed);
             return committed;
         }
         return cached;

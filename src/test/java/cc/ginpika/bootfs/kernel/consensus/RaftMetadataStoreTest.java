@@ -30,6 +30,10 @@ class RaftMetadataStoreTest {
             assertTrue(stores.get("n0").compareAndWrite(absent, Map.of("/conditional/new", "first"), Set.of()));
             assertFalse(stores.get("n1").compareAndWrite(absent, Map.of("/conditional/new", "wrong"), Set.of()));
             assertEquals("first", stores.get("n2").get("/conditional/new"));
+            long revision = stores.get("n0").revision();
+            assertTrue(stores.get("n1").compareAndWrite(revision, Map.of("/rebuild/catalog", "fresh"), Set.of()));
+            assertFalse(stores.get("n2").compareAndWrite(revision, Map.of("/rebuild/catalog", "stale"), Set.of()));
+            assertEquals("fresh", stores.get("n0").get("/rebuild/catalog"));
             assertTrue(stores.get("n1").compareAndSet("/resource/a", "original", "updated", conditionalRequest));
             assertFalse(stores.get("n2").compareAndSet("/resource/a", "original", "stale"));
             String leaderId = awaitLeader(stores.values()).nodeId();
@@ -104,7 +108,7 @@ class RaftMetadataStoreTest {
             for (String id : List.of("n1", "n2")) stores.put(id, new RaftMetadataStore(temporary.resolve(id), id, group, peers, true));
             awaitLeader(stores.values());
             for (RaftMetadataStore store : stores.values()) cc.ginpika.bootfs.kernel.backup.RestorePlan.apply(store, plan);
-            assertEquals("http://new-seed/f/resource", stores.get("n2").get("/files/resource"));
+            assertEquals("/f/resource", stores.get("n2").get("/files/resource"));
             assertTrue(stores.get("n1").get("/documents/full-text/resource").contains("kept"));
             assertEquals("content", java.nio.file.Files.readString(seed.resolve("data/resource")));
             assertNull(stores.get("n1").get("/nodes/source/catalog/resource"));

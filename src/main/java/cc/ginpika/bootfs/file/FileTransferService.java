@@ -1,5 +1,7 @@
 package cc.ginpika.bootfs.file;
 
+import cc.ginpika.bootfs.core.ResourceUrls;
+
 import cc.ginpika.bootfs.service.FederationService;
 import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
@@ -215,11 +217,14 @@ public class FileTransferService {
         JSONObject localFile=JSONObject.parseObject(sourceFile.toJSONString()); localFile.put("uuid",id); localFile.put("copyOf",snapshot.getString("objectId"));
         if (resource.getContentObjectId() == null) localFile.remove("contentObjectId");
         else localFile.put("contentObjectId", resource.getContentObjectId());
-        localFile.remove("path"); localFile.remove("url");
+        localFile.remove("path"); localFile.remove("url"); localFile.remove("thumbUrl");
         localFile.remove("parent"); localFile.remove("hlsAvailable"); localFile.remove("thumbAvailable"); localFile.remove("albumAvailable");
         resource=localFile.toJavaObject(FileObject.class); resource.setPath(path.toString());
         JSONObject localDoc=JSONObject.parseObject(doc.toJSONString()); localDoc.put("uuid",id); localDoc.put("copyOf",snapshot.getString("objectId")); localDoc.put("contextUuid",context.uuid);
         for (String field:List.of("parent","hlsAvailable","thumbAvailable","albumAvailable","resources","publicUrl")) localDoc.remove(field);
+        for (String field:List.of("url", "postUrl")) {
+            if (localDoc.containsKey(field)) localDoc.put(field, ResourceUrls.file(id));
+        }
         localDoc.put("thumbUrl",context.buildThumbUrl(id)); localDoc.put("poster",context.buildThumbUrl(id));
         JSONObject localMeta=JSONObject.parseObject(sourceMeta.toJSONString()); localMeta.put("copyOf",snapshot.getString("objectId")); localMeta.put("requiredCopies",1); localMeta.put("durableNodes",Map.of(context.uuid,prepared.getString("sha256")));
         if (resource.getContentObjectId() == null) localMeta.remove("contentObjectId");
@@ -231,7 +236,8 @@ public class FileTransferService {
         if (current!=null && JSONObject.parseObject(current).getBooleanValue("forked")) throw new IOException("Replica has independent local changes");
         if (metadataRegistry.getOne("/tombstones/"+id)!=null) throw new IOException("Replica was deleted");
         Map<String,String> expected=new HashMap<>(); expected.put("/replica-sources/"+id,current); expected.put("/tombstones/"+id,null);
-        if (!metadataRegistry.compareAndWrite(expected,Map.of("/files/"+id,context.buildUrl(id),"/files/"+id+"/meta",localMeta.toJSONString(),
+        ResourceUrls.normalizeDocument(localDoc);
+        if (!metadataRegistry.compareAndWrite(expected,Map.of("/files/"+id,ResourceUrls.file(id),"/files/"+id+"/meta",localMeta.toJSONString(),
                 "/nodes/"+context.uuid+"/catalog/"+id,localFile.toJSONString(),"/documents/full-text/"+id,localDoc.toJSONString(),"/replica-sources/"+id,snapshot.toJSONString()),Set.of())) throw new IOException("Replica changed locally; retry publication");
         context.cacheCommitted(id,resource);
     }
@@ -392,7 +398,7 @@ public class FileTransferService {
         if (resource.getContentObjectId() != null) metadata.put("contentObjectId", resource.getContentObjectId());
         try { metadata.put("sha256", cc.ginpika.bootfs.kernel.object.ContentHash.sha256(Path.of(resource.getPath()))); }
         catch (IOException failure) { throw new IllegalStateException("Replica bytes are unavailable", failure); }
-        metadataRegistry.putFileReplica(resource.getCopyOf(), resource.getUuid(), context.buildUrl(resource.getUuid()), metadata.toJSONString());
+        metadataRegistry.putFileReplica(resource.getCopyOf(), resource.getUuid(), ResourceUrls.file(resource.getUuid()), metadata.toJSONString());
         String originalDoc = metadataRegistry.getOne("/documents/full-text/" + resource.getCopyOf());
         if (originalDoc != null && resource.getContentObjectId() != null) {
             JSONObject document = JSONObject.parseObject(originalDoc);

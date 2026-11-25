@@ -83,6 +83,20 @@
         catch (e) { dialog.close(); message(e.message, 'error'); }
         finally { button.disabled = false; }
     });
+    const rebuild = document.getElementById('rebuildDatabase');
+    const rebuildDialog = document.getElementById('rebuildDialog');
+    rebuild.addEventListener('click', () => rebuildDialog.showModal());
+    document.getElementById('cancelRebuild').addEventListener('click', () => rebuildDialog.close());
+    document.getElementById('confirmRebuild').addEventListener('click', async () => {
+        rebuild.disabled = true;
+        rebuildDialog.close();
+        message(BootFSI18n.t('正在重建数据库…'));
+        try {
+            const result = await api('/api/settings/database/rebuild', 'POST', {confirm: 'REBUILD'});
+            message(BootFSI18n.t('重建完成，已恢复 {0} 条资源记录', result.files), 'success');
+        } catch (e) { message(e.message, 'error'); }
+        finally { rebuild.disabled = false; }
+    });
     window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
     load();
 })();

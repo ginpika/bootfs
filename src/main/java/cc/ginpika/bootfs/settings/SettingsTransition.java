@@ -1,5 +1,6 @@
 package cc.ginpika.bootfs.settings;
 
+import cc.ginpika.bootfs.core.ResourceUrls;
 import cc.ginpika.bootfs.core.io.DurableFiles;
 import cc.ginpika.bootfs.kernel.metadata.RocksMetadataStore;
 import com.alibaba.fastjson2.*;
@@ -102,7 +103,7 @@ public final class SettingsTransition {
     }
     private static String remap(String key,String raw,String old,String next) {
         if (key.startsWith("/cluster/node/") && raw.equals(old)) return next;
-        if (key.startsWith("/files/") && raw.startsWith(old+"/f/")) return next+raw.substring(old.length());
+        if (key.startsWith("/files/") && raw.startsWith(old+"/f/")) return ResourceUrls.relative(raw, null);
         if (key.startsWith("/versions/resource/")) {
             JSONObject version=JSON.parseObject(raw);
             if (version.getString("value")!=null) version.put("value",remap("/documents/history",version.getString("value"),old,next));
@@ -112,20 +113,12 @@ public final class SettingsTransition {
             // Completion markers such as /nodes/<id>/migration/db-json-v1 are the literal string "complete".
             if (!jsonObject(raw)) return raw;
             JSONObject doc=JSON.parseObject(raw);
-            for (String field:List.of("url","poster","thumbUrl","resources")) {
-                Object value=doc.get(field);
-                if (value instanceof String s) doc.put(field,url(s,old,next));
-                else if (value instanceof JSONArray array) for (int i=0;i<array.size();i++) if (array.get(i) instanceof String s) array.set(i,url(s,old,next));
-            }
-            return doc.toJSONString();
+            return ResourceUrls.normalizeDocument(doc).toJSONString();
         }
         return raw;
     }
     private static boolean jsonObject(String raw) {
         for (int i=0;i<raw.length();i++) if (raw.charAt(i)>' ') return raw.charAt(i)=='{';
         return false;
-    }
-    private static String url(String s,String old,String next) {
-        return s.startsWith(old+"/") && s.substring(old.length()).matches("/(f|p|thumb|hls)/.*") ? next+s.substring(old.length()) : s;
     }
 }

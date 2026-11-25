@@ -17,7 +17,7 @@ public class FullTextDocument {
     private String description;
     // poster field could be cover for meilisearch`s official dashboard
     private String poster;
-    // 缩略图完整 URL（集群下指向上传节点的 /thumb/{uuid}），渲染缩略图时直接使用此字段
+    // Site-relative thumbnail route. The node address is resolved when federating results.
     private String thumbUrl;
     private JSONArray tags;
     // means this document is a group index (a parent-level resource), has some children-level resources

@@ -1,8 +1,10 @@
 package cc.ginpika.bootfs.metadata;
 
 import cc.ginpika.bootfs.config.TfsConfig;
+import cc.ginpika.bootfs.core.ResourceUrls;
 import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
 import cc.ginpika.bootfs.kernel.metadata.MetadataStore;
+import com.alibaba.fastjson2.JSONObject;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.annotation.Order;
@@ -59,6 +61,16 @@ public class MetadataRegistry {
         store.writeBatch(Map.of("/files/"+origin+"/replicas/"+id,url,
             "/files/"+origin+"/replicas/"+id+"/meta",meta,
             "/files/"+id,url,"/files/"+id+"/meta",meta),Set.of());
+    }
+    public String resolveFileRoute(String key, String route) {
+        if (route == null || !route.startsWith("/f/")) return route;
+        String id = key.substring(key.lastIndexOf('/') + 1);
+        if (!route.equals(ResourceUrls.file(id))) return null;
+        if (context.query(id) != null) return config.getWebEntrypoint().replaceAll("/+$", "") + route;
+        String raw = store.get("/documents/full-text/" + id);
+        String node = raw == null ? null : JSONObject.parseObject(raw).getString("contextUuid");
+        String endpoint = node == null ? null : getNodesWithKeys().get(node);
+        return endpoint == null ? null : endpoint.replaceAll("/+$", "") + route;
     }
     public void delFileAndReplicas(String id) {
         Set<String> keys = new HashSet<>(scan("/files/"+id+"/").keySet());

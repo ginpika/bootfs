@@ -110,6 +110,11 @@ public final class RocksMetadataStore implements MetadataStore {
         writeBatch(puts, deletes); return true;
     }
     @Override public synchronized long revision() { ensureOpen(); return number(REVISION, 0); }
+    @Override public synchronized boolean compareAndWrite(long revision, Map<String,String> puts, Set<String> deletes) {
+        if (revision != revision()) return false;
+        writeBatch(puts, deletes);
+        return true;
+    }
     public synchronized long appliedIndex() { ensureOpen(); return number(APPLIED_INDEX, -1); }
     public synchronized long appliedTerm() { ensureOpen(); return number(APPLIED_TERM, 0); }
 

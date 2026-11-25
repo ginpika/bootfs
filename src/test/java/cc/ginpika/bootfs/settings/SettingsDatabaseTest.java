@@ -118,8 +118,8 @@ class SettingsDatabaseTest {
             var config=files(); config.setWebEntrypoint(s.current().string("webEntrypoint"));
             try (var metadata=new DynamicMetadataStore(config)) {
                 assertEquals(node,metadata.nodeId()); assertEquals(publicKey,metadata.transportIdentity().publicKey());
-                assertEquals("https://new.example/f/file",metadata.get("/files/file"));
-                assertTrue(metadata.get("/documents/full-text/file").contains("https://new.example/thumb/file"));
+                assertEquals("/f/file",metadata.get("/files/file"));
+                assertEquals("/thumb/file",JSONObject.parseObject(metadata.get("/documents/full-text/file")).getString("poster"));
             }
         }
     }
@@ -142,8 +142,8 @@ class SettingsDatabaseTest {
                 assertEquals("complete",metadata.get("/nodes/"+node+"/migration/db-json-v1"));
                 assertEquals("https://new.example",metadata.get("/cluster/node/"+node));
                 String catalog=metadata.get("/nodes/"+node+"/catalog/file");
-                assertTrue(catalog.contains("https://new.example/f/file"));
-                assertTrue(catalog.contains("https://new.example/thumb/file.webp"));
+                assertEquals("/f/file",JSONObject.parseObject(catalog).getString("url"));
+                assertEquals("/thumb/file.webp",JSONObject.parseObject(catalog).getString("thumbUrl"));
                 assertTrue(catalog.contains("\"title\":\"keep\""));
             }
         }

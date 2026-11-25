@@ -1,5 +1,7 @@
 package cc.ginpika.bootfs.file;
 
+import cc.ginpika.bootfs.core.ResourceUrls;
+
 import cc.ginpika.bootfs.config.TfsConfig;
 import cc.ginpika.bootfs.core.IdGenerator;
 import cc.ginpika.bootfs.core.io.DurableFiles;
@@ -288,7 +290,7 @@ public class ResourcePublicationService {
                 JSONObject receipts = intent.getJSONObject("receipts");
                 if (receipts != null) receipts.forEach((node, receipt) -> confirmations.put(node, receipt));
                 metadata.put("durableNodes", confirmations);
-                metadataRegistry.putFile(uuid, context.buildUrl(uuid), metadata.toJSONString());
+                metadataRegistry.putFile(uuid, ResourceUrls.file(uuid), metadata.toJSONString());
             }
             JSONObject explicitBinding = intent.getJSONObject("s3Binding");
             if (explicitBinding != null) {

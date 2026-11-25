@@ -1,5 +1,7 @@
 package cc.ginpika.bootfs.file.web;
 
+import cc.ginpika.bootfs.core.ResourceUrls;
+
 import cc.ginpika.bootfs.domain.dto.FileObject;
 import cc.ginpika.bootfs.domain.dto.Tag;
 
@@ -18,13 +20,19 @@ record FileListResponse(int pageNumber, int pageSize, int total, List<Row> rows,
                     file.getIsPublicAccess(), file.getTags(), file.getCreatedAt());
         }
 
-        static Row fromSearchHit(Map<?, ?> hit, String url) {
+        static Row fromSearchHit(Map<?, ?> hit, String url, String endpoint) {
             List<Tag> tags = hit.get("tags") instanceof List<?> values
                     ? values.stream().map(String::valueOf).filter(value -> !value.isEmpty()).map(Tag::fromIndexFormat).toList()
                     : null;
-            return new Row(null, (String) hit.get("uuid"), null, textOrFallback(hit, "fileName", "title"),
+            String id = (String) hit.get("uuid");
+            String thumbnail = ResourceUrls.relative(textOrFallback(hit, "thumbUrl", "poster"),
+                    "1".equals(hit.get("albumAvailable")) ? null : id);
+            if (thumbnail != null && thumbnail.startsWith("/") && !thumbnail.startsWith("//")) {
+                thumbnail = endpoint + thumbnail;
+            }
+            return new Row(null, id, null, textOrFallback(hit, "fileName", "title"),
                     longValue(hit.get("size")), (String) hit.get("copyOf"), (String) hit.get("hlsAvailable"),
-                    (String) hit.get("thumbAvailable"), url, textOrFallback(hit, "thumbUrl", "poster"),
+                    (String) hit.get("thumbAvailable"), url, thumbnail,
                     (String) hit.get("parent"), (String) hit.get("albumAvailable"), (String) hit.get("nsfw"),
                     (String) hit.get("isPublicAccess"), tags, longValue(hit.get("fileCreatedAt")));
         }

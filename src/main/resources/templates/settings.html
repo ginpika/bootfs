@@ -109,6 +109,7 @@
       <label class="field"><span data-i18n>写入策略</span><select name="writePolicy" class="theme-input"><option data-i18n value="single-local">本机写入，后台修复副本</option><option data-i18n value="replicated">同步复制，达到份数后发布</option></select></label>
       <label class="field"><span data-i18n>同步复制所需份数</span><input type="number" name="requiredCopies" min="0" max="100" required class="theme-input"><small data-i18n>0 沿用副本份数；同步复制至少 2 份。</small></label>
       <label class="field"><span data-i18n>准备超时（毫秒）</span><input type="number" name="prepareTimeoutMs" min="100" max="600000" required class="theme-input"></label></div>
+      <div class="credential"><strong data-i18n>数据库</strong><button data-i18n type="button" class="theme-btn-secondary" id="rebuildDatabase">重建数据库</button></div>
     </section>
     <section class="settings-section theme-card" id="node"><div class="section-heading"><h2 data-i18n>节点与反向代理</h2><span data-i18n class="badge restart">重启 / 受控变更</span></div>
       <label class="field"><span data-i18n>节点访问地址</span><input type="url" name="webEntrypoint" required class="theme-input"><small data-i18n>组网前填写其他节点可达的地址。修改前须离开集群，完成成员通知、配对及上传任务。重启时同时迁移节点身份与资源路由。</small></label>
@@ -130,4 +131,14 @@
   </div></footer>
 </form>
 <dialog id="rotateDialog" class="settings-dialog theme-card" aria-labelledby="rotateTitle"><div class="settings-dialog-body"><h2 data-i18n id="rotateTitle">轮换节点管理凭证</h2><p data-i18n>旧管理及旧传输 token 将失效。节点签名身份和配对授权保持有效。</p><div class="inline"><button data-i18n type="button" class="theme-btn-secondary" id="cancelRotate">取消</button><button data-i18n type="button" class="theme-btn-primary" id="confirmRotate">确认轮换</button></div></div></dialog>
+<dialog id="rebuildDialog" class="settings-dialog theme-card" aria-labelledby="rebuildTitle">
+  <div class="settings-dialog-body">
+    <h2 data-i18n id="rebuildTitle">重建数据库</h2>
+    <p data-i18n>重建将替换 db.json，并移除缺失源文件的目录和索引记录。</p>
+    <div class="inline">
+      <button data-i18n type="button" class="theme-btn-secondary" id="cancelRebuild">取消</button>
+      <button data-i18n type="button" class="theme-btn-primary" id="confirmRebuild">确认重建</button>
+    </div>
+  </div>
+</dialog>
 </body></html>

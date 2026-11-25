@@ -23,7 +23,6 @@ class FileListQueryTest {
         FileObject file = FileObject.builder().uuid("id").fileName("local.jpg").path("/data/id")
                 .contentObjectId("id").isPublicAccess("1").build();
         when(inventory.searchCached(0, 10, "local")).thenReturn(new LocalFileInventory.CachedFilePage(1, List.of(file)));
-        when(inventory.buildUrl("id")).thenReturn("/f/id");
         when(inventory.buildThumbUrl("id")).thenReturn("/thumb/id");
 
         ObjectMapper mapper = new ObjectMapper();
@@ -44,7 +43,7 @@ class FileListQueryTest {
         when(federation.search("photo", List.of("manual:blue"), 2, 10, true)).thenReturn(JSONObject.parseObject("""
                 {"total":9,"partial":true,"unavailableNodes":["offline"],
                  "hits":[{"uuid":"photo","title":"old document title","originEndpoint":"https://peer",
-                          "poster":"/thumb/photo","tags":["manual:blue"]},{"title":"missing ID"}]}
+                          "poster":"https://old.example/thumb/photo","tags":["manual:blue"]},{"title":"missing ID"}]}
                 """));
         FileListResponse page = query.page(2, 10, "meta:all photo", " manual:blue, ");
         assertTrue(page.partial());
@@ -53,7 +52,7 @@ class FileListQueryTest {
         assertEquals(1, page.rows().size());
         var row = page.rows().get(0);
         assertEquals("https://peer/f/photo", row.url());
-        assertEquals("/thumb/photo", row.thumbUrl());
+        assertEquals("https://peer/thumb/photo", row.thumbUrl());
         assertEquals("old document title", row.fileName());
         assertEquals("manual:blue", row.tags().get(0).toIndexFormat());
         verifyNoInteractions(search);

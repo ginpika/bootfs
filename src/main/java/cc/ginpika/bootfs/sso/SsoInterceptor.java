@@ -99,14 +99,15 @@ public class SsoInterceptor implements HandlerInterceptor {
             return true;
         }
         boolean tvViewer = read && TV_VIEWER_PATHS.contains(path);
-        boolean publicRead = tvViewer || Set.of("/f/{uuid}", "/p/{uuid}", "/thumb/{uuid}", "/setu", "/setu-url", "/setu-urls",
-                "/video-player", "/album/**", "/gallery", "/gallery/image/{node}/{uuid}", "/hls/{folder}/{file}").contains(path);
+        boolean mediaViewer = path.equals("/video-player") || path.equals("/album/**");
+        boolean publicRead = tvViewer || mediaViewer || Set.of("/f/{uuid}", "/p/{uuid}", "/thumb/{uuid}", "/setu", "/setu-url", "/setu-urls",
+                "/api/album/{uuid}/pages", "/gallery", "/gallery/image/{node}/{uuid}", "/hls/{folder}/{file}").contains(path);
         if (read && config.isPublicSharingEnabled() && publicRead) return true;
         privateResponse(request, response);
-        boolean videoEmbed = read && path.equals("/video-player")
+        boolean mediaEmbed = read && mediaViewer
                 && "navigate".equals(request.getHeader("Sec-Fetch-Mode"))
                 && "iframe".equals(request.getHeader("Sec-Fetch-Dest"));
-        boolean navigation = videoEmbed || (!path.equals("/api/logout") && BrowserRequestPolicy.isDocumentNavigation(request));
+        boolean navigation = mediaEmbed || (!path.equals("/api/logout") && BrowserRequestPolicy.isDocumentNavigation(request));
         if (!ssoService.isEnabled()) {
             return navigation || BrowserRequestPolicy.allows(request, false, appConfig.getWebEntrypoint())
                     || deny(response, 403, "Cross-origin request denied");

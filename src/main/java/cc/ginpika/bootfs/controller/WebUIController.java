@@ -2,6 +2,7 @@ package cc.ginpika.bootfs.controller;
 
 import cc.ginpika.bootfs.domain.dto.FileObject;
 import cc.ginpika.bootfs.file.inventory.LocalFileInventory;
+import cc.ginpika.bootfs.settings.NodeSettings;
 import cc.ginpika.bootfs.sso.SsoUser;
 import cc.ginpika.bootfs.sso.SsoConfig;
 import lombok.extern.slf4j.Slf4j;
@@ -21,10 +22,9 @@ import lombok.RequiredArgsConstructor;
 @SuppressWarnings("all")
 @RequiredArgsConstructor
 public class WebUIController {
-    private static final String VIDEO_FRAME_ANCESTORS = "frame-ancestors 'self'"
-            + " https://*.ginpika.cc:* http://*.ginpika.cc:* https://localhost:* http://localhost:*";
     private final LocalFileInventory context;
     private final SsoConfig ssoConfig;
+    private final NodeSettings settings;
 
     @ModelAttribute("ssoLocalAccess")
     public boolean localAccess(HttpServletRequest request) {
@@ -81,8 +81,7 @@ public class WebUIController {
     @GetMapping("/video-player")
     public ModelAndView hlsPreview(@RequestParam(value = "uuid", required = false) String uuid,
                                    HttpServletResponse response) {
-        // Browsers that enforce frame-ancestors use it in place of the default X-Frame-Options.
-        response.addHeader("Content-Security-Policy", VIDEO_FRAME_ANCESTORS);
+        mediaFramePolicy(response, "videoEmbedPolicyEnabled");
         ModelAndView mv = new ModelAndView("video-player");
         if (StringUtils.isNotBlank(uuid)) {
             FileObject fileObject = context.cached(uuid);
@@ -96,10 +95,16 @@ public class WebUIController {
 
     // Embed image list viewer
     @GetMapping("/album/**")
-    public ModelAndView imagePreview() {
-        ModelAndView mv = new ModelAndView();
-        mv.setViewName("album");
-        return mv;
+    public ModelAndView imagePreview(HttpServletResponse response) {
+        mediaFramePolicy(response, "albumEmbedPolicyEnabled");
+        return new ModelAndView("album");
+    }
+
+    private void mediaFramePolicy(HttpServletResponse response, String setting) {
+        var policy = settings.current();
+        // frame-ancestors overrides the default X-Frame-Options in browsers that support CSP.
+        response.addHeader("Content-Security-Policy", policy.bool(setting) ? policy.mediaFrameAncestors() : "frame-ancestors *");
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
     }
 
     // Embed image-hosting background random read template

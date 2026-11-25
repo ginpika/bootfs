@@ -104,15 +104,19 @@ class EndpointSecurityIntegrationTest {
                 .header("Access-Control-Request-Method", "POST")).andExpect(status().isForbidden());
     }
 
-    @Test void privateVideoEmbedStillRequiresAuthentication() throws Exception {
-        var embed = get("/video-player").header("Sec-Fetch-Mode", "navigate").header("Sec-Fetch-Dest", "iframe")
-                .header("Sec-Fetch-Site", "same-site").header("Referer", "https://blog.ginpika.cc/");
-        mvc.perform(embed).andExpect(status().isFound())
-                .andExpect(header().doesNotExist("Content-Security-Policy"));
-        mvc.perform(embed.cookie(cookie)).andExpect(status().isOk())
-                .andExpect(view().name("video-player"))
-                .andExpect(header().exists("Content-Security-Policy"))
-                .andExpect(header().string("Cache-Control", "no-store"));
+    @Test void privateMediaEmbedsStillRequireAuthentication() throws Exception {
+        for (String player : new String[]{"video-player", "album"}) {
+            String path = player.equals("album") ? "/album/missing" : "/video-player";
+            var embed = get(path).header("Sec-Fetch-Mode", "navigate").header("Sec-Fetch-Dest", "iframe")
+                    .header("Sec-Fetch-Site", "same-site").header("Referer", "https://blog.ginpika.cc/");
+            mvc.perform(embed).andExpect(status().isFound())
+                    .andExpect(header().doesNotExist("Content-Security-Policy"));
+            mvc.perform(embed.cookie(cookie)).andExpect(status().isOk())
+                    .andExpect(view().name(player))
+                    .andExpect(header().exists("Content-Security-Policy"))
+                    .andExpect(header().string("Cache-Control", "no-store"));
+        }
+        mvc.perform(get("/api/album/missing/pages")).andExpect(status().isFound());
     }
 
     @Test void aForgedProxyMimeCannotTurnAnUploadIntoSameOriginHtml() throws Exception {

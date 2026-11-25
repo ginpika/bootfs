@@ -7,6 +7,8 @@ import java.util.regex.Pattern;
 /** The complete, deliberately bounded settings schema. Values are immutable after validation. */
 public final class SettingsValues {
     public record Field(String property, String legacy, Object initial) {}
+    private static final String DNS_LABEL = "[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?";
+    private static final Pattern EMBED_DOMAIN = Pattern.compile("(?:\\*\\.)?" + DNS_LABEL + "(?:\\." + DNS_LABEL + ")*");
     public static final Map<String,Field> FIELDS;
     static {
         Map<String,Field> fields = new LinkedHashMap<>();
@@ -16,6 +18,9 @@ public final class SettingsValues {
         fields.put("ssoServerUrl", new Field("sso.server-url", "SSO_SERVER_URL", ""));
         fields.put("ssoInfoUrl", new Field("sso.info-url", "SSO_INFO_URL", ""));
         fields.put("publicSharingEnabled", new Field("bootfs.security.public-sharing.enabled", "BOOTFS_PUBLIC_SHARING_ENABLED", true));
+        fields.put("mediaEmbedDomains", new Field("bootfs.security.media-embed.domains", "BOOTFS_MEDIA_EMBED_DOMAINS", "*.ginpika.cc\nlocalhost"));
+        fields.put("videoEmbedPolicyEnabled", new Field("bootfs.security.media-embed.video-player", "BOOTFS_VIDEO_EMBED_POLICY_ENABLED", true));
+        fields.put("albumEmbedPolicyEnabled", new Field("bootfs.security.media-embed.album", "BOOTFS_ALBUM_EMBED_POLICY_ENABLED", true));
         fields.put("allowPrivateProbes", new Field("bootfs.security.allow-private-probes", "BOOTFS_ALLOW_PRIVATE_PROBES", true));
         fields.put("s3Enabled", new Field("s3.enabled", "S3_ENABLED", false));
         fields.put("s3AccessKey", new Field("s3.access-key", "S3_ACCESS_KEY", ""));
@@ -31,6 +36,7 @@ public final class SettingsValues {
         FIELDS = Collections.unmodifiableMap(fields);
     }
     private final Map<String,Object> values;
+    private final String mediaFrameAncestors;
     public SettingsValues(Map<String,?> input) {
         Map<String,Object> result = new LinkedHashMap<>();
         if (!FIELDS.keySet().containsAll(input.keySet())) throw new IllegalArgumentException("包含未知设置项");
@@ -40,7 +46,9 @@ public final class SettingsValues {
                     || field.initial() instanceof Integer && (!(v instanceof Number) || ((Number)v).doubleValue() != ((Number)v).intValue())
                     || field.initial() instanceof String && !(v instanceof String)) throw new IllegalArgumentException("设置类型无效：" + key);
             if (v instanceof Number n) v = n.intValue();
-            if (v instanceof String s) {
+            if (key.equals("mediaEmbedDomains")) {
+                v = normalizeEmbedDomains((String) v);
+            } else if (v instanceof String s) {
                 if (s.length() > 2048 || s.chars().anyMatch(c -> c < 32 || c == 127)) throw new IllegalArgumentException("设置内容过长或包含控制字符："+key);
                 v = key.equals("s3SecretKey") ? s : s.trim();
                 if (key.equals("webEntrypoint") || key.equals("ssoServerUrl")) v = ((String)v).replaceAll("/+$", "");
@@ -49,6 +57,26 @@ public final class SettingsValues {
         });
         values = Collections.unmodifiableMap(result);
         validate();
+        StringBuilder ancestors = new StringBuilder("frame-ancestors 'self'");
+        string("mediaEmbedDomains").lines().forEach(domain -> ancestors
+                .append(" https://").append(domain).append(":* http://").append(domain).append(":*"));
+        mediaFrameAncestors = ancestors.toString();
+    }
+
+    private static String normalizeEmbedDomains(String value) {
+        if (value.length() > 2048) invalid("嵌入域名最多 64 个、2048 个字符");
+        Set<String> domains = new LinkedHashSet<>();
+        for (String item : value.split("[\\r\\n,，]")) {
+            String domain = item.strip();
+            if (domain.isEmpty()) continue;
+            int length = domain.startsWith("*.") ? domain.length() - 2 : domain.length();
+            if (length > 253 || !EMBED_DOMAIN.matcher(domain).matches()) {
+                invalid("请输入域名或通配域名，例如 example.com 或 *.example.com");
+            }
+            domains.add(domain.toLowerCase(Locale.ROOT));
+        }
+        if (domains.size() > 64) invalid("嵌入域名最多 64 个、2048 个字符");
+        return String.join("\n", domains);
     }
     private void validate() {
         url(string("ssoServerUrl"), true); url(string("ssoInfoUrl"), true); url(string("webEntrypoint"), false);
@@ -77,6 +105,7 @@ public final class SettingsValues {
     private static void invalid(String message) { throw new IllegalArgumentException(message); }
     public String string(String key) { return (String) values.get(key); }
     public boolean bool(String key) { return (Boolean) values.get(key); }
+    public String mediaFrameAncestors() { return mediaFrameAncestors; }
     public int integer(String key) { return (Integer) values.get(key); }
     public int effectiveCopies() { return integer("requiredCopies") > 0 ? integer("requiredCopies") : integer("copies"); }
     public Map<String,Object> map() { return values; }

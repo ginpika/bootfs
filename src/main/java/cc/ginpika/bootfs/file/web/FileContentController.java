@@ -232,15 +232,28 @@ class FileContentController {
 
     // 获取相册（comic）的 poster 和 resources，封装索引查询避免前端 mixed content
     @GetMapping("/api/album/{uuid}")
-    public ResponseEntity<?> getAlbumDocument(@PathVariable String uuid,HttpServletRequest request) {
+    public ResponseEntity<?> getAlbumDocument(@PathVariable String uuid, HttpServletRequest request) {
+        return albumResponse(uuid, request, false);
+    }
+
+    @GetMapping("/api/album/{uuid}/pages")
+    public ResponseEntity<?> getAlbumPages(@PathVariable String uuid, HttpServletRequest request) {
+        return albumResponse(uuid, request, true);
+    }
+
+    private ResponseEntity<?> albumResponse(String uuid, HttpServletRequest request, boolean reader) {
         if (context.query(uuid)==null) return forwarder.forwardMissing(uuid, request, null);
         Map<String, Object> result = resourceSearch.getDocument("full-text", uuid);
         if (Boolean.TRUE.equals(result.get("succeed"))) {
             Map<String, Object> album = new HashMap<>((Map<String, Object>) result.get("data"));
-            Object resources = album.get("resources");
-            if (resources instanceof List<?>) {
-                album.put("resources", ((List<?>) resources).stream()
-                        .map(this::albumResourceUrl).collect(Collectors.toList()));
+            if (album.get("resources") instanceof List<?> resources) {
+                album.put("resources", resources.stream().map(this::albumResourceUrl).collect(Collectors.toList()));
+            }
+            if (reader) {
+                Object title = album.get("title");
+                Object resources = album.get("resources");
+                return ResponseEntity.ok(Map.of("title", title instanceof String name ? name : "",
+                        "resources", resources instanceof List<?> pages ? pages : List.of()));
             }
             for (String field : List.of("poster", "thumbUrl")) {
                 if (album.containsKey(field)) album.put(field, albumResourceUrl(album.get(field)));

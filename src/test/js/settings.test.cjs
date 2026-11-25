@@ -6,6 +6,7 @@ const vm = require('node:vm');
 
 async function page(options = {}) {
     const values = {ssoEnabled:false, allowedRoles:'', localBypassEnabled:true, ssoServerUrl:'', ssoInfoUrl:'', publicSharingEnabled:true, allowPrivateProbes:true,
+        mediaEmbedDomains:'*.ginpika.cc\nlocalhost', videoEmbedPolicyEnabled:true, albumEmbedPolicyEnabled:true,
         s3Enabled:false, s3AccessConfigured:true, s3SecretConfigured:true, s3Bucket:'bootfs', copies:1, writePolicy:'single-local', requiredCopies:0, prepareTimeoutMs:30000,
         webEntrypoint:'http://localhost:8181', forwardHeadersStrategy:'none', internalProxies:'127[.]0[.]0[.]1'};
     const inputs = {};
@@ -43,6 +44,20 @@ test('settings form preserves write-only credentials while sending explicit fals
     assert.equal(body.values.copies, 3); assert.equal(body.values.publicSharingEnabled, false);
     assert.equal(body.revision, 7); assert.ok(!('s3AccessKey' in body.values)); assert.ok(!('s3SecretKey' in body.values));
     assert.equal(p.element('feedback').textContent, '保存成功。设置已应用于当前节点。');
+});
+
+test('settings form sends the shared domain list and each independent viewer choice', async () => {
+    const p = await page();
+    assert.equal(p.inputs.mediaEmbedDomains.value, '*.ginpika.cc\nlocalhost');
+    assert.equal(p.inputs.videoEmbedPolicyEnabled.checked, true);
+    assert.equal(p.inputs.albumEmbedPolicyEnabled.checked, true);
+    p.inputs.mediaEmbedDomains.value = 'reader.example\n*.comics.example';
+    p.inputs.videoEmbedPolicyEnabled.checked = false;
+    await p.submit();
+    const { values } = JSON.parse(p.requests.at(-1).body);
+    assert.equal(values.mediaEmbedDomains, 'reader.example\n*.comics.example');
+    assert.equal(values.videoEmbedPolicyEnabled, false);
+    assert.equal(values.albumEmbedPolicyEnabled, true);
 });
 
 test('explicit clear removes the secret and generated credentials are discarded from fields after save', async () => {

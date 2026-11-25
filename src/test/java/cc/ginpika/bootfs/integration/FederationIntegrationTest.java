@@ -341,6 +341,11 @@ class FederationIntegrationTest {
         assertTrue(response.headers().firstValue("Content-Encoding").isEmpty());
         JSONObject album = JSON.parseObject(response.body());
         assertEquals(2, album.getJSONArray("resources").size());
+        var reader = request(frontend, "GET", "/api/album/" + id + "/pages", null, null);
+        assertEquals(200, reader.statusCode(), reader.body());
+        JSONObject readerAlbum = JSON.parseObject(reader.body());
+        assertEquals(Set.of("title", "resources"), readerAlbum.keySet());
+        assertEquals(album.getJSONArray("resources"), readerAlbum.getJSONArray("resources"));
         for (int i = 0; i < storedPages.size(); i++) {
             String path = URI.create(storedPages.getString(i)).getPath();
             assertEquals(path, album.getJSONArray("resources").getString(i));

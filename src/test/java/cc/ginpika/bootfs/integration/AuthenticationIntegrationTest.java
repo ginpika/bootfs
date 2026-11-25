@@ -96,4 +96,14 @@ class AuthenticationIntegrationTest {
         mvc.perform(get("/tv/playlist.m3u8")).andExpect(status().isOk());
         mvc.perform(get("/tv/ts/missing/0000.ts")).andExpect(status().isNotFound());
     }
+
+    @Test void publicAlbumReadersUseTheMediaFramePolicyAndScopedPagesEndpoint() throws Exception {
+        mvc.perform(get("/album/missing").header("Sec-Fetch-Mode", "navigate").header("Sec-Fetch-Dest", "iframe")
+                        .header("Sec-Fetch-Site", "cross-site").header("Referer", "http://localhost:3000/"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Security-Policy", "frame-ancestors 'self'"
+                        + " https://*.ginpika.cc:* http://*.ginpika.cc:* https://localhost:* http://localhost:*"));
+        mvc.perform(get("/api/album/missing/pages")).andExpect(status().isNotFound());
+        mvc.perform(get("/api/album/missing")).andExpect(status().isFound());
+    }
 }

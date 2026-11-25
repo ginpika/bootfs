@@ -18,13 +18,35 @@ class SettingsDatabaseTest {
     MockEnvironment env() { return new MockEnvironment().withProperty("tfs.root-path",root.toString()); }
     TfsConfig files() { var f=new TfsConfig(); f.setRootPath(root.toString()); f.setWebEntrypoint("http://localhost:8181"); return f; }
     SettingsValues changed(SettingsValues old,String key,Object value) { var m=new LinkedHashMap<>(old.map()); m.put(key,value); return new SettingsValues(m); }
-    @Test void newInstallHasExactlyEighteenSettingsAndRequestedDefaults() throws Exception {
+    @Test void newInstallHasRequestedDefaults() throws Exception {
         try (var s=new NodeSettings(env())) {
-            var v=s.current(); assertEquals(18,v.map().size());
+            var v=s.current(); assertEquals(21,v.map().size());
             assertFalse(v.bool("ssoEnabled")); assertFalse(v.bool("s3Enabled"));
             assertTrue(v.bool("localBypassEnabled")); assertTrue(v.bool("publicSharingEnabled")); assertTrue(v.bool("allowPrivateProbes"));
             assertTrue(v.permitsRole(null)); assertTrue(v.permitsRole("user")); assertEquals("",v.string("ssoServerUrl"));
             assertEquals(1,v.effectiveCopies()); assertEquals("none",v.string("forwardHeadersStrategy"));
+        }
+    }
+    @Test void existingDatabasesPickUpEmbedDefaultsAndPersistEditedPolicy() throws Exception {
+        var keys = List.of("mediaEmbedDomains", "videoEmbedPolicyEnabled", "albumEmbedPolicyEnabled");
+        try (var database = new SettingsDatabase(root)) {
+            var state = database.initialize(env(), root);
+            keys.forEach(state.getJSONObject("values")::remove);
+            database.write(state);
+        }
+        try (var settings = new NodeSettings(env()); var metadata = new RocksMetadataStore(root.resolve("kernel/metadata"))) {
+            assertEquals("*.ginpika.cc\nlocalhost", settings.current().string("mediaEmbedDomains"));
+            assertTrue(settings.current().bool("videoEmbedPolicyEnabled"));
+            assertTrue(settings.current().bool("albumEmbedPolicyEnabled"));
+            var values = new LinkedHashMap<>(settings.current().map());
+            values.put("mediaEmbedDomains", "Reader.EXAMPLE, *.comic.example\r\nreader.example");
+            values.put("videoEmbedPolicyEnabled", false);
+            settings.update(1, new SettingsValues(values), false, false, metadata);
+        }
+        try (var settings = new NodeSettings(env())) {
+            assertEquals("reader.example\n*.comic.example", settings.current().string("mediaEmbedDomains"));
+            assertFalse(settings.current().bool("videoEmbedPolicyEnabled"));
+            assertTrue(settings.current().bool("albumEmbedPolicyEnabled"));
         }
     }
     @Test void explicitLegacyValuesImportOnceAndRestartCannotOverrideDatabase() throws Exception {

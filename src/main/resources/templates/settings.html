@@ -58,6 +58,7 @@
       <nav data-i18n-attrs="aria-label" class="settings-nav theme-card" aria-label="设置分类">
         <p data-i18n class="settings-nav-title">设置分类</p>
         <a href="#access" class="settings-nav-link" aria-current="location"><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-shield"/></svg><span data-i18n>访问权限</span></a>
+        <a href="#embed" class="settings-nav-link"><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-shield"/></svg><span data-i18n>嵌入访问策略</span></a>
         <a href="#login" class="settings-nav-link"><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-login"/></svg><span data-i18n>登录认证</span></a>
         <a href="#s3" class="settings-nav-link"><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-box"/></svg><span data-i18n>S3 服务</span></a>
         <a href="#storage" class="settings-nav-link"><svg class="settings-icon" aria-hidden="true"><use href="#settings-icon-storage"/></svg><span data-i18n>存储与副本</span></a>
@@ -69,6 +70,22 @@
     <section class="settings-section theme-card" id="access"><div class="section-heading"><h2 data-i18n>访问权限</h2><span data-i18n class="badge">立即生效</span></div>
       <label class="toggle"><span><strong data-i18n>允许公开读取</strong><small data-i18n>开放现有文件链接、缩略图、预览及播放读取入口。</small></span><input type="checkbox" name="publicSharingEnabled" role="switch"></label>
       <label class="toggle"><span><strong data-i18n>允许内网节点延迟检测</strong><small data-i18n>允许 Clash 检测访问内网地址；用于新的检测任务。</small></span><input type="checkbox" name="allowPrivateProbes" role="switch"></label>
+    </section>
+    <section class="settings-section theme-card" id="embed">
+      <div class="section-heading"><h2 data-i18n>嵌入访问策略</h2><span data-i18n class="badge">立即生效</span></div>
+      <div class="field">
+        <label for="mediaEmbedDomains" data-i18n>允许嵌入的域名</label>
+        <textarea id="mediaEmbedDomains" name="mediaEmbedDomains" class="theme-input" rows="3" maxlength="2048"
+                  aria-describedby="mediaEmbedFormat" spellcheck="false" autocapitalize="none"></textarea>
+        <small id="mediaEmbedFormat" data-i18n>每行一个域名，最多 64 个。通配格式为 *.example.com</small>
+      </div>
+      <fieldset class="embed-targets">
+        <legend data-i18n>应用于</legend>
+        <div class="embed-target-options">
+          <label class="compact"><input type="checkbox" name="videoEmbedPolicyEnabled"><span data-i18n>视频播放器</span></label>
+          <label class="compact"><input type="checkbox" name="albumEmbedPolicyEnabled"><span data-i18n>相册</span></label>
+        </div>
+      </fieldset>
     </section>
     <section class="settings-section theme-card" id="login"><div class="section-heading"><h2 data-i18n>登录认证</h2><span data-i18n class="badge">立即生效</span></div>
       <label class="toggle"><span><strong data-i18n>使用 SSO 登录认证</strong><small data-i18n>开启前先测试服务，并确保当前登录会话可通过新设置。本机直连保留访问时也可开启。</small></span><input type="checkbox" name="ssoEnabled" role="switch"></label>

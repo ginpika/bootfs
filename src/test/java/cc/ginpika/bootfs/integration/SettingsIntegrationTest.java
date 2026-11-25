@@ -52,6 +52,32 @@ class SettingsIntegrationTest {
         mvc.perform(get("/api/settings")).andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"))
                 .andExpect(jsonPath("$.values.s3SecretKey").doesNotExist()).andExpect(jsonPath("$.token").doesNotExist());
     }
+    @Test void sharedEmbedPolicyAppliesImmediatelyToEachSelectedViewer() throws Exception {
+        mvc.perform(save(Map.of("mediaEmbedDomains", "Reader.Example\r\n*.manga.example, reader.example")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.values.mediaEmbedDomains").value("reader.example\n*.manga.example"));
+        String allowed = "frame-ancestors 'self' https://reader.example:* http://reader.example:*"
+                + " https://*.manga.example:* http://*.manga.example:*";
+        for (String path : List.of("/video-player", "/album/example")) {
+            mvc.perform(get(path)).andExpect(status().isOk()).andExpect(header().string("Content-Security-Policy", allowed))
+                    .andExpect(header().string("Cache-Control", "no-store"));
+        }
+        long before = revision();
+        for (String invalid : List.of("*", "https://reader.example", "example.com:8080", "example.com/album",
+                "example.com; frame-ancestors *", "example.com\r\nX-Frame-Options: ALLOWALL")) {
+            mvc.perform(save(Map.of("mediaEmbedDomains", invalid))).andExpect(status().isBadRequest());
+        }
+        assertEquals(before, revision());
+        mvc.perform(save(Map.of("videoEmbedPolicyEnabled", false))).andExpect(status().isOk());
+        mvc.perform(get("/video-player")).andExpect(header().string("Content-Security-Policy", "frame-ancestors *"));
+        mvc.perform(get("/album/example")).andExpect(header().string("Content-Security-Policy", allowed));
+
+        mvc.perform(save(Map.of("videoEmbedPolicyEnabled", true, "albumEmbedPolicyEnabled", false, "mediaEmbedDomains", "")))
+                .andExpect(status().isOk());
+        mvc.perform(get("/video-player")).andExpect(header().string("Content-Security-Policy", "frame-ancestors 'self'"));
+        mvc.perform(get("/album/example")).andExpect(header().string("Content-Security-Policy", "frame-ancestors *"));
+        mvc.perform(get("/gallery")).andExpect(header().doesNotExist("Content-Security-Policy"))
+                .andExpect(header().string("X-Frame-Options", "SAMEORIGIN"));
+    }
     @Test void validationCsrfAndRevisionFailuresLeaveSettingsUnchanged() throws Exception {
         int copies=files.getCopies(); long before=revision();
         mvc.perform(save(Map.of("copies",0))).andExpect(status().isBadRequest());

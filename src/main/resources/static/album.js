@@ -19,10 +19,22 @@
     const originalSwitch = document.querySelector('#reader-original');
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const mangaPreference = 'bootfs-album-manga';
+    const themes = ['light', 'dark', 'sakura', 'starry-night', 'forest', 'ocean', 'sunset', 'lavender'];
+
+    function applyTheme(theme) {
+        const root = document.documentElement;
+        root.classList.remove(...themes.map(name => 'theme-' + name));
+        root.classList.add('theme-' + (themes.includes(theme) ? theme : 'light'));
+    }
 
     if (window.self !== window.top) document.querySelector('#reader-back').hidden = true;
-    try { mangaSwitch.checked = localStorage.getItem(mangaPreference) === '1'; }
-    catch { /* The switch also works in frames without storage access. */ }
+    try {
+        applyTheme(localStorage.getItem('tfs-theme'));
+        mangaSwitch.checked = localStorage.getItem(mangaPreference) === '1';
+    } catch { /* The reader also works in frames without storage access. */ }
+    window.addEventListener('storage', event => {
+        if (event.key === 'tfs-theme') applyTheme(event.newValue);
+    });
 
     let resources = [];
     let index = 0;
@@ -64,8 +76,8 @@
         spinner.setAttribute('aria-label', t('正在加载…'));
         const reload = document.createElement('button');
         reload.type = 'button';
-        reload.className = 'reader-retry';
-        reload.textContent = t('重试');
+        reload.className = 'reader-button';
+        reload.append(retry.firstElementChild.cloneNode(true));
         reload.setAttribute('aria-label', t('重试第 {0} 页', page + 1));
 
         function load() {

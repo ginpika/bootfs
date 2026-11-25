@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BootFS</title>
     <link rel="icon" th:href="@{/favicon.ico}" sizes="any">
+    <link rel="stylesheet" th:href="@{/themes.css}">
     <link rel="stylesheet" th:href="@{/album.css}">
     <script defer th:src="@{/security-utils.js}"></script>
     <script defer th:src="@{/i18n/en.js}"></script>
@@ -12,48 +13,46 @@
     <script defer th:src="@{/album.js}"></script>
 </head>
 <body>
-<main class="reader" th:attr="data-pages-base=@{/api/album/},data-original-base=@{/p/}">
-    <header class="reader-header">
-        <a id="reader-back" class="reader-button" th:href="@{/}" aria-label="返回" data-i18n-attrs="aria-label">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 5-7 7 7 7M5 12h14"/></svg>
-        </a>
-        <h1 id="reader-title" data-i18n>相册</h1>
-        <button id="reader-settings" class="reader-button" type="button" aria-label="阅读设置"
-                aria-haspopup="dialog" aria-controls="reader-drawer" aria-expanded="false" data-i18n-attrs="aria-label">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 8h4m4 0h8M4 16h8m4 0h4"/>
-                <circle cx="10" cy="8" r="2"/><circle cx="14" cy="16" r="2"/>
-            </svg>
-        </button>
-    </header>
+<main class="reader" aria-labelledby="reader-title" th:attr="data-pages-base=@{/api/album/},data-original-base=@{/p/}">
+    <h1 id="reader-title" class="reader-visually-hidden" data-i18n>相册</h1>
+    <a id="reader-back" class="reader-button reader-corner" th:href="@{/}" aria-label="返回" data-i18n-attrs="aria-label">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 5-7 7 7 7M5 12h14"/></svg>
+    </a>
+    <button id="reader-settings" class="reader-button reader-corner" type="button" aria-label="阅读设置"
+            aria-haspopup="dialog" aria-controls="reader-drawer" aria-expanded="false" data-i18n-attrs="aria-label">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 8h4m4 0h8M4 16h8m4 0h4"/>
+            <circle cx="10" cy="8" r="2"/><circle cx="14" cy="16" r="2"/>
+        </svg>
+    </button>
 
     <div id="reader-stage" class="reader-stage">
         <div id="reader-book" class="reader-book" role="group" aria-label="图片" data-i18n-attrs="aria-label"></div>
         <div id="reader-status" class="reader-status">
             <p id="reader-message" role="status" data-i18n>正在加载…</p>
-            <button id="reader-retry" class="reader-retry" type="button" data-i18n hidden>重试</button>
+            <button id="reader-retry" class="reader-button" type="button" aria-label="重试" data-i18n-attrs="aria-label" hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a8 8 0 1 1 1.9 6.2M4 5v6h6"/></svg>
+            </button>
         </div>
     </div>
 
-    <footer class="reader-footer">
-        <nav class="reader-controls" aria-label="翻页" data-i18n-attrs="aria-label">
-            <button id="reader-previous" class="reader-button" type="button" aria-label="上一页" data-i18n-attrs="aria-label" disabled>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 18-6-6 6-6"/></svg>
-            </button>
-            <p class="reader-position"><span id="reader-range" aria-live="polite" aria-atomic="true">—</span><span id="reader-total"></span></p>
-            <button id="reader-next" class="reader-button" type="button" aria-label="下一页" data-i18n-attrs="aria-label" disabled>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6"/></svg>
-            </button>
-        </nav>
-    </footer>
+    <nav class="reader-controls" aria-label="翻页" data-i18n-attrs="aria-label">
+        <button id="reader-previous" class="reader-button" type="button" aria-label="上一页" data-i18n-attrs="aria-label" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 18-6-6 6-6"/></svg>
+        </button>
+        <p class="reader-position"><span id="reader-range" aria-live="polite" aria-atomic="true">—</span><span id="reader-total"></span></p>
+        <button id="reader-next" class="reader-button" type="button" aria-label="下一页" data-i18n-attrs="aria-label" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6"/></svg>
+        </button>
+    </nav>
 </main>
 
-<dialog id="reader-drawer" class="reader-drawer" aria-labelledby="reader-drawer-title">
+<dialog id="reader-drawer" class="reader-drawer theme-card" aria-labelledby="reader-drawer-title">
     <div class="reader-drawer-content">
         <header class="reader-drawer-header">
             <h2 id="reader-drawer-title" data-i18n>阅读设置</h2>
             <form method="dialog">
-                <button class="reader-button" type="submit" aria-label="关闭" data-i18n-attrs="aria-label" autofocus>
+                <button class="theme-icon-btn" type="submit" aria-label="关闭" data-i18n-attrs="aria-label" autofocus>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
                 </button>
             </form>
@@ -61,7 +60,7 @@
         <label class="reader-option">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v14M12 6c-2.7-2-5.5-2.3-9-1.5v13c3.5-.8 6.3-.5 9 1.5 2.7-2 5.5-2.3 9-1.5v-13c-3.5-.8-6.3-.5-9 1.5Z"/></svg>
             <span data-i18n>漫画模式</span>
-            <input id="reader-manga" class="reader-switch" type="checkbox" role="switch">
+            <input id="reader-manga" type="checkbox" role="switch">
         </label>
         <label class="reader-option">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -69,7 +68,7 @@
                 <circle cx="8.5" cy="9" r="1.5"/><path d="m4 18 5-5 3 3 4-5 5 5"/>
             </svg>
             <span data-i18n>原图模式</span>
-            <input id="reader-original" class="reader-switch" type="checkbox" role="switch">
+            <input id="reader-original" type="checkbox" role="switch">
         </label>
     </div>
 </dialog>

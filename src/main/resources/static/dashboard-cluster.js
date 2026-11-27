@@ -11,6 +11,9 @@
         var submit = document.getElementById('clusterLinkSubmit');
         var message = document.getElementById('clusterLinkMessage');
         var summary = document.getElementById('clusterSummary');
+        var notificationStatus = document.getElementById('clusterNotificationStatus');
+        var notificationClear = document.getElementById('clusterNotificationClear');
+        var notificationError = document.getElementById('clusterNotificationError');
         var removeOpen = document.getElementById('clusterRemoveOpen');
         var removeDialog = document.getElementById('clusterRemoveDialog');
         var removeTitle = document.getElementById('clusterRemoveTitle');
@@ -31,6 +34,7 @@
         var generation = 0;
         var issuing = false;
         var removing = false;
+        var clearingNotifications = false;
         var removal;
         var codeExpiresAt = 0;
         var storageKey = 'bootfs-dashboard-link';
@@ -57,7 +61,7 @@
 
         function updateRemovalControls() {
             removeOpen.textContent = selectedNodeId && selectedNodeId === local?.nodeId ? BootFSI18n.t('退出集群') : BootFSI18n.t('移除节点');
-            removeOpen.disabled = !isClusterMember(selectedNodeId) || posting || removing || Boolean(target);
+            removeOpen.disabled = !isClusterMember(selectedNodeId) || posting || removing || clearingNotifications || Boolean(target);
             if (!removeDialog.open) return;
             var self = removal.nodeId === local.nodeId;
             var canRemove = isClusterMember(removal.nodeId) && local.groupId === removal.groupId;
@@ -79,10 +83,11 @@
 
         function updateControls() {
             var enabled = local && local.phase === 'ACTIVE';
-            submit.disabled = !enabled || posting || removing || Boolean(target);
+            submit.disabled = !enabled || posting || removing || clearingNotifications || Boolean(target);
             input.disabled = posting || Boolean(target);
             codeInput.disabled = posting || Boolean(target);
             generate.disabled = !enabled || issuing || removing;
+            notificationClear.disabled = posting || removing || clearingNotifications;
             submit.textContent = posting ? BootFSI18n.t('正在连接…') : (target ? BootFSI18n.t('连接中…') : BootFSI18n.t('连接'));
             updateRemovalControls();
         }
@@ -113,11 +118,13 @@
         function renderLocal(state, reloadStats) {
             local = state;
             window.bootfsClusterAvailable = state.phase === 'ACTIVE' || state.phase === 'STATIC';
+            notificationStatus.hidden = state.phase !== 'ACTIVE' || !state.pendingNotifications;
+            if (notificationStatus.hidden) notificationError.textContent = '';
             if (state.phase === 'STATIC') {
                 summary.textContent = BootFSI18n.t('当前沿用 {0} 存储模式', state.metadataMode || BootFSI18n.t('原有'));
                 showMessage(BootFSI18n.t('当前数据可继续使用。要启用节点配对，请先通过备份恢复迁移到新的动态节点。'), false);
             } else if (state.phase === 'ACTIVE') {
-                summary.textContent = BootFSI18n.t('本机独立读写 · {0} 个组网成员', Object.keys(state.peers || {}).length) + (state.pendingNotifications ? ' ' + BootFSI18n.t('· 成员通知待同步') : '');
+                summary.textContent = BootFSI18n.t('本机独立读写 · {0} 个组网成员', Object.keys(state.peers || {}).length);
             } else {
                 summary.textContent = phaseLabel(state) + (state.lastError ? BootFSI18n.t('：{0}', state.lastError) : '');
                 if (!target) showMessage(summary.textContent, Boolean(state.lastError));
@@ -137,7 +144,7 @@
         }
 
         async function refresh() {
-            if (checking || posting || removing) return;
+            if (checking || posting || removing || clearingNotifications) return;
             checking = true;
             var currentGeneration = generation;
             clearTimeout(timer);
@@ -159,6 +166,7 @@
                     } else if (state.pending) {
                         showMessage(BootFSI18n.t('成员目录正在同步，本机资源仍可正常使用…'));
                         summary.textContent = BootFSI18n.t('成员目录正在同步');
+                        notificationStatus.hidden = true;
                     } else {
                         var joining = [state.local, state.remote].find(function (node) {
                             return node.phase === 'FROZEN' || node.phase === 'ATTACHING';
@@ -167,6 +175,7 @@
                             var detail = joining.lastError ? BootFSI18n.t('，后台正在重试：{0}', joining.lastError) : BootFSI18n.t('，请稍候…');
                             showMessage(phaseLabel(joining) + detail, Boolean(joining.lastError));
                             summary.textContent = phaseLabel(joining) + detail;
+                            notificationStatus.hidden = true;
                         } else {
                             rememberTarget('');
                             showMessage(submissionError || BootFSI18n.t('尚未完成互联，请检查两端状态后重新连接。'), true);
@@ -179,6 +188,7 @@
                 var detail = error.name === 'AbortError' ? BootFSI18n.t('请求超时') : error.message;
                 showMessage(BootFSI18n.t(target ? '暂时无法确认连接状态，正在重试：{0}' : '无法读取组网状态：{0}', detail), true);
                 summary.textContent = message.textContent;
+                notificationStatus.hidden = true;
                 if (submissionError && error.rejected) {
                     rememberTarget('');
                     showMessage(submissionError, true);
@@ -189,6 +199,23 @@
                 timer = setTimeout(refresh, 2500);
             }
         }
+
+        notificationClear.addEventListener('click', async function () {
+            if (notificationStatus.hidden || notificationClear.disabled) return;
+            clearingNotifications = true;
+            generation++;
+            notificationError.textContent = '';
+            updateControls();
+            try {
+                renderLocal(await request('notifications/clear', {}));
+            } catch {
+                notificationError.textContent = BootFSI18n.t('清空通知失败');
+            } finally {
+                clearingNotifications = false;
+                updateControls();
+                refresh();
+            }
+        });
 
         document.getElementById('clusterLinkOpen').addEventListener('click', function () {
             dialog.showModal();

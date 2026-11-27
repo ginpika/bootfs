@@ -232,7 +232,14 @@
                                 aria-haspopup="dialog" aria-controls="clusterLinkDialog">连接 BootFS 节点</button>
                         </div>
                     </div>
-                    <p data-i18n id="clusterSummary" role="status" aria-live="polite" class="text-sm mb-3" style="color: var(--color-text-secondary);">正在读取组网状态…</p>
+                    <p class="text-sm mb-3" style="color: var(--color-text-secondary);">
+                        <span data-i18n id="clusterSummary" role="status" aria-live="polite">正在读取组网状态…</span><span id="clusterNotificationStatus" hidden>
+                            <span aria-hidden="true">·</span>
+                            <button data-i18n data-i18n-attrs="title" id="clusterNotificationClear" type="button"
+                                title="清空待发成员通知" class="cursor-pointer underline underline-offset-2 disabled:cursor-default disabled:opacity-60">成员通知待同步</button>
+                        </span>
+                        <span id="clusterNotificationError" role="alert" style="color: var(--color-danger);"></span>
+                    </p>
                     <p id="clusterRemoveFeedback" role="status" class="text-sm mb-3 break-words empty:hidden" style="color: var(--color-success);"></p>
                     <div id="nodesGrid" class="flex flex-wrap gap-4">
                         <p data-i18n class="text-sm w-full" style="color: var(--color-text-muted);">加载中...</p>

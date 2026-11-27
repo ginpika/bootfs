@@ -45,6 +45,10 @@ public class ClusterController {
     }
     @PostMapping("/remove") public JSONObject remove(@RequestBody JSONObject request) throws IOException { cluster.dynamic().remove(request.getString("nodeId")); return cluster.status(); }
     @PostMapping("/leave") public JSONObject leave() throws IOException { cluster.dynamic().leave(); return cluster.status(); }
+    @PostMapping("/notifications/clear") public JSONObject clearNotifications() throws IOException {
+        cluster.dynamic().clearNotifications();
+        return cluster.status();
+    }
     @GetMapping("/versions") public List<JSONObject> versions(@RequestParam String namespace,@RequestParam String key) {
         if (!Set.of("s3","resource","metadata").contains(namespace)) throw new IllegalArgumentException("Unknown version namespace");
         return ResourceVersions.versions(metadata.scan("/versions/"),namespace,key).values().stream().map(JSON::parseObject).toList();

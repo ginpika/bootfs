@@ -44,8 +44,9 @@ function dashboard(clusterState) {
         async fetch(url, options) {
             if (url === '/api/dashboard/stats') return Response.json({succeed: true, data: {nodes: [...nodes]}});
             if (url === '/api/cluster/status' && clusterState) return Response.json(clusterState);
-            assert.ok(['/api/cluster/leave', '/api/cluster/remove'].includes(url), url);
+            assert.ok(['/api/cluster/leave', '/api/cluster/remove', '/api/cluster/notifications/clear'].includes(url), url);
             assert.equal(options.method, 'POST');
+            assert.equal(options.headers['X-BootFS-Request'], '1');
             const action = {url, body: JSON.parse(options.body)};
             actions.push(action);
             return onAction(action);
@@ -314,4 +315,51 @@ test('the coordinator badge follows cluster status and confirmed local departure
     assert.doesNotMatch(grid.innerHTML, /调度节点/);
     assert.equal(page.sandbox.selectedNodeId, 'a');
     assert.doesNotMatch(page.element('nodesGrid').innerHTML, /data-node-id="b"/);
+});
+
+test('clicking pending member notifications clears them even when an older poll arrives later', async () => {
+    const state = {phase: 'ACTIVE', nodeId: 'a', peers: {a: 'http://a', b: 'http://b', c: 'http://c'}, pendingNotifications: 1};
+    const page = dashboard(state);
+    page.init();
+    await new Promise(setImmediate);
+
+    const indicator = page.element('clusterNotificationStatus');
+    const button = page.element('clusterNotificationClear');
+    assert.equal(indicator.hidden, false);
+    assert.equal(page.element('clusterSummary').textContent, '本机独立读写 · 3 个组网成员');
+
+    let releasePoll;
+    const fetch = page.sandbox.fetch;
+    page.sandbox.fetch = () => new Promise(resolve => { releasePoll = resolve; });
+    const stalePoll = page.refreshCluster();
+    page.sandbox.fetch = fetch;
+
+    let releaseClear;
+    page.onAction(() => new Promise(resolve => { releaseClear = resolve; }));
+    const clearing = button.listeners.click();
+    assert.equal(button.disabled, true);
+    await button.listeners.click();
+    assert.deepEqual(page.actions, [{url: '/api/cluster/notifications/clear', body: {}}]);
+
+    const oldStatus = Response.json(state);
+    state.pendingNotifications = 0;
+    releaseClear(Response.json(state));
+    await clearing;
+    releasePoll(oldStatus);
+    await stalePoll;
+    assert.equal(indicator.hidden, true);
+    assert.equal(page.element('clusterSummary').textContent, '本机独立读写 · 3 个组网成员');
+});
+
+test('a failed clear leaves the notification action available for retry', async () => {
+    const page = dashboard({phase: 'ACTIVE', nodeId: 'a', peers: {a: 'http://a'}, pendingNotifications: 1});
+    page.init();
+    await new Promise(setImmediate);
+
+    const button = page.element('clusterNotificationClear');
+    page.onAction(() => Response.json({error: 'Write failed'}, {status: 409}));
+    await button.listeners.click();
+    assert.equal(page.element('clusterNotificationStatus').hidden, false);
+    assert.equal(page.element('clusterNotificationError').textContent, '清空通知失败');
+    assert.equal(button.disabled, false);
 });

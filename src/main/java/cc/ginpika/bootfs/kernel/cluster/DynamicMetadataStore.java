@@ -82,13 +82,15 @@ public final class DynamicMetadataStore implements MetadataStore {
         manifest.put("links", new JSONObject()); manifest.put("pending", new JSONObject());
         manifest.put("departed", new JSONObject()); manifest.put("admissions", new JSONObject()); manifest.remove("lastError");
     }
-    private void persist() throws IOException {
+    private void persist() throws IOException { persist(manifest); }
+    private void persist(JSONObject state) throws IOException {
         Files.createDirectories(manifestFile.getParent());
         Path stage = Files.createTempFile(manifestFile.getParent(), ".node-", ".tmp");
         try {
             Files.setPosixFilePermissions(stage, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
-            Files.writeString(stage, manifest.toJSONString(), StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
+            Files.writeString(stage, state.toJSONString(), StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
             Files.move(stage, manifestFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            manifest = state;
             DurableFiles.syncDirectory(manifestFile.getParent());
         } finally { Files.deleteIfExists(stage); }
     }
@@ -295,21 +297,46 @@ public final class DynamicMetadataStore implements MetadataStore {
         retire(id); object("departed").put(id, member.getString("incarnation")); members().remove(id); links().remove(id); object("pending").remove(id); object("admissions").remove(id);
         persist();
     }
+    public synchronized void clearNotifications() throws IOException {
+        JSONObject cleared = new JSONObject(manifest);
+        cleared.put("outbox", new JSONArray());
+        cleared.remove("lastError");
+        persist(cleared);
+    }
+
     /** Best-effort durable control-plane delivery. No resource read/write waits for it. */
     public boolean advance() throws IOException {
-        JSONArray jobs;
-        synchronized (this) { jobs = JSON.parseArray(manifest.getJSONArray("outbox").toJSONString()); }
+        JSONArray outbox, jobs;
+        synchronized (this) {
+            outbox = manifest.getJSONArray("outbox");
+            jobs = JSON.parseArray(outbox.toJSONString());
+        }
         Set<String> blocked = new HashSet<>();
         for (Object raw : jobs) {
-            JSONObject job=(JSONObject)raw; String url=job.getString("url"); if (blocked.contains(url)) continue;
+            JSONObject job = (JSONObject) raw;
+            String url = job.getString("url");
+            if (blocked.contains(url)) continue;
+            synchronized (this) {
+                if (outbox != manifest.getJSONArray("outbox")) return true;
+            }
+            IOException deliveryError = null;
             try {
                 call(url, job.getString("path"), job.getJSONObject("body"), job.getString("token"), 1000);
-                synchronized (this) { manifest.getJSONArray("outbox").removeIf(item -> job.getString("id").equals(((JSONObject)item).getString("id"))); manifest.remove("lastError"); persist(); }
-            } catch (ClusterHttp.HttpFailure failure) {
-                if (failure.status == 410) {
-                    synchronized (this) { manifest.getJSONArray("outbox").removeIf(item -> job.getString("id").equals(((JSONObject)item).getString("id"))); persist(); }
-                } else { blocked.add(url); synchronized(this) { manifest.put("lastError", "成员通知待重试："+url); persist(); } }
-            } catch (IOException failure) { blocked.add(url); synchronized(this) { manifest.put("lastError", "成员通知待重试："+url); persist(); } }
+            } catch (IOException failure) {
+                deliveryError = failure;
+            }
+            synchronized (this) {
+                // A clear replaces the queue while the HTTP request is in flight.
+                if (outbox != manifest.getJSONArray("outbox")) return true;
+                if (deliveryError == null || deliveryError instanceof ClusterHttp.HttpFailure failure && failure.status == 410) {
+                    outbox.removeIf(item -> job.getString("id").equals(((JSONObject) item).getString("id")));
+                    if (deliveryError == null) manifest.remove("lastError");
+                } else {
+                    blocked.add(url);
+                    manifest.put("lastError", "成员通知待重试：" + url);
+                }
+                persist();
+            }
         }
         return true;
     }

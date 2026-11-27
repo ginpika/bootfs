@@ -102,6 +102,42 @@ class DynamicClusterTest {
         assertEquals(existing, new NodeIdentity(config).id());
     }
 
+    @Test void clearingNotificationsPersistsAndPreservesOtherNodeState() throws Exception {
+        TfsConfig config = new TfsConfig();
+        config.setRootPath(root.resolve("clearing").toString());
+        config.setUniqueId("local");
+        config.setWebEntrypoint("http://local");
+        try (var store = new DynamicMetadataStore(config)) {
+            String publicKey = store.transportIdentity().publicKey();
+            store.paired("peer", "http://peer", "a".repeat(32), "b".repeat(32), publicKey);
+            store.join(new JSONObject(Map.of("nodeId", "peer", "url", "http://peer",
+                    "incarnation", "first", "publicKey", publicKey)), "peer");
+            store.remove("peer");
+            assertEquals(1, store.status().getIntValue("pendingNotifications"));
+        }
+
+        Path file = Path.of(config.getRootPath(), "kernel", "cluster", "node.json");
+        JSONObject previous = JSON.parseObject(Files.readString(file));
+        previous.put("lastError", "成员通知待重试：http://peer");
+        Files.writeString(file, previous.toJSONString());
+
+        try (var store = new DynamicMetadataStore(config)) {
+            assertNotNull(store.status().getString("lastError"));
+            store.clearNotifications();
+            store.clearNotifications();
+            assertEquals(0, store.status().getIntValue("pendingNotifications"));
+            assertNull(store.status().getString("lastError"));
+        }
+
+        previous.put("outbox", new JSONArray());
+        previous.remove("lastError");
+        assertEquals(previous, JSON.parseObject(Files.readString(file)));
+        try (var reopened = new DynamicMetadataStore(config)) {
+            assertEquals(0, reopened.status().getIntValue("pendingNotifications"));
+            assertNull(reopened.status().getString("lastError"));
+        }
+    }
+
     @Test @Timeout(30) void fullLifetimeStandaloneClusterAStandaloneClusterBPreservesLocalAuthority() throws Exception {
         Node a=new Node("a"), x=new Node("x"), b=new Node("b"); x.resource("mine","private original"); a.resource("a-only","alpha"); b.resource("b-only","beta");
         Map<String,String> original=new TreeMap<>(x.store.scan("")); String owner=x.store.nodeId(); String initial=x.store.status().getString("groupId");
